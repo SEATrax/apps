@@ -96,42 +96,49 @@ CREATE POLICY "Anyone can update payments" ON payments FOR UPDATE USING (true);
 
 ---
 
-## Phase 1: Smart Contract Development
+## Phase 1: Multiple Smart Contract Architecture
 
 ### 1.1 Setup Hardhat Project
-- [ ] Create `contracts/` directory in project root
-- [ ] Initialize Hardhat: `npx hardhat init`
-- [ ] Install dependencies: OpenZeppelin, Hardhat plugins
-- [ ] Configure for Lisk Sepolia network
+- [x] Create `contracts/` directory in project root
+- [x] Initialize Hardhat: `npx hardhat init`
+- [x] Install dependencies: OpenZeppelin, Hardhat plugins
+- [x] Configure for Lisk Sepolia network
 
-### 1.2 Implement SEATrax.sol
-- [ ] Import OpenZeppelin: ERC721, AccessControl, ReentrancyGuard
-- [ ] Define Invoice struct with all fields
-- [ ] Define Pool struct with all fields
-- [ ] Define Investment struct
-- [ ] Implement storage mappings
-- [ ] Implement ADMIN_ROLE constant
+### 1.2 Core Contract Architecture (COMPLETED)
+- [x] **AccessControl**: Central role management (Admin, Exporter, Investor roles)
+- [x] **InvoiceNFT**: ERC721 tokenization of shipping invoices
+- [x] **PoolNFT**: ERC721 tokenization of investment pools
+- [x] **PoolFundingManager**: Investment logic and fund distribution
+- [x] **PaymentOracle**: Payment verification system
+- [x] **PlatformAnalytics**: Metrics and reporting
 
-### 1.3 Exporter Functions
-- [ ] `registerExporter()` - register wallet as exporter
-- [ ] `createInvoice()` - mint invoice NFT with all data
-- [ ] `withdrawFunds()` - withdraw when ≥70% funded
-- [ ] `getExporterInvoices()` - get all invoices by exporter
+### 1.3 Contract Functions (COMPLETED)
 
-### 1.4 Investor Functions
-- [ ] `registerInvestor()` - register wallet as investor
-- [ ] `invest()` - invest ETH in pool, record investment
-- [ ] `claimReturns()` - claim principal + yield after completion
-- [ ] `getInvestorPools()` - get all pools investor participated
+**AccessControl Contract:**
+- [x] `grantExporterRole(address)` - Admin assigns exporter role
+- [x] `grantInvestorRole(address)` - Admin assigns investor role
+- [x] `getUserRoles(address)` - Check user permissions
 
-### 1.5 Admin Functions
-- [ ] `verifyExporter()` - mark exporter as verified
-- [ ] `approveInvoice()` - approve pending invoice
-- [ ] `rejectInvoice()` - reject pending invoice
-- [ ] `createPool()` - create pool with selected invoices
-- [ ] `distributeToInvoice()` - manual distribution at 70%+
-- [ ] `markInvoicePaid()` - update invoice status to PAID
-- [ ] `distributeProfits()` - distribute 4% to investors, 1% fee
+**InvoiceNFT Contract:**
+- [x] `mintInvoice()` - Create invoice NFT (exporters only)
+- [x] `finalizeInvoice()` - Mark invoice ready for funding
+- [x] `withdrawFunds()` - Exporter withdrawal (≥70% funded)
+- [x] `getInvoicesByExporter()` - Get invoices by owner
+
+**PoolNFT Contract:**
+- [x] `createPool()` - Create investment pool NFT (admin only)
+- [x] `finalizePool()` - Open pool for investments
+- [x] `getPoolsByStatus()` - Query pools by status
+
+**PoolFundingManager Contract:**
+- [x] `investInPool()` - Investor funding (min 1000 tokens)
+- [x] `allocateFundsToInvoices()` - Distribute pool funds (≥70%)
+- [x] `distributeProfits()` - 4% yield + 1% platform fee
+- [x] `claimInvestorReturns()` - Claim investment returns
+
+**PaymentOracle Contract:**
+- [x] `markInvoicePaid()` - Confirm importer payment
+- [x] `submitPaymentConfirmation()` - Oracle verification
 
 ### 1.6 Internal Functions
 - [ ] `_distributeToInvoice()` - internal distribution logic
@@ -150,37 +157,43 @@ CREATE POLICY "Anyone can update payments" ON payments FOR UPDATE USING (true);
 - [ ] PoolCreated, InvestmentMade, InvoiceFunded
 - [ ] FundsWithdrawn, InvoicePaid, ProfitsDistributed, ReturnsClaimed
 
-### 1.9 Testing & Deployment
-- [ ] Write unit tests for all functions
-- [ ] Test edge cases (70% threshold, 100% auto-distribute)
-- [ ] Deploy to Lisk Sepolia testnet
-- [ ] Verify contract on block explorer
-- [ ] Update `NEXT_PUBLIC_CONTRACT_ADDRESS` in `.env.local`
-- [ ] Update ABI in `src/lib/contract.ts`
+### 1.9 Testing & Deployment (COMPLETED)
+- [x] Write unit tests for all contract functions
+- [x] Test NFT tokenization and cross-contract interactions
+- [x] Deploy all 6 contracts to Lisk Sepolia testnet
+- [x] Verify contracts on block explorer
+- [x] Update contract addresses in `.env.local`:
+  - [x] ACCESS_CONTROL=0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F
+  - [x] INVOICE_NFT=0x8Da2dF6050158ae8B058b90B37851323eFd69E16
+  - [x] POOL_NFT=0x317Ce254731655E19932b9EFEAf7eeA31F0775ad
+  - [x] POOL_FUNDING_MANAGER=0xbD5f292F75D22996E7A4DD277083c75aB29ff45C
+  - [x] PAYMENT_ORACLE=0x7894728174E53Df9Fec402De07d80652659296a8
+  - [x] PLATFORM_ANALYTICS=0xb77C5C42b93ec46A323137B64586F0F8dED987A9
+- [x] Update ABIs in `src/lib/contract.ts` for all contracts
 
 ---
 
 ## Phase 2: Authentication & Onboarding
 
 ### 2.1 Login Page
-- [ ] Create `src/app/(auth)/login/page.tsx`
-- [ ] Connect wallet button
-- [ ] Check if wallet is registered (exporter/investor/admin)
-- [ ] Redirect to appropriate dashboard or onboarding
+- [x] Create `src/app/(auth)/login/page.tsx`
+- [x] Panna SDK wallet connection
+- [x] Check wallet roles via AccessControl contract `getUserRoles()`
+- [x] Redirect to appropriate dashboard or onboarding
 
 ### 2.2 Exporter Onboarding
-- [ ] Create `src/app/onboarding/exporter/page.tsx`
-- [ ] Form fields: Company Name, Tax ID, Country, Export License
-- [ ] Wallet address auto-filled from connected wallet
-- [ ] Submit: save to Supabase + call `registerExporter()` on contract
-- [ ] Redirect to exporter dashboard
+- [x] Create `src/app/onboarding/exporter/page.tsx`
+- [x] Form fields: Company Name, Tax ID, Country, Export License
+- [x] Wallet address from Panna `useActiveAccount()`
+- [x] Submit: save to Supabase + admin grants role via `grantExporterRole()`
+- [x] Redirect to exporter dashboard
 
 ### 2.3 Investor Onboarding
-- [ ] Create `src/app/onboarding/investor/page.tsx`
-- [ ] Form fields: Name, Address
-- [ ] Wallet address auto-filled from connected wallet
-- [ ] Submit: save to Supabase + call `registerInvestor()` on contract
-- [ ] Redirect to investor dashboard
+- [x] Create `src/app/onboarding/investor/page.tsx`
+- [x] Form fields: Name, Address
+- [x] Wallet address from Panna `useActiveAccount()`
+- [x] Submit: save to Supabase + admin grants role via `grantInvestorRole()`
+- [x] Redirect to investor dashboard
 
 ### 2.4 Role Guard Component
 - [ ] Create `src/components/common/role-guard.tsx`
@@ -201,36 +214,33 @@ CREATE POLICY "Anyone can update payments" ON payments FOR UPDATE USING (true);
 
 ### 3.2 Invoice List Page
 - [ ] Create `src/app/exporter/invoices/page.tsx`
-- [ ] Fetch invoices from contract using `getExporterInvoices()`
-- [ ] Display as cards with status badges
-- [ ] Filter by status
-- [ ] Link to invoice detail
+- [ ] Fetch invoices using InvoiceNFT `getInvoicesByExporter()`
+- [ ] Display NFT-based invoice cards with status badges
+- [ ] Filter by InvoiceStatus enum values
+- [ ] Link to invoice detail by NFT token ID
 
 ### 3.3 Create Invoice Page
 - [ ] Create `src/app/exporter/invoices/new/page.tsx`
 - [ ] Form fields:
-  - [ ] Invoice Number
-  - [ ] Invoice Date, Due Date
-  - [ ] Total Amount (Invoice Value)
-  - [ ] Currency (USD)
-  - [ ] Goods Description
-  - [ ] Importer Name, Importer License, Importer Email
-  - [ ] Loan Amount Requested
-  - [ ] Upload: Purchase Order, Bill of Lading (to IPFS)
-- [ ] Convert amounts to cents before contract call
-- [ ] Call `createInvoice()` on contract
-- [ ] Save metadata to Supabase `invoice_metadata` table
+  - [ ] Exporter Company, Importer Company
+  - [ ] Shipping Date, Shipping Amount, Loan Amount
+  - [ ] Invoice Number, Goods Description
+  - [ ] Importer License, Documents (IPFS)
+- [ ] Convert USD to wei for contract call
+- [ ] Call InvoiceNFT `mintInvoice()` → returns NFT tokenId
+- [ ] Save metadata to Supabase `invoice_metadata` table with tokenId
+- [ ] Call `finalizeInvoice()` to mark ready for funding
 - [ ] Redirect to invoice list
 
 ### 3.4 Invoice Detail Page
 - [ ] Create `src/app/exporter/invoices/[id]/page.tsx`
-- [ ] Show all invoice details
-- [ ] Show funding progress bar
-- [ ] Show status badge
-- [ ] If status=FUNDED and ≥70%: Show "Withdraw" button
-- [ ] Call `canWithdraw()` to get withdrawable amount
-- [ ] Call `withdrawFunds()` on button click
-- [ ] Show withdrawal history
+- [ ] Fetch invoice NFT data using `getInvoice(tokenId)`
+- [ ] Show funding progress from `amountInvested` field
+- [ ] Show status from InvoiceStatus enum
+- [ ] If status=Funded and ≥70%: Show "Withdraw" button
+- [ ] Call `getAvailableWithdrawal()` for withdrawable amount
+- [ ] Call `withdrawFunds(tokenId, amount)` on button click
+- [ ] Show withdrawal history from contract events
 
 ### 3.5 Payments Page
 - [ ] Create `src/app/exporter/payments/page.tsx`
@@ -250,44 +260,44 @@ CREATE POLICY "Anyone can update payments" ON payments FOR UPDATE USING (true);
 
 ### 4.2 Browse Pools Page
 - [ ] Create `src/app/investor/pools/page.tsx`
-- [ ] Fetch open pools from contract `getAllOpenPools()`
-- [ ] Display as cards with:
-  - [ ] Pool name, dates
-  - [ ] Total loan amount (in USD)
-  - [ ] Funding progress %
-  - [ ] Number of invoices
+- [ ] Fetch pools using PoolNFT `getPoolsByStatus(Open)`
+- [ ] Display pool NFT cards with:
+  - [ ] Pool name, start/end dates
+  - [ ] Total loan amount from `totalLoanAmount`
+  - [ ] Funding progress from PoolFundingManager `getPoolFundingPercentage()`
+  - [ ] Invoice count from `invoiceIds.length`
   - [ ] Expected yield (4%)
-- [ ] Filter by risk category (from Supabase metadata)
-- [ ] Link to pool detail
+- [ ] Filter by risk category (from Supabase `pool_metadata`)
+- [ ] Link to pool detail by NFT poolId
 
 ### 4.3 Pool Detail + Invest Page
 - [ ] Create `src/app/investor/pools/[id]/page.tsx`
-- [ ] Show pool details
-- [ ] Show invoices in pool (list)
-- [ ] Show current investors and amounts
-- [ ] Funding progress with percentage
+- [ ] Fetch pool NFT using PoolNFT `getPool(poolId)`
+- [ ] Show invoices using InvoiceNFT `getInvoice()` for each `invoiceIds`
+- [ ] Show investor amounts from PoolFundingManager mapping
+- [ ] Funding progress from `getPoolFundingPercentage(poolId)`
 - [ ] Investment form:
-  - [ ] Input: Amount in USD
-  - [ ] Auto-convert to ETH using `usdToEth()`
+  - [ ] Input: Amount in USD (min 1000 tokens)
+  - [ ] Auto-convert to ETH using `usdToWei()`
   - [ ] Show estimated returns (amount + 4%)
   - [ ] "Invest" button
-- [ ] Call `invest()` with ETH value
-- [ ] Show transaction status
+- [ ] Call PoolFundingManager `investInPool(poolId, amount)`
+- [ ] Auto-allocate at 100% funding via smart contract logic
 
 ### 4.4 My Investments Page
 - [ ] Create `src/app/investor/investments/page.tsx`
-- [ ] Fetch from `getInvestorPools()`
-- [ ] For each pool, get investment details
-- [ ] Show: Pool name, Amount, Percentage, Status
-- [ ] Show expected returns
+- [ ] Query PoolFundingManager `investorAmounts` mapping
+- [ ] For each pool, get pool NFT details and status
+- [ ] Show: Pool name, Amount, Percentage, PoolStatus
+- [ ] Calculate expected returns (4% of investment)
 
 ### 4.5 Claim Returns Page
 - [ ] Create `src/app/investor/returns/page.tsx`
-- [ ] List completed pools where user invested
-- [ ] Show claimable amount (principal + 4% yield)
-- [ ] "Claim" button for each
-- [ ] Call `claimReturns()` on click
-- [ ] Show claimed history
+- [ ] List pools with PoolStatus.Completed where user invested
+- [ ] Show claimable amount via `getInvestorReturns(poolId, address)`
+- [ ] "Claim" button for each pool
+- [ ] Call PoolFundingManager `claimInvestorReturns(poolId)`
+- [ ] Show claimed history from contract events
 
 ---
 
@@ -303,22 +313,22 @@ CREATE POLICY "Anyone can update payments" ON payments FOR UPDATE USING (true);
 - [ ] Create `src/app/admin/exporters/page.tsx`
 - [ ] List pending exporters from Supabase
 - [ ] Show: Company, Tax ID, Country, License
-- [ ] "Verify" button
-- [ ] Call `verifyExporter()` + update Supabase
+- [ ] "Grant Role" button
+- [ ] Call AccessControl `grantExporterRole(address)` + update Supabase
 - [ ] Filter: Pending, Verified, All
 
 ### 5.3 Review Invoices Page
 - [ ] Create `src/app/admin/invoices/page.tsx`
-- [ ] Fetch pending invoices from `getAllPendingInvoices()`
-- [ ] Display with key details
-- [ ] Link to detail page
+- [ ] Fetch invoices with InvoiceStatus.Pending via InvoiceNFT
+- [ ] Display invoice NFTs with key details
+- [ ] Link to detail page by tokenId
 
 ### 5.4 Invoice Review Detail
 - [ ] Create `src/app/admin/invoices/[id]/page.tsx`
-- [ ] Show all invoice details
-- [ ] Show uploaded documents (from IPFS)
-- [ ] "Approve" and "Reject" buttons
-- [ ] Call respective contract functions
+- [ ] Show invoice NFT details from `getInvoice(tokenId)`
+- [ ] Show uploaded documents (from IPFS via Supabase metadata)
+- [ ] "Finalize" button (moves to Fundraising status)
+- [ ] Call InvoiceNFT `finalizeInvoice(tokenId)`
 - [ ] Redirect back to list
 
 ### 5.5 Manage Pools Page
@@ -331,30 +341,32 @@ CREATE POLICY "Anyone can update payments" ON payments FOR UPDATE USING (true);
 ### 5.6 Create Pool Page
 - [ ] Create `src/app/admin/pools/new/page.tsx`
 - [ ] Form fields: Pool Name, Start Date, End Date, Description, Risk Category
-- [ ] Fetch approved invoices `getAllApprovedInvoices()`
-- [ ] Selectable list of invoices (checkbox)
-- [ ] Show totals: Selected count, Total loan amount, Total shipping amount
-- [ ] Submit: Call `createPool()` + save metadata to Supabase
+- [ ] Fetch finalized invoices (InvoiceStatus.Finalized)
+- [ ] Selectable list of invoice NFTs (checkbox)
+- [ ] Show totals: Selected count, Total loan/shipping amounts
+- [ ] Submit: Call PoolNFT `createPool(name, invoiceIds)` → get poolId
+- [ ] Save metadata to Supabase `pool_metadata` with poolId
+- [ ] Call `finalizePool(poolId)` to open for investments
 - [ ] Redirect to pool list
 
 ### 5.7 Pool Detail + Distribute
 - [ ] Create `src/app/admin/pools/[id]/page.tsx`
-- [ ] Show pool details
-- [ ] Show funding progress
-- [ ] List invoices with individual funding status
-- [ ] If pool ≥70%: Show "Distribute" section
-  - [ ] For each unfunded invoice, show "Distribute" button
-  - [ ] Call `distributeToInvoice()`
+- [ ] Show pool NFT details from `getPool(poolId)`
+- [ ] Show funding progress via `getPoolFundingPercentage(poolId)`
+- [ ] List invoices with individual funding from `amountInvested`
+- [ ] If pool ≥70%: Show "Allocate Funds" section
+  - [ ] Call PoolFundingManager `allocateFundsToInvoices(poolId)`
+  - [ ] Auto-triggers at 100% funding
 - [ ] If all invoices PAID: Show "Distribute Profits" button
-  - [ ] Call `distributeProfits()`
+  - [ ] Call PoolFundingManager `distributeProfits(poolId)`
 
 ### 5.8 Payment Tracking Page
 - [ ] Create `src/app/admin/payments/page.tsx`
-- [ ] List invoices in WITHDRAWN status
-- [ ] Show payment link for each
+- [ ] List invoices in InvoiceStatus.Funded (withdrawn) status
+- [ ] Show payment link for each invoice NFT
 - [ ] "Mark as Paid" button
-- [ ] Call `markInvoicePaid()` on contract
-- [ ] Update payment status in Supabase
+- [ ] Call PaymentOracle `markInvoicePaid(tokenId)`
+- [ ] Update payment status in Supabase `payments` table
 
 ---
 
@@ -454,46 +466,57 @@ contracts/SEATrax.sol
 
 ### Files to Modify
 ```
-src/lib/contract.ts          # Update with real ABI after deployment
-src/lib/supabase.ts          # Add more helper functions as needed
-src/hooks/useContract.ts     # Add any missing functions
-src/app/page.tsx             # Update landing page
-src/app/layout.tsx           # Add role checking
-src/components/header.tsx    # Add role-based navigation
+src/lib/contract.ts              # Multiple contract ABIs and addresses
+src/lib/supabase.ts              # Add helper functions for NFT metadata
+src/hooks/useAccessControl.ts    # Role management hook
+src/hooks/useInvoiceNFT.ts       # Invoice NFT operations
+src/hooks/usePoolNFT.ts          # Pool NFT operations  
+src/hooks/usePoolFunding.ts      # Investment and distribution logic
+src/hooks/usePaymentOracle.ts    # Payment verification
+src/hooks/usePlatformAnalytics.ts # Metrics and reporting
+src/app/page.tsx                 # Update landing page
+src/app/layout.tsx               # Add multi-contract role checking
+src/components/header-simple.tsx # Add role-based navigation
 ```
 
 ---
 
-## Quick Reference: Contract Function Calls
+## Quick Reference: Multiple Contract Function Calls
 
 ```typescript
-// Exporter
-await contract.registerExporter();
-await contract.createInvoice(invoiceValue, loanAmount, invoiceDate, dueDate, ipfsHash);
-await contract.withdrawFunds(invoiceId);
-const invoices = await contract.getExporterInvoices(address);
+// AccessControl Contract
+await accessControl.grantExporterRole(exporterAddress);  // Admin only
+await accessControl.grantInvestorRole(investorAddress);  // Admin only
+const roles = await accessControl.getUserRoles(userAddress);
 
-// Investor
-await contract.registerInvestor();
-await contract.invest(poolId, { value: ethAmount });
-await contract.claimReturns(poolId);
-const pools = await contract.getInvestorPools(address);
+// InvoiceNFT Contract - Exporter Functions
+const tokenId = await invoiceNFT.mintInvoice(exporterCompany, importerCompany, shippingAmount, loanAmount, shippingDate);
+await invoiceNFT.finalizeInvoice(tokenId);  // Mark ready for funding
+await invoiceNFT.withdrawFunds(tokenId, amount);  // When ≥70% funded
+const invoice = await invoiceNFT.getInvoice(tokenId);
+const exporterInvoices = await invoiceNFT.getInvoicesByExporter(exporterAddress);
+const withdrawable = await invoiceNFT.getAvailableWithdrawal(tokenId);
 
-// Admin
-await contract.verifyExporter(exporterAddress);
-await contract.approveInvoice(invoiceId);
-await contract.rejectInvoice(invoiceId);
-await contract.createPool(name, invoiceIds, startDate, endDate);
-await contract.distributeToInvoice(poolId, invoiceId, amount);
-await contract.markInvoicePaid(invoiceId);
-await contract.distributeProfits(poolId);
+// PoolNFT Contract - Admin Functions  
+const poolId = await poolNFT.createPool(name, invoiceIds);  // Admin only
+await poolNFT.finalizePool(poolId);  // Open for investments
+const pool = await poolNFT.getPool(poolId);
+const openPools = await poolNFT.getPoolsByStatus(PoolStatus.Open);
 
-// View
-const invoice = await contract.getInvoice(invoiceId);
-const pool = await contract.getPool(poolId);
-const investment = await contract.getInvestment(poolId, investor);
-const percentage = await contract.getPoolFundingPercentage(poolId);
-const [canWithdraw, amount] = await contract.canWithdraw(invoiceId);
-const openPools = await contract.getAllOpenPools();
-const pendingInvoices = await contract.getAllPendingInvoices();
+// PoolFundingManager Contract - Investment Functions
+await poolFunding.investInPool(poolId, amount, { value: ethAmount });  // Min 1000 tokens
+await poolFunding.allocateFundsToInvoices(poolId);  // Admin, when ≥70%
+await poolFunding.distributeProfits(poolId);  // Admin, when all paid
+await poolFunding.claimInvestorReturns(poolId);  // Investors
+const percentage = await poolFunding.getPoolFundingPercentage(poolId);
+const returns = await poolFunding.getInvestorReturns(poolId, investorAddress);
+
+// PaymentOracle Contract - Payment Verification
+await paymentOracle.markInvoicePaid(tokenId);  // Admin/Oracle only
+await paymentOracle.submitPaymentConfirmation(tokenId);  // Oracle only
+
+// PlatformAnalytics Contract - Metrics
+await analytics.updatePlatformMetrics();
+const tvl = await analytics.getTotalValueLocked();
+const stats = await analytics.getInvestorStats(investorAddress);
 ```

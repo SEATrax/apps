@@ -11,6 +11,7 @@ SEATrax adalah **Shipping Invoice Funding Platform** berbasis blockchain yang me
 
 - **Frontend**: Next.js 15, TypeScript, Tailwind CSS, shadcn/ui
 - **Blockchain**: Lisk Sepolia, Panna SDK
+- **Smart Contracts**: Multiple contract architecture with specialized responsibilities
 - **Backend**: Supabase (PostgreSQL)
 - **Storage**: Pinata (IPFS)
 - **Currency API**: CurrencyFreaks (USD ↔ ETH conversion)
@@ -99,81 +100,89 @@ OPEN (accepting investments) → FUNDED (100% invested) → COMPLETED (profits d
 
 ---
 
-## Data Structures
+## Smart Contract Architecture
 
-### Invoice NFT (On-chain)
+### Multiple Contract System
+
+```
+AccessControl (Core Role Management)
+    ├── InvoiceNFT (Invoice Tokenization)
+    ├── PoolNFT (Pool Tokenization)
+    ├── PoolFundingManager (Investment & Distribution)
+    ├── PaymentOracle (Payment Verification)
+    └── PlatformAnalytics (Metrics & Reporting)
+```
+
+### Contract Addresses
+
+```env
+ACCESS_CONTROL="0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F"
+INVOICE_NFT="0x8Da2dF6050158ae8B058b90B37851323eFd69E16"
+POOL_NFT="0x317Ce254731655E19932b9EFEAf7eeA31F0775ad"
+POOL_FUNDING_MANAGER="0xbD5f292F75D22996E7A4DD277083c75aB29ff45C"
+PAYMENT_ORACLE="0x7894728174E53Df9Fec402De07d80652659296a8"
+PLATFORM_ANALYTICS="0xb77C5C42b93ec46A323137B64586F0F8dED987A9"
+```
+
+### Invoice NFT Structure
 
 ```solidity
 struct Invoice {
-    uint256 tokenId;
-    address exporter;
     string exporterCompany;
+    address exporterWallet;
     string importerCompany;
-    string importerEmail;           // For payment notification
     uint256 shippingDate;
-    uint256 shippingAmount;         // Total shipping value (USD cents)
-    uint256 loanAmount;             // Requested loan (USD cents)
-    uint256 amountInvested;         // Received from pool (ETH wei)
-    uint256 amountWithdrawn;        // Withdrawn by exporter (ETH wei)
+    uint256 shippingAmount;         // Total shipping value
+    uint256 loanAmount;             // Requested loan amount
+    uint256 amountInvested;         // Funds allocated from pools
+    uint256 amountWithdrawn;        // Exporter withdrawals
     InvoiceStatus status;
-    uint256 poolId;                 // 0 if not in pool
-    string ipfsHash;                // Documents
-    uint256 createdAt;
+    // Off-chain: importer payment reference
 }
 
 enum InvoiceStatus {
-    PENDING,      // 0
-    APPROVED,     // 1
-    IN_POOL,      // 2
-    FUNDED,       // 3
-    WITHDRAWN,    // 4
-    PAID,         // 5
-    COMPLETED,    // 6
-    REJECTED      // 7
+    Pending,
+    Finalized,
+    Fundraising,
+    Funded,
+    Paid,
+    Cancelled
 }
 ```
 
-### Pool NFT (On-chain)
+### Pool NFT Structure
 
 ```solidity
 struct Pool {
-    uint256 poolId;
     string name;
     uint256 startDate;
     uint256 endDate;
-    uint256 totalLoanAmount;        // Sum of invoice loans (USD cents)
-    uint256 totalShippingAmount;    // Sum of invoice shipping (USD cents)
-    uint256 amountInvested;         // Total ETH invested (wei)
-    uint256 amountDistributed;      // Amount sent to invoices (wei)
-    uint256 feePaid;                // Platform fee collected (wei)
+    uint256[] invoiceIds;           // Array of Invoice NFT IDs
+    uint256 totalLoanAmount;        // Sum of invoice loans
+    uint256 totalShippingAmount;    // Sum of shipping amounts
+    uint256 amountInvested;         // Total investor funds
+    uint256 amountDistributed;      // Funds sent to invoices
+    uint256 feePaid;                // Platform fees paid
     PoolStatus status;
-    uint256[] invoiceIds;
-    uint256 createdAt;
 }
 
 enum PoolStatus {
-    OPEN,         // 0 - Accepting investments
-    FUNDED,       // 1 - 100% funded
-    COMPLETED,    // 2 - Profits distributed
-    CANCELLED     // 3
+    Open,
+    Fundraising,
+    PartiallyFunded,
+    Funded,
+    Settling,
+    Completed
 }
 ```
 
-### Investment Record (On-chain mapping)
+### Investment Tracking
 
 ```solidity
-struct Investment {
-    address investor;
-    uint256 poolId;
-    uint256 amount;                 // ETH invested (wei)
-    uint256 percentage;             // Basis points (10000 = 100%)
-    uint256 timestamp;
-    bool returnsClaimed;
-}
-
-// Mappings
-mapping(uint256 => mapping(address => Investment)) public investments;
-mapping(uint256 => address[]) public poolInvestors;
+// In PoolFundingManager contract
+mapping(address investor => uint256 amountInvestedInPool) public investorAmounts;
+mapping(uint256 invoiceId => uint256 amountAllocatedFromPool) public invoiceAllocations;
+mapping(address investor => mapping(uint256 invoiceId => uint256 amount)) public investorInvoiceAllocations;
 ```
 
 ### Database Tables (Supabase)
@@ -199,40 +208,54 @@ payments (id, invoice_id, amount_usd, payment_link, status, sent_at, paid_at, cr
 
 ## Smart Contract Functions
 
-### Exporter Functions
+### AccessControl Contract
 ```solidity
-function registerExporter() external;
-function createInvoice(exporterCompany, importerCompany, importerEmail, shippingDate, shippingAmount, loanAmount, ipfsHash) returns (uint256 tokenId);
-function withdrawFunds(uint256 invoiceId) external;
+function grantExporterRole(address account) external; // Admin only
+function grantInvestorRole(address account) external; // Admin only
+function getUserRoles(address account) external view returns (bool hasAdminRole, bool hasExporterRole, bool hasInvestorRole);
 ```
 
-### Investor Functions
+### InvoiceNFT Contract
 ```solidity
-function registerInvestor() external;
-function invest(uint256 poolId) external payable;
-function claimReturns(uint256 poolId) external;
+function mintInvoice(string exporterCompany, string importerCompany, uint256 shippingAmount, uint256 loanAmount, uint256 shippingDate) external returns (uint256 invoiceId); // Exporters only
+function finalizeInvoice(uint256 invoiceId) external; // Invoice owner only
+function withdrawFunds(uint256 invoiceId, uint256 amount) external; // Invoice owner only
+function getInvoice(uint256 invoiceId) external view returns (Invoice);
+function getInvoicesByExporter(address exporter) external view returns (uint256[] invoiceIds);
+function getAvailableWithdrawal(uint256 invoiceId) external view returns (uint256);
 ```
 
-### Admin Functions
+### PoolNFT Contract
 ```solidity
-function verifyExporter(address exporter) external;
-function approveInvoice(uint256 invoiceId) external;
-function rejectInvoice(uint256 invoiceId) external;
-function createPool(name, invoiceIds[], startDate, endDate) returns (uint256 poolId);
-function distributeToInvoice(poolId, invoiceId, amount) external;  // Manual at 70%
-function markInvoicePaid(uint256 invoiceId) external;
-function distributeProfits(uint256 poolId) external;
+function createPool(string name, uint256[] invoiceIds) external returns (uint256 poolId); // Admin only
+function finalizePool(uint256 poolId) external; // Admin only
+function getPool(uint256 poolId) external view returns (Pool);
+function getPoolsByStatus(PoolStatus status) external view returns (uint256[] poolIds);
 ```
 
-### View Functions
+### PoolFundingManager Contract
 ```solidity
-function getInvoice(uint256 invoiceId) returns (Invoice);
-function getPool(uint256 poolId) returns (Pool);
-function getInvestment(poolId, investor) returns (Investment);
-function getPoolFundingPercentage(poolId) returns (uint256);
-function canWithdraw(invoiceId) returns (bool, uint256);
-function getAllOpenPools() returns (uint256[]);
-function getAllPendingInvoices() returns (uint256[]);
+function investInPool(uint256 poolId, uint256 amount) external; // Investors only, min 1000 tokens
+function allocateFundsToInvoices(uint256 poolId) external; // Admin only, when ≥70% funded
+function distributeProfits(uint256 poolId) external; // Admin only, when all invoices paid
+function claimInvestorReturns(uint256 poolId) external; // Investors only
+function getPoolFundingPercentage(uint256 poolId) external view returns (uint256);
+function getInvestorReturns(uint256 poolId, address investor) external view returns (uint256);
+```
+
+### PaymentOracle Contract
+```solidity
+function submitPaymentConfirmation(uint256 invoiceId) external; // Oracle only
+function markInvoicePaid(uint256 invoiceId) external; // Admin/Oracle only
+```
+
+### PlatformAnalytics Contract
+```solidity
+function updatePlatformMetrics() external;
+function updateInvestorPortfolio(address investor) external;
+function updatePoolPerformance(uint256 poolId) external;
+function getTotalValueLocked() external view returns (uint256);
+function getInvestorStats(address investor) external view returns (uint256 totalInvested, uint256 totalReturns, uint256 activeInvestments);
 ```
 
 ---
@@ -298,21 +321,33 @@ Exporter Returns = remaining after subtracting already withdrawn amounts
 
 ### When implementing components:
 1. Use shadcn/ui components from `@/components/ui`
-2. Use `useContract` hook for all smart contract interactions
+2. Use multiple contract hooks for specific contract interactions:
+   - `useAccessControl` for role management
+   - `useInvoiceNFT` for invoice operations
+   - `usePoolNFT` for pool operations
+   - `usePoolFunding` for investment operations
+   - `usePaymentOracle` for payment verification
+   - `usePlatformAnalytics` for metrics
 3. Use `usePanna` hook for wallet connection
 4. Handle loading and error states
 5. Show transaction status with toast notifications
 
 ### When implementing smart contract calls:
 1. Always convert USD to ETH using `usdToWei()` from `@/lib/currency`
-2. Handle transaction confirmation and errors
-3. Update UI optimistically where appropriate
-4. Refresh data after successful transactions
+2. Use appropriate contract based on operation:
+   - Invoice creation/withdrawal → InvoiceNFT
+   - Pool creation/management → PoolNFT
+   - Investment/funding → PoolFundingManager
+   - Role assignment → AccessControl
+   - Payment confirmation → PaymentOracle
+3. Handle transaction confirmation and errors
+4. Update UI optimistically where appropriate
+5. Refresh data after successful transactions
 
 ### File naming conventions:
 - Pages: `page.tsx`
 - Components: `kebab-case.tsx` (e.g., `invoice-card.tsx`)
-- Hooks: `camelCase.ts` (e.g., `useContract.ts`)
+- Hooks: `camelCase.ts` (e.g., `useInvoiceNFT.ts`)
 - Types: defined in `@/types/index.ts`
 
 ---
@@ -320,8 +355,18 @@ Exporter Returns = remaining after subtracting already withdrawn amounts
 ## Environment Variables
 
 ```env
-# Required
+# Multiple Smart Contracts
+ACCESS_CONTROL=0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F
+INVOICE_NFT=0x8Da2dF6050158ae8B058b90B37851323eFd69E16
+POOL_NFT=0x317Ce254731655E19932b9EFEAf7eeA31F0775ad
+POOL_FUNDING_MANAGER=0xbD5f292F75D22996E7A4DD277083c75aB29ff45C
+PAYMENT_ORACLE=0x7894728174E53Df9Fec402De07d80652659296a8
+PLATFORM_ANALYTICS=0xb77C5C42b93ec46A323137B64586F0F8dED987A9
+
+# Legacy (deprecated)
 NEXT_PUBLIC_CONTRACT_ADDRESS=
+
+# Required
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_PINATA_GATEWAY=
