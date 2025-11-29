@@ -1,254 +1,251 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  Layers, 
-  Search, 
-  TrendingUp, 
-  Users, 
-  Clock,
-  ArrowRight,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { usePanna } from '@/hooks/usePanna';
-import { formatEther, formatDate, getStatusColor } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import { Ship, Wallet, Copy, ChevronDown, LogOut, User, ExternalLink } from 'lucide-react';
+import { useActiveAccount, LoginButton, liskSepolia } from 'panna-sdk';
 import { appConfig } from '@/config';
-
-// Mock data - replace with actual contract data
-const mockPools = [
-  {
-    poolId: 1n,
-    name: 'Asia Pacific Trade Pool',
-    description: 'Diversified pool of shipping invoices from APAC region exporters.',
-    totalValue: 500000n * 10n ** 18n,
-    totalInvested: 350000n * 10n ** 18n,
-    investorCount: 24,
-    status: 'open',
-    invoiceCount: 8,
-    targetYield: 4,
-    maturityDate: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60,
-  },
-  {
-    poolId: 2n,
-    name: 'European Export Fund',
-    description: 'Premium European exporters with verified trade history.',
-    totalValue: 750000n * 10n ** 18n,
-    totalInvested: 750000n * 10n ** 18n,
-    investorCount: 42,
-    status: 'closed',
-    invoiceCount: 12,
-    targetYield: 4,
-    maturityDate: Math.floor(Date.now() / 1000) + 60 * 24 * 60 * 60,
-  },
-  {
-    poolId: 3n,
-    name: 'Emerging Markets Pool',
-    description: 'High-growth emerging market trade finance opportunities.',
-    totalValue: 300000n * 10n ** 18n,
-    totalInvested: 180000n * 10n ** 18n,
-    investorCount: 18,
-    status: 'open',
-    invoiceCount: 5,
-    targetYield: 4.5,
-    maturityDate: Math.floor(Date.now() / 1000) + 120 * 24 * 60 * 60,
-  },
-];
+import { formatAddress } from '@/lib/utils';
+import AddInvestment from '@/components/AddInvestment';
+import Link from 'next/link';
 
 export default function PoolsPage() {
-  const { isConnected } = usePanna();
-  const [searchQuery, setSearchQuery] = useState('');
+  const activeAccount = useActiveAccount();
+  const isConnected = !!activeAccount;
+  const pannaConfigured = !!(appConfig.panna.clientId && appConfig.panna.partnerId);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const router = useRouter();
 
-  const calculateFundingPercentage = (invested: bigint, total: bigint) => {
-    if (total === 0n) return 0;
-    return Number((invested * 100n) / total);
+  const handlePoolSelect = (poolId: string) => {
+    router.push(`/pools/${poolId}`);
   };
 
   if (!isConnected) {
     return (
-      <div className="container mx-auto px-4 py-20">
-        <Card className="max-w-md mx-auto text-center">
-          <CardHeader>
-            <CardTitle>Connect Wallet</CardTitle>
-            <CardDescription>
-              Please connect your wallet to view and invest in pools.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        {/* Navbar for unauthenticated state */}
+        <header className="bg-[#0f172a] border-b border-cyan-500/20 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex justify-between items-center">
+              <Link href="/" className="flex items-center gap-3 hover-scale cursor-pointer">
+                <div className="w-10 h-10 bg-cyan-400 rounded-lg flex items-center justify-center hover-glow">
+                  <Ship className="w-6 h-6 text-slate-900" />
+                </div>
+                <span className="text-xl text-white font-bold tracking-tight">SeaTrax</span>
+              </Link>
+              
+              <div className="flex items-center gap-3">
+                {pannaConfigured && (
+                  <div className="panna-login-button sr-only" aria-hidden="true">
+                    <LoginButton chain={liskSepolia} />
+                  </div>
+                )}
+                
+                {pannaConfigured ? (
+                  <button
+                    className="px-6 py-2 bg-cyan-400 text-slate-900 rounded-lg hover:bg-cyan-300 hover-scale-sm hover-shine transition-all border border-cyan-400 flex items-center gap-2"
+                    onClick={() => {
+                      const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+                      if (loginBtn) loginBtn.click();
+                    }}
+                  >
+                    <Wallet className="h-4 w-4" />
+                    Connect Wallet
+                  </button>
+                ) : (
+                  <button className="px-6 py-2 bg-gray-500 text-gray-300 rounded-lg opacity-50 cursor-not-allowed flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Configure Panna
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
+            <Wallet className="h-16 w-16 text-cyan-400 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Connect Your Wallet</h1>
+            <p className="text-gray-600 mb-6">
+              Please connect your wallet to view available investment pools.
+            </p>
+            {pannaConfigured && (
+              <button
+                className="px-6 py-3 bg-cyan-400 text-slate-900 rounded-lg hover:bg-cyan-300 transition-all font-medium flex items-center gap-2 mx-auto"
+                onClick={() => {
+                  const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+                  if (loginBtn) loginBtn.click();
+                }}
+              >
+                <Wallet className="h-4 w-4" />
+                Connect Wallet
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Investment Pools</h1>
-          <p className="text-muted-foreground mt-1">
-            Invest in curated bundles of shipping invoices
-          </p>
-        </div>
-      </div>
-
-      {/* Stats Overview */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardContent className="p-4">
+    <div className="min-h-screen bg-gray-50">
+      {/* Navbar */}
+      <header className="bg-[#0f172a] border-b border-cyan-500/20 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <Link href="/" className="flex items-center gap-3 hover-scale cursor-pointer">
+              <div className="w-10 h-10 bg-cyan-400 rounded-lg flex items-center justify-center hover-glow">
+                <Ship className="w-6 h-6 text-slate-900" />
+              </div>
+              <span className="text-xl text-white font-bold tracking-tight">SeaTrax</span>
+            </Link>
+            
+            <nav className="hidden md:flex items-center gap-8">
+              <Link href="/dashboard" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">Dashboard</Link>
+              <Link href="/pools" className="text-cyan-400 hover:text-cyan-300 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-cyan-400">Pools</Link>
+              <Link href="/investments" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">Investments</Link>
+              <Link href="/returns" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">Returns</Link>
+            </nav>
+            
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Layers className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{mockPools.length}</p>
-                <p className="text-sm text-muted-foreground">Active Pools</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{appConfig.platform.investorYield}%</p>
-                <p className="text-sm text-muted-foreground">Target Yield</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Users className="h-5 w-5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">84</p>
-                <p className="text-sm text-muted-foreground">Total Investors</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-amber-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">25</p>
-                <p className="text-sm text-muted-foreground">Total Invoices</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-md mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search pools..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
-      {/* Pools Grid */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {mockPools.map((pool) => {
-          const fundingPercentage = calculateFundingPercentage(
-            pool.totalInvested,
-            pool.totalValue
-          );
-
-          return (
-            <Card key={pool.poolId.toString()} className="card-hover">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-xl">{pool.name}</CardTitle>
-                    <CardDescription className="mt-1">
-                      {pool.description}
-                    </CardDescription>
-                  </div>
-                  <Badge className={getStatusColor(pool.status)}>
-                    {pool.status === 'open' ? 'Open' : 'Closed'}
-                  </Badge>
+              {pannaConfigured && (
+                <div className="panna-login-button sr-only" aria-hidden="true">
+                  <LoginButton chain={liskSepolia} />
                 </div>
-              </CardHeader>
-              <CardContent>
-                {/* Pool Stats */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {formatEther(pool.totalValue, 0)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Total Value (ETH)</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{pool.investorCount}</p>
-                    <p className="text-xs text-muted-foreground">Investors</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-emerald-500">
-                      {pool.targetYield}%
-                    </p>
-                    <p className="text-xs text-muted-foreground">Expected Yield</p>
-                  </div>
-                </div>
-
-                {/* Funding Progress */}
-                <div className="mb-6">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-muted-foreground">Funding Progress</span>
-                    <span className="font-medium">{fundingPercentage}%</span>
-                  </div>
-                  <Progress 
-                    value={fundingPercentage}
-                    className="h-2"
-                    indicatorClassName={
-                      fundingPercentage >= 100 
-                        ? 'bg-emerald-500' 
-                        : fundingPercentage >= 70 
-                        ? 'bg-blue-500' 
-                        : ''
-                    }
-                  />
-                </div>
-
-                {/* Pool Details */}
-                <div className="flex items-center justify-between text-sm text-muted-foreground mb-6">
-                  <span>{pool.invoiceCount} invoices in pool</span>
-                  <span>Matures: {formatDate(pool.maturityDate)}</span>
-                </div>
-
-                {/* Action */}
-                <Button 
-                  className="w-full gap-2" 
-                  disabled={pool.status !== 'open'}
+              )}
+              
+              <div className="relative flex items-center gap-2">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/30 bg-slate-800/50 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700/50 cursor-pointer transition-colors"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  onKeyDown={(e) => e.key === 'Enter' && setMenuOpen((v) => !v)}
                 >
-                  {pool.status === 'open' ? (
-                    <>
-                      Invest Now
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  ) : (
-                    'Pool Closed'
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                  <Wallet className="h-4 w-4" />
+                  <span className="hidden sm:inline">{formatAddress(activeAccount?.address || '')}</span>
+                  <span className="sm:hidden">Wallet</span>
+                  <ChevronDown className="h-4 w-4" />
+                </div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigator.clipboard.writeText(activeAccount?.address || '')}
+                  onKeyDown={(e) => e.key === 'Enter' && navigator.clipboard.writeText(activeAccount?.address || '')}
+                  aria-label="Copy wallet address"
+                  className="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-cyan-400/30 bg-slate-800/50 hover:bg-slate-700/50 cursor-pointer text-white"
+                >
+                  <Copy className="h-4 w-4" />
+                </div>
+                <a
+                  href={`${appConfig.chain.blockExplorer}/address/${activeAccount?.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-cyan-400/30 bg-slate-800/50 hover:bg-slate-700/50 text-white"
+                  aria-label="Open in block explorer"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+                {menuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-cyan-400/30 bg-slate-800 shadow-lg animate-slide-down z-50">
+                    <div className="p-2">
+                      <Link
+                        href="/profile"
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white hover:bg-slate-700/50 transition-colors"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <User className="h-4 w-4" />
+                        Profile
+                      </Link>
+                    </div>
+                    <div className="border-t border-cyan-400/20"></div>
+                    <div className="p-2">
+                      <p className="text-xs text-gray-400 px-3 py-1 mb-1">Manage wallet</p>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white border border-cyan-400/30 bg-slate-700/50 hover:bg-slate-600/50 transition-colors cursor-pointer"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setTimeout(() => {
+                            const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement;
+                            if (loginBtn) loginBtn.click();
+                          }, 100);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setMenuOpen(false);
+                            setTimeout(() => {
+                              const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement;
+                              if (loginBtn) loginBtn.click();
+                            }, 100);
+                          }
+                        }}
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Manage Wallet
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Pools Content */}
+      <AddInvestment />
+
+      {/* Footer */}
+      <footer className="bg-[#0f172a] text-gray-400 py-12 border-t border-cyan-500/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-4 gap-8">
+            <div className="md:col-span-2">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 bg-cyan-400 rounded-lg flex items-center justify-center">
+                  <Ship className="w-5 h-5 text-slate-900" />
+                </div>
+                <span className="text-white font-bold text-lg">SeaTrax</span>
+              </div>
+              <p className="text-gray-400 max-w-md">
+                Empowering global trade through blockchain-based invoice funding. 
+                Connect exporters with investors for secure, transparent financing.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-medium mb-4">Platform</h4>
+              <div className="space-y-2">
+                <a href="#" className="block hover:text-cyan-400 transition-colors">How it Works</a>
+                <a href="#" className="block hover:text-cyan-400 transition-colors">Pools</a>
+                <a href="#" className="block hover:text-cyan-400 transition-colors">Documentation</a>
+                <a href="#" className="block hover:text-cyan-400 transition-colors">Security</a>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="text-white font-medium mb-4">Support</h4>
+              <div className="space-y-2">
+                <a href="#" className="block hover:text-cyan-400 transition-colors">Help Center</a>
+                <a href="#" className="block hover:text-cyan-400 transition-colors">Contact Us</a>
+                <a href="#" className="block hover:text-cyan-400 transition-colors">Terms of Service</a>
+                <a href="#" className="block hover:text-cyan-400 transition-colors">Privacy Policy</a>
+              </div>
+            </div>
+          </div>
+          
+          <div className="border-t border-cyan-500/20 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
+            <p className="text-gray-500">© 2025 SeaTrax. All rights reserved.</p>
+            <div className="flex items-center gap-6 mt-4 md:mt-0">
+              <a href="#" className="text-gray-400 hover:text-cyan-400 transition-colors">Twitter</a>
+              <a href="#" className="text-gray-400 hover:text-cyan-400 transition-colors">LinkedIn</a>
+              <a href="#" className="text-gray-400 hover:text-cyan-400 transition-colors">GitHub</a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

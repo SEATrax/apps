@@ -1,348 +1,364 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
- * SEATrax Theme Configuration
- * 
- * This file uses CSS custom properties for theming.
- * You can easily customize the theme by modifying these values.
- * 
- * Color format: HSL (hue saturation lightness)
- */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  
+  /* SEATrax Color Palette */
+  --background: #f8f9fa;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
+  --popover: #ffffff;
+  --popover-foreground: #1e293b;
+  
+  /* Primary - Teal/Cyan */
+  --primary: #22d3ee;
+  --primary-foreground: #1e293b;
+  --primary-hover: #06b6d4;
+  
+  /* Secondary - Dark Navy */
+  --secondary: #1e293b;
+  --secondary-foreground: #ffffff;
+  
+  /* Dark backgrounds */
+  --dark-bg: #0f172a;
+  --dark-bg-secondary: #1e293b;
+  --dark-bg-tertiary: #334155;
+  
+  /* Teal variations */
+  --teal-50: #ecfeff;
+  --teal-100: #cffafe;
+  --teal-200: #a5f3fc;
+  --teal-300: #67e8f9;
+  --teal-400: #22d3ee;
+  --teal-500: #06b6d4;
+  --teal-600: #0891b2;
+  --teal-700: #0e7490;
+  
+  --muted: #e2e8f0;
+  --muted-foreground: #64748b;
+  --accent: #22d3ee;
+  --accent-foreground: #1e293b;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(148, 163, 184, 0.2);
+  --input: transparent;
+  --input-background: #f1f5f9;
+  --switch-background: #cbd5e1;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #22d3ee;
+  --chart-1: #22d3ee;
+  --chart-2: #06b6d4;
+  --chart-3: #0891b2;
+  --chart-4: #0e7490;
+  --chart-5: #67e8f9;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1e293b;
+  --sidebar-primary: #22d3ee;
+  --sidebar-primary-foreground: #1e293b;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #1e293b;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #22d3ee;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
 
 @layer base {
-  :root {
-    /* Background colors */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    
-    /* Card colors */
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    
-    /* Popover colors */
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    
-    /* Primary colors - Ocean Blue */
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 40% 98%;
-    
-    /* Secondary colors */
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    
-    /* Muted colors */
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    
-    /* Accent colors */
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    
-    /* Destructive colors */
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    
-    /* Border and input colors */
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 217 91% 60%;
-    
-    /* Border radius */
-    --radius: 0.75rem;
-    
-    /* Chart colors */
-    --chart-1: 217 91% 60%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
-
-  .dark {
-    /* Background colors - Deep Ocean */
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    
-    /* Card colors */
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    
-    /* Popover colors */
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    
-    /* Primary colors - Bright Ocean Blue */
-    --primary: 217 91% 60%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    
-    /* Secondary colors */
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    
-    /* Muted colors */
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    
-    /* Accent colors */
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    
-    /* Destructive colors */
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    
-    /* Border and input colors */
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-    
-    /* Chart colors */
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
-
   * {
-    border-color: hsl(var(--border));
+    @apply border-border outline-ring/50;
   }
 
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-muted rounded-full;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50 transition-colors;
-}
-
-/* Selection */
-::selection {
-  @apply bg-primary/20 text-primary;
-}
-
-/* Focus styles */
-:focus-visible {
-  @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
-}
-
-/* Animations */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slide-down {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
-}
-
-.animate-slide-down {
-  animation: slide-down 0.3s ease-out;
-}
-
-.animate-scale-in {
-  animation: scale-in 0.2s ease-out;
-}
-
-.animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    hsl(var(--muted)) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-/* Glass effect */
-.glass {
-  @apply bg-background/80 backdrop-blur-xl border border-border/50;
-}
-
-/* Gradient text */
-.gradient-text {
-  @apply bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent;
-}
-
-/* Card hover effect */
-.card-hover {
-  @apply transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1;
-}
-
-/* Container */
-.container {
-  @apply max-w-7xl mx-auto;
-}
-
-/* Custom styles for Panna SDK LoginButton to match our design */
-@layer components {
-  .panna-login-button button,
-  .panna-login-button-menu button {
-    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors;
-    @apply focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring;
-    @apply disabled:pointer-events-none disabled:opacity-50;
-    @apply h-9 px-4 py-2;
+    @apply bg-background text-foreground;
+    font-family: var(--font-family);
   }
   
-  /* Main header login button - primary style */
-  .panna-login-button button {
-    @apply bg-primary text-primary-foreground shadow hover:bg-primary/90;
+  /* Custom scrollbar for webkit browsers */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
   }
   
-  /* Dropdown menu login button - outline style */
-  .panna-login-button-menu button {
-    @apply w-full border border-input bg-background hover:bg-accent hover:text-accent-foreground;
+  ::-webkit-scrollbar-track {
+    background: #1e293b;
   }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #22d3ee;
+    border-radius: 5px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #06b6d4;
+  }
+  
+  /* Wave animation for landing page */
+  @keyframes wave {
+    0% {
+      transform: translateX(0) translateY(0);
+    }
+    100% {
+      transform: translateX(-50%) translateY(0);
+    }
+  }
+  
+  /* Pulse glow animation */
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(34, 211, 238, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(34, 211, 238, 0.6);
+    }
+  }
+  
+  /* Float animation */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+}
 
-  /* Panna SDK modal/light theme overrides */
-  /* Target common panna portal containers safely */
-  :where(.panna-portal, [class*="panna"], [id^="panna"]) {
-    /* Ensure portal sits above header */
-    z-index: 9999;
+/* Custom Hover Animation Utilities */
+@layer utilities {
+  /* Card hover - lift with shadow */
+  .hover-lift {
+    @apply transition-all duration-300 ease-out;
   }
+  
+  .hover-lift:hover {
+    @apply -translate-y-1 shadow-xl shadow-cyan-500/20;
+  }
+  
+  /* Card hover - intense lift */
+  .hover-lift-lg {
+    @apply transition-all duration-300 ease-out;
+  }
+  
+  .hover-lift-lg:hover {
+    @apply -translate-y-2 shadow-2xl shadow-cyan-500/30;
+  }
+  
+  /* Button hover - scale */
+  .hover-scale {
+    @apply transition-transform duration-200 ease-out;
+  }
+  
+  .hover-scale:hover {
+    @apply scale-105;
+  }
+  
+  /* Button hover - scale small */
+  .hover-scale-sm {
+    @apply transition-transform duration-200 ease-out;
+  }
+  
+  .hover-scale-sm:hover {
+    @apply scale-[1.02];
+  }
+  
+  /* Icon hover - bounce */
+  .hover-bounce {
+    @apply transition-transform duration-300 ease-out;
+  }
+  
+  .hover-bounce:hover {
+    animation: float 2s ease-in-out infinite;
+  }
+  
+  /* Glow effect */
+  .hover-glow {
+    @apply transition-all duration-300;
+  }
+  
+  .hover-glow:hover {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  /* Border glow */
+  .hover-border-glow {
+    @apply transition-all duration-300;
+  }
+  
+  .hover-border-glow:hover {
+    @apply border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.3)];
+  }
+  
+  /* Smooth color transition */
+  .hover-color {
+    @apply transition-colors duration-300 ease-out;
+  }
+  
+  /* Background transition */
+  .hover-bg {
+    @apply transition-all duration-300 ease-out;
+  }
+  
+  .hover-bg:hover {
+    opacity: 0.8;
+  }
+  
+  /* Shine effect */
+  .hover-shine {
+    @apply relative overflow-hidden;
+  }
+  
+  .hover-shine::before {
+    content: '';
+    @apply absolute top-0 left-[-100%] w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent;
+    transition: left 0.5s ease-out;
+  }
+  
+  .hover-shine:hover::before {
+    @apply left-[100%];
+  }
+}
 
-  /* Force light theme background and readable text when document is light */
-  body:not(.dark) :where(.panna-portal, [class*="panna-modal"], [class*="panna-dialog"]) {
-    background-color: hsl(var(--card)) !important;
-    color: hsl(var(--card-foreground)) !important;
-  }
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=' text-']), :not(:has([class^='text-'])))) {
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  /* Ensure ALL children in the portal inherit light theme in light mode */
-  body:not(.dark) :where(.panna-portal, [class*="panna-modal"], [class*="panna-dialog"]) * {
-    color: hsl(var(--foreground)) !important;
-  }
+    h2 {
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  /* Prevent opaque dark blocks; default panels to card bg */
-  body:not(.dark) :where(.panna-portal) :where([class*="container"], [class*="content"], [class*="paper"], [class*="surface"], [class*="wrapper"]) {
-    background-color: hsl(var(--card)) !important;
-    border-color: hsl(var(--border)) !important;
-  }
+    h3 {
+      font-size: var(--text-lg);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  /* Inputs and fields */
-  body:not(.dark) :where(.panna-portal) :where(input, textarea, select) {
-    background-color: hsl(var(--background)) !important;
-    color: hsl(var(--foreground)) !important;
-    border-color: hsl(var(--border)) !important;
-  }
+    h4 {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  /* Thirdweb UI (used by Panna) light theme fixes */
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) {
-    background-color: hsl(var(--card)) !important;
-    color: hsl(var(--foreground)) !important;
-  }
-  /* Override any inline dark backgrounds within the modal */
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) :where([style*="background: rgb(12"], [style*="background:rgb(12"], [style*="background-color: rgb(12"], [style*="background-color:rgb(12"]) {
-    background: hsl(var(--card)) !important;
-    background-color: hsl(var(--card)) !important;
-  }
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) :where(.css-cauv8d, .css-1e5x898, .css-r4yucw, .css-qcagxi, .css-l03scp, .css-ihiwz0, .css-r4stvh) {
-    color: hsl(var(--foreground)) !important;
-    background-color: transparent !important;
-    border-color: hsl(var(--border)) !important;
-  }
-  /* Specific copy controls shown in your log */
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) :where(.css-1xzrdgc, .css-hrpeht) {
-    background-color: hsl(var(--secondary)) !important;
-    color: hsl(var(--secondary-foreground)) !important;
-    border: 1px solid hsl(var(--border)) !important;
-  }
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) button {
-    background-color: hsl(var(--secondary)) !important;
-    color: hsl(var(--secondary-foreground)) !important;
-    border-color: hsl(var(--border)) !important;
-  }
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) .tw-highlight-button__send,
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) .tw-highlight-button__receive {
-    background-color: hsl(var(--card)) !important;
-    color: hsl(var(--foreground)) !important;
-    border: 1px solid hsl(var(--border)) !important;
-  }
-  body:not(.dark) :where(.tw-connected-wallet__default_modal_screen) .tw-disconnect-wallet-button {
-    background-color: hsl(var(--destructive)) !important;
-    color: hsl(var(--destructive-foreground)) !important;
-  }
+    p {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
 
-  /* Backdrop adjustments */
-  body:not(.dark) :where(.panna-backdrop, [class*="panna-backdrop"]) {
-    background-color: rgba(0,0,0,0.4) !important;
-  }
+    label {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  /* Buttons inside modal should respect our theme tokens */
-  body:not(.dark) :where(.panna-portal) button {
-    @apply text-foreground;
-  }
+    button {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
 
-  /* Common card elements inside modal */
-  body:not(.dark) :where(.panna-portal) :where(.card, .panel, .sheet, [class*="card"], [class*="panel"], [class*="sheet"]) {
-    background-color: hsl(var(--card)) !important;
-    color: hsl(var(--card-foreground)) !important;
-    border-color: hsl(var(--border)) !important;
+    input {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
   }
+}
+
+html {
+  font-size: var(--font-size);
 }

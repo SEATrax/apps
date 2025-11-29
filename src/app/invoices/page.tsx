@@ -177,14 +177,13 @@ export default function InvoicesPage() {
                         </div>
                         <Progress 
                           value={fundingPercentage} 
-                          className="h-2"
-                          indicatorClassName={
+                          className={`h-2 ${
                             fundingPercentage >= 70 
                               ? 'bg-emerald-500' 
                               : fundingPercentage >= 50 
                               ? 'bg-amber-500' 
-                              : ''
-                          }
+                              : 'bg-gray-200'
+                          }`}
                         />
                         <div className="flex justify-between text-xs text-muted-foreground mt-1">
                           <span>{formatEther(invoice.currentFunding, 0)} ETH</span>
