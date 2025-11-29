@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Force webpack usage instead of turbopack to avoid compatibility issues
+  // Use --webpack flag in build command instead of experimental config
+  
   webpack: (config, { isServer }) => {
     // Exclude test files and problematic modules from bundling
     config.resolve = {
