@@ -132,12 +132,28 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               ) : (
                 pannaConfigured ? (
                   <div className="flex items-center gap-2">
-                    <LoginButton chain={liskSepolia} />
-                    <Link href="/testing">
-                      <button className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-all border border-slate-600 text-sm">
-                        Test Mode
-                      </button>
-                    </Link>
+                    <div className="panna-login-button sr-only" aria-hidden="true">
+                      <LoginButton chain={liskSepolia} />
+                    </div>
+                    <div
+                      className="px-6 py-2 bg-cyan-400 text-slate-900 rounded-lg hover:bg-cyan-300 hover-scale hover-shine transition-all border border-cyan-400 flex items-center gap-2 cursor-pointer"
+                      onClick={() => {
+                        const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+                        if (loginBtn) loginBtn.click();
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+                          if (loginBtn) loginBtn.click();
+                        }
+                      }}
+                    >
+                      <Wallet className="h-4 w-4" />
+                      Connect Wallet
+                    </div>
                     <style jsx global>{`
                       /* Style the Panna LoginButton */
                       .panna-login-button button,
