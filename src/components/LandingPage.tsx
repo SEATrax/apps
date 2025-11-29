@@ -52,13 +52,6 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             
             {/* Auth Section */}
             <div className="flex items-center gap-3">
-              {/* Hidden LoginButton always mounted to reliably trigger modal */}
-              {pannaConfigured && (
-                <div className="panna-login-button sr-only" aria-hidden="true">
-                  <LoginButton chain={liskSepolia} />
-                </div>
-              )}
-              
               {/* Auth controls: show wallet dropdown when connected, otherwise show connect/signup */}
               {isConnected && activeAccount ? (
                 <div ref={menuRef} className="relative flex items-center gap-2">
@@ -138,16 +131,38 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 </div>
               ) : (
                 pannaConfigured ? (
-                  <button
-                    className="px-6 py-2 bg-cyan-400 text-slate-900 rounded-lg hover:bg-cyan-300 hover-scale-sm hover-shine transition-all border border-cyan-400 flex items-center gap-2"
-                    onClick={() => {
-                      const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
-                      if (loginBtn) loginBtn.click();
-                    }}
-                  >
-                    <Wallet className="h-4 w-4" />
-                    Connect Wallet
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <LoginButton chain={liskSepolia} />
+                    <Link href="/testing">
+                      <button className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-all border border-slate-600 text-sm">
+                        Test Mode
+                      </button>
+                    </Link>
+                    <style jsx global>{`
+                      /* Style the Panna LoginButton */
+                      .panna-login-button button,
+                      button[data-testid*="login"],
+                      button[class*="login"] {
+                        background: #22d3ee !important;
+                        color: #0f172a !important;
+                        border: 1px solid #22d3ee !important;
+                        border-radius: 8px !important;
+                        padding: 8px 24px !important;
+                        font-weight: 500 !important;
+                        font-size: 14px !important;
+                        transition: all 0.2s ease !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        gap: 8px !important;
+                      }
+                      .panna-login-button button:hover,
+                      button[data-testid*="login"]:hover,
+                      button[class*="login"]:hover {
+                        background: #67e8f9 !important;
+                        transform: scale(1.02) !important;
+                      }
+                    `}</style>
+                  </div>
                 ) : (
                   <button className="px-6 py-2 bg-gray-500 text-gray-300 rounded-lg opacity-50 cursor-not-allowed flex items-center gap-2">
                     <Wallet className="h-4 w-4" />

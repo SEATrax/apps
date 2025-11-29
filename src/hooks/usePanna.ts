@@ -73,6 +73,38 @@ export function usePanna() {
       }
     },
     
+    switchToMockUser: (role: 'exporter' | 'investor' | 'admin') => {
+      const mockUsers = {
+        exporter: {
+          id: 'mock-exp-1',
+          name: 'Test Exporter (Mock)',
+          role: 'exporter',
+          address: '0x1234567890123456789012345678901234567890',
+          verified: true
+        },
+        investor: {
+          id: 'mock-inv-1', 
+          name: 'Test Investor (Mock)',
+          role: 'investor',
+          address: '0x0987654321098765432109876543210987654321',
+          verified: true
+        },
+        admin: {
+          id: 'mock-adm-1',
+          name: 'Test Admin (Mock)',
+          role: 'admin', 
+          address: '0xABCDEF1234567890ABCDEF1234567890ABCDEF12',
+          verified: true
+        }
+      };
+      
+      const user = mockUsers[role];
+      setMockUser(user);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('mockUser', JSON.stringify(user));
+      }
+    },
+    
     // Contract interaction helpers
     readContract: async (args: any) => {
       throw new Error('Use useContract hook for contract interactions');
