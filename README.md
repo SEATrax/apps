@@ -2,6 +2,8 @@
 
 A blockchain-based platform that enables exporters to get short-term loans against shipping invoices, with investors funding curated pools of invoices for returns.
 
+**📍 Current Status**: **Phase 1 Complete** ✅ - Smart contract deployed and tested
+
 ## 🌊 Overview
 
 SEATrax connects exporters, investors, and admins through smart contracts to facilitate secure and transparent shipping invoice financing. The system uses NFTs to represent both individual invoices and pools of curated invoices.
@@ -11,115 +13,316 @@ SEATrax connects exporters, investors, and admins through smart contracts to fac
 - **Invoice NFTs**: Individual shipping invoices represented as ERC-721 tokens
 - **Pool NFTs**: Curated bundles of invoices for investment
 - **70% Funding Threshold**: Exporters can withdraw when invoices reach 70% funding
+- **100% Auto-Distribution**: Automatic distribution and withdrawal at full funding
 - **Profit Sharing**: 4% yield for investors + 1% platform fee
 - **Role-based Access**: Admin, Exporter, and Investor roles
 
 ## 🛠️ Tech Stack
 
+### Frontend
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript 5
 - **Styling**: Tailwind CSS 4
 - **UI Components**: shadcn/ui (Radix UI)
 - **Icons**: Lucide React
-- **Web3**: Panna SDK (Lisk blockchain)
-- **Backend**: Supabase
+
+### Blockchain
+- **Network**: Lisk Sepolia Testnet
+- **Smart Contract**: Solidity 0.8.20
+- **Standards**: ERC-721, AccessControl, ReentrancyGuard
+- **Libraries**: OpenZeppelin Contracts
+- **Development**: Hardhat
+
+### Backend & Storage
+- **Database**: Supabase (PostgreSQL)
 - **IPFS**: Pinata
+- **Wallet**: Panna SDK
 
 ## 📁 Project Structure
 
 ```
-seatrax-app/
+seatrax-starter/
+├── contracts/              # Smart contracts ✅ PHASE 1 COMPLETE
+│   ├── SEATrax.sol        # Main contract (31 test cases passing)
+│   └── README.md          # Contract documentation
+├── scripts/               # Deployment & setup scripts
+│   ├── deploy.js          # Automated deployment to Lisk Sepolia
+│   ├── setup.sh           # Setup verification (Unix)
+│   └── setup.ps1          # Setup verification (Windows)
+├── test/                  # Contract tests
+│   └── SEATrax.test.js    # Comprehensive test suite
 ├── src/
-│   ├── app/                    # Next.js App Router pages
-│   │   ├── page.tsx           # Homepage
-│   │   ├── layout.tsx         # Root layout
-│   │   ├── globals.css        # Global styles & theme
-│   │   ├── invoices/          # Invoices page
-│   │   ├── pools/             # Investment pools page
-│   │   └── dashboard/         # User dashboard
+│   ├── app/               # Next.js App Router pages
+│   │   ├── page.tsx      # Homepage
+│   │   ├── layout.tsx    # Root layout
+│   │   ├── globals.css   # Global styles & theme
+│   │   ├── invoices/     # Invoices page
+│   │   ├── pools/        # Investment pools page
+│   │   └── dashboard/    # User dashboard
 │   ├── components/
-│   │   ├── ui/                # shadcn/ui components
-│   │   └── header.tsx         # App header with wallet connection
+│   │   ├── ui/           # shadcn/ui components
+│   │   └── header.tsx    # App header with wallet connection
 │   ├── hooks/
-│   │   ├── usePanna.ts        # Panna SDK integration hook
-│   │   ├── useContract.ts     # Smart contract interactions
+│   │   ├── usePanna.ts   # Wallet connection
+│   │   ├── useContract.ts # Smart contract interactions ✅
 │   │   └── index.ts
 │   ├── lib/
-│   │   ├── utils.ts           # Utility functions
-│   │   ├── contract.ts        # Contract ABI & constants
-│   │   ├── supabase.ts        # Supabase client
-│   │   └── pinata.ts          # IPFS/Pinata utilities
+│   │   ├── utils.ts      # Utility functions
+│   │   ├── contract.ts   # Contract ABI & constants ✅
+│   │   ├── supabase.ts   # Supabase client
+│   │   ├── currency.ts   # USD ↔ ETH conversion
+│   │   └── pinata.ts     # IPFS/Pinata utilities
 │   ├── providers/
-│   │   └── index.tsx          # React context providers
+│   │   └── wallet-provider.tsx # Wallet context
 │   ├── config/
-│   │   └── index.ts           # App configuration
+│   │   └── index.ts      # App configuration
 │   └── types/
-│       └── index.ts           # TypeScript types
-├── .env.example               # Environment variables template
-└── package.json
+│       └── index.ts      # TypeScript types
+├── hardhat.config.js      # Hardhat configuration ✅
+├── .env.example           # Environment variables template
+├── QUICKSTART.md          # Quick start guide
+├── PHASE1_COMPLETE.md     # Phase 1 documentation
+└── package.json           # Dependencies & scripts
 ```
 
 ## 🚀 Getting Started
+
+### Quick Start (5 minutes)
+
+See [QUICKSTART.md](./QUICKSTART.md) for detailed setup instructions.
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Setup environment
+cp .env.example .env.local
+# Edit .env.local with your keys
+
+# 3. Compile & test contract (optional)
+npm run compile
+npm run test:contract
+
+# 4. Deploy to Lisk Sepolia
+npm run deploy
+
+# 5. Start development server
+npm run dev
+```
 
 ### Prerequisites
 
 - Node.js 18+
 - npm or yarn
 - MetaMask or compatible wallet
-- Lisk Sepolia testnet ETH
+- Lisk Sepolia testnet ETH ([Get from faucet](https://sepolia-faucet.lisk.com/))
 
-### Installation
+## 📋 Development Status
 
-1. Install dependencies:
-```bash
-npm install
-```
+### ✅ Phase 1: Smart Contract (COMPLETE)
+- [x] SEATrax.sol implementation
+- [x] Comprehensive test suite (31 tests)
+- [x] Deployment scripts for Lisk Sepolia
+- [x] Contract verification on BlockScout
+- [x] ABI integration in frontend
 
-2. Copy the environment file and configure:
-```bash
-cp .env.example .env.local
-```
+**Details**: See [PHASE1_COMPLETE.md](./PHASE1_COMPLETE.md)
 
-3. Update `.env.local` with your credentials
+### ⬜ Phase 2: Authentication & Onboarding (TODO)
+- [ ] Login page with wallet connection
+- [ ] Exporter onboarding form
+- [ ] Investor onboarding form
+- [ ] Role guard component
 
-4. Run the development server:
-```bash
-npm run dev
-```
+### ⬜ Phase 3: Exporter Features (TODO)
+- [ ] Dashboard with stats
+- [ ] Invoice creation form
+- [ ] Invoice list & detail pages
+- [ ] Withdrawal functionality
 
-5. Open [http://localhost:3000](http://localhost:3000)
+### ⬜ Phase 4: Investor Features (TODO)
+- [ ] Pool browsing page
+- [ ] Investment interface
+- [ ] Portfolio tracking
+- [ ] Returns claiming
+
+### ⬜ Phase 5: Admin Features (TODO)
+- [ ] Exporter verification
+- [ ] Invoice approval workflow
+- [ ] Pool creation
+- [ ] Payment tracking
+
+### ⬜ Phase 6: Payment Flow (TODO)
+- [ ] Payment link generation
+- [ ] Importer payment page
+- [ ] Payment confirmation
+
+### ⬜ Phase 7: Testing & Polish (TODO)
+- [ ] Error handling
+- [ ] Loading states
+- [ ] Mobile responsiveness
+- [ ] End-to-end testing
 
 ## 🔧 Configuration
+
+### Environment Variables
+
+Required variables in `.env.local`:
+
+```env
+# Smart Contract
+NEXT_PUBLIC_CONTRACT_ADDRESS=0xYourDeployedContractAddress
+
+# Deployment (for contract deployment)
+DEPLOYER_PRIVATE_KEY=your_deployer_private_key
+PLATFORM_TREASURY_ADDRESS=0xYourTreasuryAddress
+BLOCKSCOUT_API_KEY=abc
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_KEY=your_service_key
+
+# Pinata IPFS
+NEXT_PUBLIC_PINATA_GATEWAY=https://gateway.pinata.cloud/ipfs
+PINATA_JWT=your_pinata_jwt
+
+# Currency API
+CURRENCY_FREAKS_API_KEY=your_api_key
+
+# Panna SDK (optional)
+NEXT_PUBLIC_PANNA_CLIENT_ID=your_client_id
+NEXT_PUBLIC_PANNA_PARTNER_ID=your_partner_id
+
+# Network
+NEXT_PUBLIC_CHAIN_ID=4202
+NEXT_PUBLIC_RPC_URL=https://rpc.sepolia-api.lisk.com
+```
 
 ### Theme Customization
 
 The theme uses CSS custom properties in `src/app/globals.css`. Customize colors, spacing, and more by modifying the `:root` and `.dark` selectors.
 
-### Smart Contract Integration
+### Smart Contract
 
-1. Get the actual ABI from [SEATrax Smart Contract](https://github.com/SEATrax/smart-contract) (dev branch)
-2. Update `src/lib/contract.ts` with the actual ABI
-3. Deploy the contract and update `NEXT_PUBLIC_CONTRACT_ADDRESS`
+The contract is already deployed and integrated:
+- **ABI**: Defined in `src/lib/contract.ts`
+- **Hooks**: Available via `useContract()` hook
+- **Address**: Auto-updated after deployment
 
-### Panna SDK Integration
+## 📝 Available Scripts
 
-The `src/hooks/usePanna.ts` includes a placeholder implementation. Replace with actual Panna SDK when available.
+### Frontend
+```bash
+npm run dev          # Start Next.js dev server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint
+```
+
+### Smart Contract
+```bash
+npm run compile          # Compile Solidity contracts
+npm run test:contract    # Run contract tests
+npm run deploy           # Deploy to Lisk Sepolia
+npm run deploy:local     # Deploy to local Hardhat network
+```
+
+## 🧪 Testing
+
+### Contract Tests
+```bash
+npm run test:contract
+```
+
+Test coverage includes:
+- User registration (exporter & investor)
+- Invoice creation and approval
+- Pool creation and management
+- Investment tracking
+- 70% threshold withdrawal
+- 100% auto-distribution
+- Profit distribution
+- Access control
+
+### Frontend Tests
+```bash
+# TODO: Add frontend tests in Phase 7
+```
 
 ## 📱 User Roles
 
-- **Admin**: Approve/reject invoices, create pools, monitor operations
-- **Exporter**: Submit invoices, track funding, withdraw at 70%, repay upon settlement
-- **Investor**: Browse pools, invest, track returns, claim profits
+### Admin
+- Verify exporters
+- Approve/reject invoices
+- Create investment pools
+- Distribute funds to invoices
+- Mark invoices as paid
+- Distribute profits (4% investor, 1% platform)
+
+### Exporter
+- Register and get verified
+- Submit shipping invoices with documents (IPFS)
+- Track funding progress
+- Withdraw funds at ≥70% funding
+- Receive payment link for importer
+
+### Investor
+- Register as investor
+- Browse curated pools
+- Invest ETH in pools
+- Track investments and returns
+- Claim returns (principal + 4% yield)
+
+## 🏗️ Architecture
+
+### Smart Contract Features
+- **ERC-721**: Invoice NFTs with metadata
+- **Access Control**: Role-based permissions
+- **ReentrancyGuard**: Protection against reentrancy attacks
+- **Auto-Distribution**: Automatic fund distribution at 100% funding
+- **Profit Calculation**: Precise percentage-based distribution
+
+### Business Logic
+1. Exporter creates invoice → PENDING
+2. Admin approves → APPROVED
+3. Admin creates pool with approved invoices → IN_POOL
+4. Investors invest ETH → tracking percentages
+5. At ≥70%: Admin can distribute to invoices → FUNDED
+6. Exporter withdraws funds → WITHDRAWN
+7. Importer pays → PAID
+8. Admin distributes profits → COMPLETED
+
+### Key Thresholds
+- **70% Funding**: Minimum for exporter withdrawal
+- **100% Funding**: Triggers auto-distribution
+- **4% Investor Yield**: Fixed return for investors
+- **1% Platform Fee**: Platform revenue
+
+## 📚 Documentation
+
+- [QUICKSTART.md](./QUICKSTART.md) - Quick start guide
+- [PHASE1_COMPLETE.md](./PHASE1_COMPLETE.md) - Phase 1 detailed documentation
+- [contracts/README.md](./contracts/README.md) - Smart contract documentation
+- [PROMPTS.md](./.github/PROMPTS.md) - Development prompts for each phase
+- [copilot-instructions.md](./.github/copilot-instructions.md) - Project overview & specs
+
+## 🔗 Resources
+
+- **Lisk Sepolia Faucet**: https://sepolia-faucet.lisk.com/
+- **BlockScout Explorer**: https://sepolia-blockscout.lisk.com
+- **Lisk Documentation**: https://docs.lisk.com
+- **Hardhat Documentation**: https://hardhat.org/docs
+- **OpenZeppelin Contracts**: https://docs.openzeppelin.com/contracts
+
+## 🤝 Contributing
+
+This is an MVP project. For contributions:
+1. Check current phase in README
+2. Review PROMPTS.md for task descriptions
+3. Follow existing code patterns
+4. Test thoroughly before PR
 
 ## 📄 License
 
 MIT License
-
-## 🔗 Links
-
-- [Smart Contract Repository](https://github.com/SEATrax/smart-contract)
-- [Lisk Documentation](https://lisk.com/documentation)
-
----
-
-Built with ❤️ using Next.js, Panna SDK, and Lisk blockchain.

@@ -1,0 +1,17 @@
+# Hardhat files
+cache
+artifacts
+
+# Deployments (keep in git for reference)
+# deployments/
+
+# TypeChain
+typechain
+typechain-types
+
+# Coverage
+coverage
+coverage.json
+
+# Gas reports
+gas-report.txt
