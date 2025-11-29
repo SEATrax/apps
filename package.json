@@ -85,7 +85,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^9",
     "eslint-config-next": "16.0.5",
-    "ethers": "^5.7.2",
+    "ethers": "^6.15.0",
     "hardhat": "^2.22.16",
     "hardhat-gas-reporter": "^1.0.10",
     "ignore-loader": "^0.1.2",

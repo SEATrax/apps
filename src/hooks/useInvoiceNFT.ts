@@ -75,7 +75,7 @@ export const useInvoiceNFT = () => {
     // TODO: Implement actual USD to ETH conversion using CurrencyFreaks API
     // For now, using mock conversion rate: 1 ETH = $3000
     const ethAmount = usdAmount / 3000;
-    return ethers.utils.parseEther(ethAmount.toString()).toString();
+    return ethers.parseEther(ethAmount.toString()).toString();
   };
 
   // Mint new invoice NFT - Mock implementation
