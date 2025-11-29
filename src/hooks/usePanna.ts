@@ -2,7 +2,14 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { appConfig } from '@/config';
-import type { WalletState } from '@/types';
+
+// Local wallet state type (without role - role is determined from Supabase)
+interface LocalWalletState {
+  isConnected: boolean;
+  address: string | null;
+  chainId: number | null;
+  balance: bigint;
+}
 
 // ============================================================
 // PANNA SDK PLACEHOLDER
@@ -39,7 +46,7 @@ interface UsePannaReturn {
 
 export function usePanna(): UsePannaReturn {
   const [isConnecting, setIsConnecting] = useState(false);
-  const [walletState, setWalletState] = useState<WalletState>({
+  const [walletState, setWalletState] = useState<LocalWalletState>({
     isConnected: false,
     address: null,
     chainId: null,

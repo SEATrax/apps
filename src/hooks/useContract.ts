@@ -2,251 +2,257 @@
 
 import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
-import type { InvoiceNFT, PoolNFT, Investment, InvoiceMetadata } from '@/types';
-import { INVOICE_STATUS, POOL_STATUS } from '@/lib/contract';
+import type { Invoice, Pool, Investment, InvoiceStatus, PoolStatus } from '@/types';
 
 interface UseContractReturn {
-  // Invoice Functions
-  createInvoice: (ipfsHash: string, fundingAmount: bigint, dueDate: number) => Promise<bigint>;
-  getInvoice: (tokenId: bigint) => Promise<InvoiceNFT | null>;
-  getInvoicesByOwner: (owner: string) => Promise<bigint[]>;
-  approveInvoice: (tokenId: bigint) => Promise<void>;
-  rejectInvoice: (tokenId: bigint, reason: string) => Promise<void>;
-  withdrawFunding: (tokenId: bigint) => Promise<void>;
-  repayInvoice: (tokenId: bigint, amount: bigint) => Promise<void>;
+  // Exporter Functions
+  registerExporter: () => Promise<void>;
+  createInvoice: (
+    invoiceValue: bigint,
+    loanAmount: bigint,
+    invoiceDate: number,
+    dueDate: number,
+    ipfsHash: string
+  ) => Promise<bigint>;
+  withdrawFunds: (invoiceId: bigint) => Promise<void>;
+  getExporterInvoices: (exporter: string) => Promise<bigint[]>;
   
-  // Pool Functions
-  createPool: (name: string, invoiceTokenIds: bigint[], maturityDate: number) => Promise<bigint>;
-  getPool: (poolId: bigint) => Promise<PoolNFT | null>;
+  // Investor Functions
+  registerInvestor: () => Promise<void>;
   invest: (poolId: bigint, amount: bigint) => Promise<void>;
   claimReturns: (poolId: bigint) => Promise<void>;
-  getInvestmentsByInvestor: (investor: string) => Promise<Investment[]>;
+  getInvestorPools: (investor: string) => Promise<bigint[]>;
   
-  // Utility Functions
-  getFundingPercentage: (tokenId: bigint) => Promise<number>;
-  hasRole: (role: string, account: string) => Promise<boolean>;
+  // Admin Functions
+  verifyExporter: (exporter: string) => Promise<void>;
+  approveInvoice: (invoiceId: bigint) => Promise<void>;
+  rejectInvoice: (invoiceId: bigint) => Promise<void>;
+  createPool: (
+    name: string,
+    invoiceIds: bigint[],
+    startDate: number,
+    endDate: number
+  ) => Promise<bigint>;
+  markInvoicePaid: (invoiceId: bigint) => Promise<void>;
+  distributeProfits: (poolId: bigint) => Promise<void>;
+  
+  // View Functions
+  getInvoice: (invoiceId: bigint) => Promise<Invoice | null>;
+  getPool: (poolId: bigint) => Promise<Pool | null>;
+  getInvestment: (poolId: bigint, investor: string) => Promise<Investment | null>;
+  canWithdraw: (invoiceId: bigint) => Promise<{ canWithdraw: boolean; amount: bigint }>;
+  getPoolFundingPercentage: (poolId: bigint) => Promise<number>;
+  getAllOpenPools: () => Promise<bigint[]>;
   
   // State
   isLoading: boolean;
   error: Error | null;
 }
 
+const INVOICE_STATUS_MAP: Record<number, InvoiceStatus> = {
+  0: 'PENDING',
+  1: 'APPROVED',
+  2: 'IN_POOL',
+  3: 'FUNDED',
+  4: 'WITHDRAWN',
+  5: 'PAID',
+  6: 'COMPLETED',
+  7: 'REJECTED',
+};
+
+const POOL_STATUS_MAP: Record<number, PoolStatus> = {
+  0: 'OPEN',
+  1: 'FUNDED',
+  2: 'COMPLETED',
+  3: 'CANCELLED',
+};
+
 export function useContract(): UseContractReturn {
-  const { readContract, writeContract, address } = usePanna();
+  const { readContract, writeContract } = usePanna();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // Helper to handle contract calls
-  const handleContractCall = useCallback(async <T>(
-    operation: () => Promise<T>
-  ): Promise<T> => {
+  const handleCall = useCallback(async <T>(operation: () => Promise<T>): Promise<T> => {
     setIsLoading(true);
     setError(null);
     try {
       return await operation();
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Contract operation failed');
-      setError(error);
-      throw error;
+      const e = err instanceof Error ? err : new Error('Contract operation failed');
+      setError(e);
+      throw e;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // ============== INVOICE FUNCTIONS ==============
+  // ============== EXPORTER ==============
+  const registerExporter = useCallback(async (): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('registerExporter', []);
+    });
+  }, [writeContract, handleCall]);
 
   const createInvoice = useCallback(async (
-    ipfsHash: string,
-    fundingAmount: bigint,
-    dueDate: number
+    invoiceValue: bigint,
+    loanAmount: bigint,
+    invoiceDate: number,
+    dueDate: number,
+    ipfsHash: string
   ): Promise<bigint> => {
-    return handleContractCall(async () => {
-      const txHash = await writeContract('createInvoice', [ipfsHash, fundingAmount, dueDate]);
-      console.log('Invoice created, tx:', txHash);
-      // In production, parse the event logs to get the tokenId
-      return 0n; // Placeholder
+    return handleCall(async () => {
+      await writeContract('createInvoice', [invoiceValue, loanAmount, invoiceDate, dueDate, ipfsHash]);
+      return 0n;
     });
-  }, [writeContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  const getInvoice = useCallback(async (tokenId: bigint): Promise<InvoiceNFT | null> => {
-    return handleContractCall(async () => {
-      const result = await readContract<[string, string, bigint, bigint, number, bigint, bigint]>(
-        'getInvoice',
-        [tokenId]
-      );
-      
-      const [owner, ipfsHash, fundingAmount, currentFunding, status, createdAt, dueDate] = result;
-      
-      const statusMap: Record<number, InvoiceNFT['status']> = {
-        [INVOICE_STATUS.PENDING]: 'pending',
-        [INVOICE_STATUS.APPROVED]: 'approved',
-        [INVOICE_STATUS.FUNDING]: 'funding',
-        [INVOICE_STATUS.FUNDED]: 'funded',
-        [INVOICE_STATUS.COMPLETED]: 'completed',
-        [INVOICE_STATUS.DEFAULTED]: 'defaulted',
-        [INVOICE_STATUS.REJECTED]: 'rejected',
-      };
-
-      return {
-        tokenId,
-        owner,
-        ipfsHash,
-        metadata: {} as InvoiceMetadata, // Fetch from IPFS separately
-        status: statusMap[status] || 'pending',
-        fundingAmount,
-        currentFunding,
-        fundingPercentage: fundingAmount > 0n 
-          ? Number((currentFunding * 100n) / fundingAmount) 
-          : 0,
-        createdAt: Number(createdAt),
-        dueDate: Number(dueDate),
-      };
+  const withdrawFunds = useCallback(async (invoiceId: bigint): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('withdrawFunds', [invoiceId]);
     });
-  }, [readContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  const getInvoicesByOwner = useCallback(async (owner: string): Promise<bigint[]> => {
-    return handleContractCall(async () => {
-      return await readContract<bigint[]>('getInvoicesByOwner', [owner]);
+  const getExporterInvoices = useCallback(async (exporter: string): Promise<bigint[]> => {
+    return handleCall(() => readContract<bigint[]>('getExporterInvoices', [exporter]));
+  }, [readContract, handleCall]);
+
+  // ============== INVESTOR ==============
+  const registerInvestor = useCallback(async (): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('registerInvestor', []);
     });
-  }, [readContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  const approveInvoice = useCallback(async (tokenId: bigint): Promise<void> => {
-    return handleContractCall(async () => {
-      await writeContract('approveInvoice', [tokenId]);
+  const invest = useCallback(async (poolId: bigint, amount: bigint): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('invest', [poolId], amount);
     });
-  }, [writeContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  const rejectInvoice = useCallback(async (tokenId: bigint, reason: string): Promise<void> => {
-    return handleContractCall(async () => {
-      await writeContract('rejectInvoice', [tokenId, reason]);
+  const claimReturns = useCallback(async (poolId: bigint): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('claimReturns', [poolId]);
     });
-  }, [writeContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  const withdrawFunding = useCallback(async (tokenId: bigint): Promise<void> => {
-    return handleContractCall(async () => {
-      await writeContract('withdrawFunding', [tokenId]);
+  const getInvestorPools = useCallback(async (investor: string): Promise<bigint[]> => {
+    return handleCall(() => readContract<bigint[]>('getInvestorPools', [investor]));
+  }, [readContract, handleCall]);
+
+  // ============== ADMIN ==============
+  const verifyExporter = useCallback(async (exporter: string): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('verifyExporter', [exporter]);
     });
-  }, [writeContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  const repayInvoice = useCallback(async (tokenId: bigint, amount: bigint): Promise<void> => {
-    return handleContractCall(async () => {
-      await writeContract('repayInvoice', [tokenId], amount);
+  const approveInvoice = useCallback(async (invoiceId: bigint): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('approveInvoice', [invoiceId]);
     });
-  }, [writeContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  // ============== POOL FUNCTIONS ==============
+  const rejectInvoice = useCallback(async (invoiceId: bigint): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('rejectInvoice', [invoiceId]);
+    });
+  }, [writeContract, handleCall]);
 
   const createPool = useCallback(async (
     name: string,
-    invoiceTokenIds: bigint[],
-    maturityDate: number
+    invoiceIds: bigint[],
+    startDate: number,
+    endDate: number
   ): Promise<bigint> => {
-    return handleContractCall(async () => {
-      const txHash = await writeContract('createPool', [name, invoiceTokenIds, maturityDate]);
-      console.log('Pool created, tx:', txHash);
-      return 0n; // Placeholder - parse event logs for actual poolId
+    return handleCall(async () => {
+      await writeContract('createPool', [name, invoiceIds, startDate, endDate]);
+      return 0n;
     });
-  }, [writeContract, handleContractCall]);
+  }, [writeContract, handleCall]);
 
-  const getPool = useCallback(async (poolId: bigint): Promise<PoolNFT | null> => {
-    return handleContractCall(async () => {
-      const result = await readContract<[string, string, bigint, bigint, number, bigint]>(
-        'getPool',
-        [poolId]
-      );
-      
-      const [admin, name, totalValue, totalInvested, status, maturityDate] = result;
-      
-      const statusMap: Record<number, PoolNFT['status']> = {
-        [POOL_STATUS.OPEN]: 'open',
-        [POOL_STATUS.CLOSED]: 'closed',
-        [POOL_STATUS.MATURED]: 'matured',
-        [POOL_STATUS.LIQUIDATING]: 'liquidating',
-      };
+  const markInvoicePaid = useCallback(async (invoiceId: bigint): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('markInvoicePaid', [invoiceId]);
+    });
+  }, [writeContract, handleCall]);
 
+  const distributeProfits = useCallback(async (poolId: bigint): Promise<void> => {
+    return handleCall(async () => {
+      await writeContract('distributeProfits', [poolId]);
+    });
+  }, [writeContract, handleCall]);
+
+  // ============== VIEW ==============
+  const getInvoice = useCallback(async (invoiceId: bigint): Promise<Invoice | null> => {
+    return handleCall(async () => {
+      const r = await readContract<{
+        tokenId: bigint; exporter: string; invoiceValue: bigint; loanAmount: bigint;
+        fundedAmount: bigint; withdrawnAmount: bigint; status: number; poolId: bigint;
+        invoiceDate: bigint; dueDate: bigint; createdAt: bigint; ipfsHash: string;
+      }>('getInvoice', [invoiceId]);
       return {
-        poolId,
-        name,
-        description: '',
-        admin,
-        invoiceTokenIds: [],
-        totalValue,
-        totalInvested,
-        investorCount: 0,
-        status: statusMap[status] || 'open',
-        targetYield: 4,
-        platformFee: 1,
-        createdAt: 0,
-        maturityDate: Number(maturityDate),
+        tokenId: r.tokenId, exporter: r.exporter, invoiceValue: r.invoiceValue,
+        loanAmount: r.loanAmount, fundedAmount: r.fundedAmount, withdrawnAmount: r.withdrawnAmount,
+        status: INVOICE_STATUS_MAP[r.status] || 'PENDING', poolId: r.poolId,
+        invoiceDate: Number(r.invoiceDate), dueDate: Number(r.dueDate),
+        createdAt: Number(r.createdAt), ipfsHash: r.ipfsHash,
       };
     });
-  }, [readContract, handleContractCall]);
+  }, [readContract, handleCall]);
 
-  const invest = useCallback(async (poolId: bigint, amount: bigint): Promise<void> => {
-    return handleContractCall(async () => {
-      await writeContract('invest', [poolId], amount);
+  const getPool = useCallback(async (poolId: bigint): Promise<Pool | null> => {
+    return handleCall(async () => {
+      const r = await readContract<{
+        poolId: bigint; name: string; startDate: bigint; endDate: bigint;
+        totalLoanAmount: bigint; totalInvested: bigint; totalDistributed: bigint;
+        status: number; invoiceIds: bigint[]; createdAt: bigint;
+      }>('getPool', [poolId]);
+      return {
+        poolId: r.poolId, name: r.name, startDate: Number(r.startDate), endDate: Number(r.endDate),
+        totalLoanAmount: r.totalLoanAmount, totalInvested: r.totalInvested,
+        totalDistributed: r.totalDistributed, status: POOL_STATUS_MAP[r.status] || 'OPEN',
+        invoiceIds: r.invoiceIds, createdAt: Number(r.createdAt),
+      };
     });
-  }, [writeContract, handleContractCall]);
+  }, [readContract, handleCall]);
 
-  const claimReturns = useCallback(async (poolId: bigint): Promise<void> => {
-    return handleContractCall(async () => {
-      await writeContract('claimReturns', [poolId]);
+  const getInvestment = useCallback(async (poolId: bigint, investor: string): Promise<Investment | null> => {
+    return handleCall(async () => {
+      const r = await readContract<{
+        investor: string; poolId: bigint; amount: bigint; percentage: bigint;
+        timestamp: bigint; returnsClaimed: boolean;
+      }>('getInvestment', [poolId, investor]);
+      return {
+        investor: r.investor, poolId: r.poolId, amount: r.amount,
+        percentage: Number(r.percentage), timestamp: Number(r.timestamp),
+        returnsClaimed: r.returnsClaimed,
+      };
     });
-  }, [writeContract, handleContractCall]);
+  }, [readContract, handleCall]);
 
-  const getInvestmentsByInvestor = useCallback(async (investor: string): Promise<Investment[]> => {
-    return handleContractCall(async () => {
-      const poolIds = await readContract<bigint[]>('getInvestmentsByInvestor', [investor]);
-      // In production, fetch full investment details for each poolId
-      return poolIds.map((poolId) => ({
-        investor,
-        poolId,
-        amount: 0n,
-        timestamp: 0,
-        expectedReturn: 0n,
-        claimed: false,
-      }));
+  const canWithdraw = useCallback(async (invoiceId: bigint) => {
+    return handleCall(async () => {
+      const [can, amount] = await readContract<[boolean, bigint]>('canWithdraw', [invoiceId]);
+      return { canWithdraw: can, amount };
     });
-  }, [readContract, handleContractCall]);
+  }, [readContract, handleCall]);
 
-  // ============== UTILITY FUNCTIONS ==============
-
-  const getFundingPercentage = useCallback(async (tokenId: bigint): Promise<number> => {
-    return handleContractCall(async () => {
-      const percentage = await readContract<bigint>('getFundingPercentage', [tokenId]);
-      return Number(percentage);
+  const getPoolFundingPercentage = useCallback(async (poolId: bigint): Promise<number> => {
+    return handleCall(async () => {
+      const p = await readContract<bigint>('getPoolFundingPercentage', [poolId]);
+      return Number(p);
     });
-  }, [readContract, handleContractCall]);
+  }, [readContract, handleCall]);
 
-  const hasRole = useCallback(async (role: string, account: string): Promise<boolean> => {
-    return handleContractCall(async () => {
-      return await readContract<boolean>('hasRole', [role, account]);
-    });
-  }, [readContract, handleContractCall]);
+  const getAllOpenPools = useCallback(async (): Promise<bigint[]> => {
+    return handleCall(() => readContract<bigint[]>('getAllOpenPools', []));
+  }, [readContract, handleCall]);
 
   return {
-    // Invoice Functions
-    createInvoice,
-    getInvoice,
-    getInvoicesByOwner,
-    approveInvoice,
-    rejectInvoice,
-    withdrawFunding,
-    repayInvoice,
-    
-    // Pool Functions
-    createPool,
-    getPool,
-    invest,
-    claimReturns,
-    getInvestmentsByInvestor,
-    
-    // Utility Functions
-    getFundingPercentage,
-    hasRole,
-    
-    // State
-    isLoading,
-    error,
+    registerExporter, createInvoice, withdrawFunds, getExporterInvoices,
+    registerInvestor, invest, claimReturns, getInvestorPools,
+    verifyExporter, approveInvoice, rejectInvoice, createPool, markInvoicePaid, distributeProfits,
+    getInvoice, getPool, getInvestment, canWithdraw, getPoolFundingPercentage, getAllOpenPools,
+    isLoading, error,
   };
 }

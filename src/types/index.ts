@@ -1,137 +1,282 @@
-// User Roles
+// ============== USER TYPES ==============
+
 export type UserRole = 'admin' | 'exporter' | 'investor';
 
-// Invoice Status
-export type InvoiceStatus = 
-  | 'pending'      // Waiting for approval
-  | 'approved'     // Approved, ready for funding
-  | 'funding'      // Currently being funded
-  | 'funded'       // Reached 70% threshold
-  | 'completed'    // Invoice paid, profits distributed
-  | 'defaulted'    // Invoice defaulted
-  | 'rejected';    // Rejected by admin
-
-// Pool Status
-export type PoolStatus = 
-  | 'open'         // Accepting investments
-  | 'closed'       // No longer accepting investments
-  | 'matured'      // All invoices completed
-  | 'liquidating'; // Processing returns
-
-// Invoice NFT
-export interface InvoiceNFT {
-  tokenId: bigint;
-  owner: string;
-  ipfsHash: string;
-  metadata: InvoiceMetadata;
-  status: InvoiceStatus;
-  fundingAmount: bigint;
-  currentFunding: bigint;
-  fundingPercentage: number;
-  createdAt: number;
-  dueDate: number;
+// Exporter Profile (Supabase)
+export interface ExporterProfile {
+  id: string;
+  walletAddress: string;
+  companyName: string;
+  taxId: string;
+  country: string;
+  exportLicense: string;
+  isVerified: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
-// Invoice Metadata (stored on IPFS)
+// Investor Profile (Supabase)
+export interface InvestorProfile {
+  id: string;
+  walletAddress: string;
+  name: string;
+  address: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ============== INVOICE TYPES ==============
+
+export type InvoiceStatus =
+  | 'PENDING'      // Submitted, waiting review
+  | 'APPROVED'     // Approved by admin
+  | 'IN_POOL'      // Added to pool
+  | 'FUNDED'       // Received funds (>=70%)
+  | 'WITHDRAWN'    // Exporter withdrew
+  | 'PAID'         // Importer paid
+  | 'COMPLETED'    // Profits distributed
+  | 'REJECTED';    // Rejected by admin
+
+// Invoice On-chain Data
+export interface Invoice {
+  tokenId: bigint;
+  exporter: string;
+  
+  // Financial (USD cents on-chain, display as USD)
+  invoiceValue: bigint;
+  loanAmount: bigint;
+  fundedAmount: bigint;      // ETH wei
+  withdrawnAmount: bigint;   // ETH wei
+  
+  // Status
+  status: InvoiceStatus;
+  poolId: bigint;
+  
+  // Timestamps
+  invoiceDate: number;
+  dueDate: number;
+  createdAt: number;
+  
+  // IPFS
+  ipfsHash: string;
+}
+
+// Invoice Metadata (IPFS)
 export interface InvoiceMetadata {
   invoiceNumber: string;
-  exporterName: string;
-  exporterAddress: string;
-  buyerName: string;
-  buyerCountry: string;
-  shippingDetails: ShippingDetails;
-  amount: number;
-  currency: string;
-  issueDate: string;
+  invoiceDate: string;
   dueDate: string;
-  description: string;
-  documents: DocumentReference[];
+  totalAmount: number;       // Invoice value in USD
+  currency: string;
+  goodsDescription: string;
+  
+  // Importer info
+  importerName: string;
+  importerLicense: string;
+  
+  // Documents
+  documents: {
+    purchaseOrder?: string;
+    billOfLading?: string;
+    other?: string[];
+  };
+  
+  // Loan request
+  loanAmount: number;
 }
 
-export interface ShippingDetails {
-  portOfLoading: string;
-  portOfDischarge: string;
-  vesselName?: string;
-  containerNumber?: string;
-  billOfLadingNumber?: string;
-  estimatedArrival?: string;
+// Invoice with full data (combined)
+export interface InvoiceFull extends Invoice {
+  metadata: InvoiceMetadata;
 }
 
-export interface DocumentReference {
-  name: string;
-  ipfsHash: string;
-  type: 'bill_of_lading' | 'commercial_invoice' | 'packing_list' | 'certificate_of_origin' | 'other';
-}
+// ============== POOL TYPES ==============
 
-// Pool NFT
-export interface PoolNFT {
+export type PoolStatus =
+  | 'OPEN'         // Accepting investments
+  | 'FUNDED'       // 100% funded, distributing
+  | 'COMPLETED'    // All done
+  | 'CANCELLED';
+
+// Pool On-chain Data
+export interface Pool {
   poolId: bigint;
   name: string;
-  description: string;
-  admin: string;
-  invoiceTokenIds: bigint[];
-  totalValue: bigint;
-  totalInvested: bigint;
-  investorCount: number;
+  
+  // Timeline
+  startDate: number;
+  endDate: number;
+  
+  // Financial
+  totalLoanAmount: bigint;    // USD cents (sum of invoice loans)
+  totalInvested: bigint;      // ETH wei
+  totalDistributed: bigint;   // ETH wei
+  
+  // Status
   status: PoolStatus;
-  targetYield: number; // 4% for investors
-  platformFee: number; // 1% platform fee
+  
+  // Invoices
+  invoiceIds: bigint[];
+  
   createdAt: number;
-  maturityDate: number;
 }
 
-// Investment
+// Pool with calculated fields
+export interface PoolWithStats extends Pool {
+  fundingPercentage: number;
+  investorCount: number;
+  targetAmountEth: bigint;
+}
+
+// ============== INVESTMENT TYPES ==============
+
 export interface Investment {
   investor: string;
   poolId: bigint;
-  amount: bigint;
+  amount: bigint;           // ETH wei
+  percentage: number;       // Basis points (10000 = 100%)
   timestamp: number;
-  expectedReturn: bigint;
-  claimed: boolean;
+  returnsClaimed: boolean;
 }
 
-// User Profile (Supabase)
-export interface UserProfile {
+// Investment with calculated returns
+export interface InvestmentWithReturns extends Investment {
+  expectedReturns: bigint;  // Principal + 4% yield
+  poolName: string;
+  poolStatus: PoolStatus;
+}
+
+// ============== PAYMENT TYPES ==============
+
+export interface Payment {
   id: string;
-  walletAddress: string;
-  role: UserRole;
-  companyName?: string;
-  email?: string;
-  kycVerified: boolean;
+  invoiceId: number;
+  amountUsd: number;
+  paymentLink: string;
+  status: 'pending' | 'sent' | 'paid';
+  sentAt?: string;
+  paidAt?: string;
   createdAt: string;
-  updatedAt: string;
 }
 
-// Transaction Event
-export interface TransactionEvent {
-  txHash: string;
-  event: string;
-  args: Record<string, unknown>;
-  blockNumber: number;
+// ============== API TYPES ==============
+
+export interface CurrencyRate {
+  usd: number;
+  eth: number;
   timestamp: number;
 }
 
-// Contract Configuration
-export interface ContractConfig {
-  address: string;
-  chainId: number;
-  rpcUrl: string;
+export interface PaymentLinkResponse {
+  invoiceId: number;
+  invoiceNumber: string;
+  importerName: string;
+  amountDue: number;
+  currency: string;
+  paymentLink: string;
 }
 
-// Wallet State
+// ============== FORM TYPES ==============
+
+export interface ExporterOnboardingForm {
+  companyName: string;
+  taxId: string;
+  country: string;
+  exportLicense: string;
+}
+
+export interface InvestorOnboardingForm {
+  name: string;
+  address: string;
+}
+
+export interface CreateInvoiceForm {
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  totalAmount: number;
+  currency: string;
+  goodsDescription: string;
+  importerName: string;
+  importerLicense: string;
+  loanAmount: number;
+  purchaseOrder?: File;
+  billOfLading?: File;
+}
+
+export interface CreatePoolForm {
+  name: string;
+  startDate: string;
+  endDate: string;
+  invoiceIds: number[];
+  description?: string;
+  riskCategory?: 'low' | 'medium' | 'high';
+}
+
+export interface InvestForm {
+  poolId: number;
+  amountUsd: number;
+  amountEth: number;
+}
+
+// ============== DASHBOARD STATS ==============
+
+export interface ExporterStats {
+  totalInvoices: number;
+  pendingInvoices: number;
+  totalLoanRequested: number;
+  totalFunded: number;
+  totalWithdrawn: number;
+}
+
+export interface InvestorStats {
+  totalInvested: number;
+  activeInvestments: number;
+  pendingReturns: number;
+  claimedReturns: number;
+}
+
+export interface AdminStats {
+  totalExporters: number;
+  pendingExporters: number;
+  totalInvoices: number;
+  pendingInvoices: number;
+  totalPools: number;
+  activePools: number;
+  totalInvested: number;
+}
+
+// ============== WALLET TYPES ==============
+
 export interface WalletState {
   isConnected: boolean;
   address: string | null;
   chainId: number | null;
   balance: bigint;
+  role: UserRole | null;
 }
 
-// App Statistics
-export interface AppStatistics {
-  totalInvoicesCreated: number;
-  totalInvoicesFunded: number;
-  totalValueLocked: bigint;
-  totalInvestors: number;
-  totalExporters: number;
-  averageYield: number;
-}
+// ============== CONTRACT CONSTANTS ==============
+
+export const INVOICE_STATUS_MAP: Record<number, InvoiceStatus> = {
+  0: 'PENDING',
+  1: 'APPROVED',
+  2: 'IN_POOL',
+  3: 'FUNDED',
+  4: 'WITHDRAWN',
+  5: 'PAID',
+  6: 'COMPLETED',
+  7: 'REJECTED',
+};
+
+export const POOL_STATUS_MAP: Record<number, PoolStatus> = {
+  0: 'OPEN',
+  1: 'FUNDED',
+  2: 'COMPLETED',
+  3: 'CANCELLED',
+};
+
+// Platform constants
+export const INVESTOR_YIELD_BPS = 400;   // 4% = 400 basis points
+export const PLATFORM_FEE_BPS = 100;     // 1% = 100 basis points
+export const FUNDING_THRESHOLD_BPS = 7000; // 70% = 7000 basis points

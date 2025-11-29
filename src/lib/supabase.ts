@@ -13,144 +13,222 @@ export const supabase = createClient(
   supabaseAnonKey || 'placeholder-key'
 );
 
-// Database types (adjust based on your Supabase schema)
+// ============== DATABASE TYPES ==============
+
 export interface Database {
   public: {
     Tables: {
-      users: {
+      exporters: {
         Row: {
           id: string;
           wallet_address: string;
-          role: 'admin' | 'exporter' | 'investor';
-          company_name: string | null;
-          email: string | null;
-          kyc_verified: boolean;
+          company_name: string;
+          tax_id: string;
+          country: string;
+          export_license: string;
+          is_verified: boolean;
           created_at: string;
-          updated_at: string;
         };
         Insert: {
           id?: string;
           wallet_address: string;
-          role: 'admin' | 'exporter' | 'investor';
-          company_name?: string | null;
-          email?: string | null;
-          kyc_verified?: boolean;
+          company_name: string;
+          tax_id: string;
+          country: string;
+          export_license: string;
+          is_verified?: boolean;
           created_at?: string;
-          updated_at?: string;
         };
         Update: {
           id?: string;
           wallet_address?: string;
-          role?: 'admin' | 'exporter' | 'investor';
-          company_name?: string | null;
-          email?: string | null;
-          kyc_verified?: boolean;
+          company_name?: string;
+          tax_id?: string;
+          country?: string;
+          export_license?: string;
+          is_verified?: boolean;
           created_at?: string;
-          updated_at?: string;
         };
       };
-      invoices: {
+      investors: {
         Row: {
           id: string;
-          token_id: string;
-          owner_address: string;
-          ipfs_hash: string;
-          status: string;
-          funding_amount: string;
-          current_funding: string;
+          wallet_address: string;
+          name: string;
+          address: string;
           created_at: string;
-          due_date: string;
         };
         Insert: {
           id?: string;
-          token_id: string;
-          owner_address: string;
-          ipfs_hash: string;
-          status?: string;
-          funding_amount: string;
-          current_funding?: string;
+          wallet_address: string;
+          name: string;
+          address: string;
           created_at?: string;
-          due_date: string;
         };
         Update: {
           id?: string;
-          token_id?: string;
-          owner_address?: string;
-          ipfs_hash?: string;
-          status?: string;
-          funding_amount?: string;
-          current_funding?: string;
-          created_at?: string;
-          due_date?: string;
-        };
-      };
-      pools: {
-        Row: {
-          id: string;
-          pool_id: string;
-          name: string;
-          description: string | null;
-          admin_address: string;
-          status: string;
-          total_value: string;
-          total_invested: string;
-          created_at: string;
-          maturity_date: string;
-        };
-        Insert: {
-          id?: string;
-          pool_id: string;
-          name: string;
-          description?: string | null;
-          admin_address: string;
-          status?: string;
-          total_value?: string;
-          total_invested?: string;
-          created_at?: string;
-          maturity_date: string;
-        };
-        Update: {
-          id?: string;
-          pool_id?: string;
+          wallet_address?: string;
           name?: string;
-          description?: string | null;
-          admin_address?: string;
-          status?: string;
-          total_value?: string;
-          total_invested?: string;
+          address?: string;
           created_at?: string;
-          maturity_date?: string;
         };
       };
-      investments: {
+      invoice_metadata: {
         Row: {
           id: string;
-          investor_address: string;
-          pool_id: string;
-          amount: string;
-          expected_return: string;
-          claimed: boolean;
+          token_id: number;
+          invoice_number: string;
+          goods_description: string | null;
+          importer_name: string;
+          importer_license: string | null;
+          documents: Record<string, string> | null;
           created_at: string;
         };
         Insert: {
           id?: string;
-          investor_address: string;
-          pool_id: string;
-          amount: string;
-          expected_return: string;
-          claimed?: boolean;
+          token_id: number;
+          invoice_number: string;
+          goods_description?: string | null;
+          importer_name: string;
+          importer_license?: string | null;
+          documents?: Record<string, string> | null;
           created_at?: string;
         };
         Update: {
           id?: string;
-          investor_address?: string;
-          pool_id?: string;
-          amount?: string;
-          expected_return?: string;
-          claimed?: boolean;
+          token_id?: number;
+          invoice_number?: string;
+          goods_description?: string | null;
+          importer_name?: string;
+          importer_license?: string | null;
+          documents?: Record<string, string> | null;
+          created_at?: string;
+        };
+      };
+      pool_metadata: {
+        Row: {
+          id: string;
+          pool_id: number;
+          description: string | null;
+          risk_category: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          pool_id: number;
+          description?: string | null;
+          risk_category?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          pool_id?: number;
+          description?: string | null;
+          risk_category?: string | null;
+          created_at?: string;
+        };
+      };
+      payments: {
+        Row: {
+          id: string;
+          invoice_id: number;
+          amount_usd: number;
+          payment_link: string | null;
+          status: string;
+          sent_at: string | null;
+          paid_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          invoice_id: number;
+          amount_usd: number;
+          payment_link?: string | null;
+          status?: string;
+          sent_at?: string | null;
+          paid_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          invoice_id?: number;
+          amount_usd?: number;
+          payment_link?: string | null;
+          status?: string;
+          sent_at?: string | null;
+          paid_at?: string | null;
           created_at?: string;
         };
       };
     };
   };
+}
+
+// ============== HELPER FUNCTIONS ==============
+
+export async function getExporterByWallet(walletAddress: string) {
+  const { data, error } = await supabase
+    .from('exporters')
+    .select('*')
+    .eq('wallet_address', walletAddress.toLowerCase())
+    .single();
+  
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
+export async function createExporter(exporter: Database['public']['Tables']['exporters']['Insert']) {
+  const { data, error } = await supabase
+    .from('exporters')
+    .insert({
+      ...exporter,
+      wallet_address: exporter.wallet_address.toLowerCase(),
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function getInvestorByWallet(walletAddress: string) {
+  const { data, error } = await supabase
+    .from('investors')
+    .select('*')
+    .eq('wallet_address', walletAddress.toLowerCase())
+    .single();
+  
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
+export async function createInvestor(investor: Database['public']['Tables']['investors']['Insert']) {
+  const { data, error } = await supabase
+    .from('investors')
+    .insert({
+      ...investor,
+      wallet_address: investor.wallet_address.toLowerCase(),
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function getUserRole(walletAddress: string): Promise<'admin' | 'exporter' | 'investor' | null> {
+  const address = walletAddress.toLowerCase();
+  
+  const adminAddresses = (process.env.ADMIN_ADDRESSES || '').toLowerCase().split(',');
+  if (adminAddresses.includes(address)) {
+    return 'admin';
+  }
+  
+  const exporter = await getExporterByWallet(address);
+  if (exporter) return 'exporter';
+  
+  const investor = await getInvestorByWallet(address);
+  if (investor) return 'investor';
+  
+  return null;
 }
