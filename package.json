@@ -30,11 +30,14 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.555.0",
     "next": "16.0.5",
+    "panna-sdk": "^0.1.0",
     "pinata": "^2.5.1",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-hook-form": "^7.53.0",
     "tailwind-merge": "^3.4.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "thirdweb": "^5.114.1"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.8",

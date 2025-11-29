@@ -1,3 +1,25 @@
+### Profile Creation Flow
+
+1. User authenticates (magic link or wallet connect). This only creates a Supabase `auth.users` record.
+2. Wallet provisioning (Panna stub) supplies `walletAddress` and persists mapping in `user_wallets` (requires RLS policies in migrations).
+3. Role resolution checks existing `exporters` / `investors` tables:
+	- If no profile found, UI shows onboarding buttons.
+	- After submitting onboarding form, a row is inserted and role becomes active; header dropdown then shows company name (exporter) or name (investor).
+4. Admin role is determined solely by `ADMIN_ADDRESSES` env variable (lowercase addresses).
+
+If you see no data in Supabase after magic link login:
+- You have not completed onboarding; no exporter/investor row is created automatically.
+- Check `user_wallets` table exists and RLS policies applied; if provisioning failed you will need an external wallet.
+- Use SQL to inspect:
+```sql
+select * from auth.users order by created_at desc;
+select * from public.user_wallets order by created_at desc;
+select * from public.exporters order by created_at desc;
+select * from public.investors order by created_at desc;
+```
+
+To auto-create a default investor profile on first login (optional enhancement), you could insert a row in `AuthProvider` after successful wallet provisioning if no profile is found.
+
 # SEATrax - Shipping Invoice Funding Platform
 
 A blockchain-based platform that enables exporters to get short-term loans against shipping invoices, with investors funding curated pools of invoices for returns.
@@ -10,14 +32,31 @@ SEATrax connects exporters, investors, and admins through smart contracts to fac
 
 ## ✨ Key Features
 
-- **Invoice NFTs**: Individual shipping invoices represented as ERC-721 tokens
-- **Pool NFTs**: Curated bundles of invoices for investment
-- **70% Funding Threshold**: Exporters can withdraw when invoices reach 70% funding
-- **100% Auto-Distribution**: Automatic distribution and withdrawal at full funding
-- **Profit Sharing**: 4% yield for investors + 1% platform fee
-- **Role-based Access**: Admin, Exporter, and Investor roles
 
 ## 🛠️ Tech Stack
+
+The current implementation supports two access modes:
+
+- Wallet Login: Full functionality (creating invoices, investing, withdrawals) requires an injected EVM wallet (MetaMask) or future Panna SDK wallet integration. On connect we resolve on-chain role (admin via `ADMIN_ADDRESSES`, exporter/investor via Supabase profiles).
+- Email Session (Guest / Placeholder): If no wallet provider is detected, users can start a lightweight email session (placeholder for future Panna SDK account-based auth). This session allows basic navigation (e.g. viewing pools) but cannot perform on-chain transactions. A wallet must be connected to create profiles tied to addresses or execute contract functions.
+
+Panna SDK Integration TODOs:
+1. Replace `usePanna` placeholder methods with real SDK connect/read/write.
+2. Implement account-based login (email/social) using SDK APIs instead of the local email session.
+3. Map SDK account → wallet address or embedded custodial key for signing transactions.
+4. Remove temporary `AuthProvider` or adapt it to wrap SDK session state.
+
+Guest / Hybrid Notes:
+- Magic link via Supabase establishes session; Panna provisions wallet address automatically (stubbed).
+- If Panna provisioning fails a fallback banner appears; user may connect external wallet manually.
+- Role resolution occurs after wallet provisioning and is surfaced in the header dropdown.
+- `user_wallets` table persists the mapping of Supabase user → wallet.
+
+Environment Required for Full Features:
+- `NEXT_PUBLIC_CONTRACT_ADDRESS`, `ADMIN_ADDRESSES`, Supabase credentials.
+Environment Required for Full Features:
+- `NEXT_PUBLIC_CONTRACT_ADDRESS`, `ADMIN_ADDRESSES`, Supabase credentials.
+- Panna SDK identifiers: `NEXT_PUBLIC_PANNA_CLIENT_ID`, `NEXT_PUBLIC_PANNA_PARTNER_ID` (future real integration).
 
 ### Frontend
 - **Framework**: Next.js 15 (App Router)

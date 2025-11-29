@@ -6,6 +6,7 @@ export { Badge, badgeVariants } from './badge';
 export { Progress } from './progress';
 export { Textarea } from './textarea';
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs';
+export { ToastProvider, useToast } from './toast';
 export {
   Dialog,
   DialogPortal,

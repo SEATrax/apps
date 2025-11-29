@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Providers } from '@/providers';
-import { Header } from '@/components/header';
+import { HeaderSimple } from '@/components/header-simple';
+import { FallbackBanner } from '@/components/common/fallback-banner';
 import { appConfig } from '@/config';
 
 export const metadata: Metadata = {
@@ -57,7 +58,8 @@ export default function RootLayout({
               <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
             </div>
             
-            <Header />
+            <FallbackBanner />
+            <HeaderSimple />
             
             <main className="flex-1">
               {children}

@@ -224,11 +224,44 @@ export async function getUserRole(walletAddress: string): Promise<'admin' | 'exp
     return 'admin';
   }
   
-  const exporter = await getExporterByWallet(address);
-  if (exporter) return 'exporter';
-  
-  const investor = await getInvestorByWallet(address);
-  if (investor) return 'investor';
+  try {
+    const exporter = await getExporterByWallet(address);
+    if (exporter) return 'exporter';
+    
+    const investor = await getInvestorByWallet(address);
+    if (investor) return 'investor';
+  } catch (err: any) {
+    console.warn('Supabase tables not found or not accessible:', err.message);
+  }
   
   return null;
+}
+
+// ============== USER WALLETS (HYBRID AUTH) ==============
+
+export async function getUserWallet(userId: string) {
+  const { data, error } = await supabase
+    .from('user_wallets')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('primary_wallet', true)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
+export async function upsertUserWallet(userId: string, walletAddress: string) {
+  // Ensure lowercase address
+  const address = walletAddress.toLowerCase();
+  // Check existing primary wallet
+  const existing = await getUserWallet(userId);
+  if (existing && existing.wallet_address === address) return existing;
+  // Insert new (will fail if unique constraint clashes; allow conflict handling)
+  const { data, error } = await supabase
+    .from('user_wallets')
+    .upsert({ user_id: userId, wallet_address: address, primary_wallet: true }, { onConflict: 'wallet_address' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
