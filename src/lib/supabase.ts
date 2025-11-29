@@ -8,10 +8,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not configured. Database features will be disabled.');
 }
 
+const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+  supabaseUrl !== 'https://placeholder.supabase.co' && 
+  supabaseAnonKey !== 'placeholder-key';
+
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder-key'
 );
+
+export { isSupabaseConfigured };
 
 // ============== DATABASE TYPES ==============
 

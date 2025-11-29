@@ -109,13 +109,24 @@ export default function RoleSelection({ onRoleSelect }: RoleSelectionProps) {
           </button>
         </div>
 
-        <div className="text-center mt-8">
+        <div className="text-center mt-8 space-y-4">
           <p className="text-gray-400">
             Already have an account?{' '}
             <a href="#" className="text-cyan-400 hover:text-cyan-300 hover-color hover-scale-sm inline-block">
               Sign in
             </a>
           </p>
+          
+          {/* Testing Shortcut */}
+          <div className="border-t border-slate-700 pt-4">
+            <p className="text-sm text-gray-500 mb-2">For Testing & Development:</p>
+            <a 
+              href="/testing" 
+              className="inline-block bg-slate-800 hover:bg-slate-700 text-cyan-400 px-4 py-2 rounded-lg text-sm transition-colors border border-slate-600 hover:border-cyan-400/50"
+            >
+              🧪 Access Testing Environment
+            </a>
+          </div>
         </div>
       </div>
     </div>
