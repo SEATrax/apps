@@ -8,4 +8,5 @@ export const APP_NAV = [
   { href: '/invoices', label: 'Invoices', roles: ['exporter','admin'] },
   { href: '/pools', label: 'Investment Pools', roles: ['investor','admin','exporter'] },
   { href: '/dashboard', label: 'Dashboard', roles: ['admin'] },
+  { href: '/demo', label: 'Demo', roles: [] },
 ];

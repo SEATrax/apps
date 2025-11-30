@@ -131,7 +131,13 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 </div>
               ) : (
                 pannaConfigured ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <Link 
+                      href="/demo"
+                      className="px-4 py-2 text-cyan-400 border border-cyan-400/50 rounded-lg hover:bg-cyan-400/10 transition-all"
+                    >
+                      Try Demo
+                    </Link>
                     <div className="panna-login-button sr-only" aria-hidden="true">
                       <LoginButton chain={liskSepolia} />
                     </div>
@@ -229,11 +235,12 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             >
               Explore Platform
             </button>
-            <button 
-              className="px-8 py-4 bg-transparent text-white rounded-lg hover:bg-white/10 hover-scale hover-border-glow transition-all text-lg border-2 border-white/30"
+            <Link 
+              href="/demo"
+              className="px-8 py-4 bg-transparent text-white rounded-lg hover:bg-white/10 hover-scale hover-border-glow transition-all text-lg border-2 border-white/30 text-center"
             >
-              Request Demo
-            </button>
+              Try Interactive Demo
+            </Link>
           </div>
 
           {/* Live Stats */}
