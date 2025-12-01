@@ -20,10 +20,12 @@ import {
   ExternalLink, 
   AlertCircle, 
   CheckCircle,
-  Wallet
+  Wallet,
+  Paperclip
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { getIPFSUrl } from '@/lib/pinata';
 
 interface Invoice {
   id: number;
@@ -43,11 +45,7 @@ interface Invoice {
   shippingDate: string;
   createdAt: string;
   fundedPercentage: number;
-  documents: Array<{
-    name: string;
-    hash: string;
-    size: number;
-  }>;
+  documents?: Record<string, string>; // filename -> ipfsHash mapping
   withdrawalHistory: Array<{
     amount: number;
     date: string;
@@ -100,11 +98,12 @@ export default function InvoiceDetail() {
         shippingDate: '2024-12-15',
         createdAt: '2024-11-25',
         fundedPercentage: 85,
-        documents: [
-          { name: 'Commercial Invoice.pdf', hash: 'QmExampleHash1', size: 245760 },
-          { name: 'Bill of Lading.pdf', hash: 'QmExampleHash2', size: 189440 },
-          { name: 'Packing List.pdf', hash: 'QmExampleHash3', size: 156672 },
-        ],
+        documents: {
+          'Commercial Invoice.pdf': 'QmYHNYAaYK6LZe3busXN1h9rAtaQCH1eeyWMeyeCgNUgZi',
+          'Bill of Lading.pdf': 'QmZHBxPyHnGzZjUi5wDQdqKmQZjmEFj7VGNjzKjSqNzHe8',
+          'Packing List.pdf': 'QmXKvYwGzHRgNaWu2JpRQzwrCJ3Ft2xDcEkVK1yS4WGYA7',
+          'Export License.jpg': 'QmRjkPJwz8HfVeEWGfwCQwUxRs4nTzRgKmVByW9KaRHZv2',
+        },
         withdrawalHistory: [
           {
             amount: 5000,
@@ -350,6 +349,61 @@ export default function InvoiceDetail() {
                     </p>
                   </div>
                 </div>
+
+                <Separator className="bg-slate-700" />
+
+                {/* Documents Section */}
+                <div>
+                  <h4 className="font-medium text-slate-300 mb-3 flex items-center gap-2">
+                    <Paperclip className="h-4 w-4" />
+                    Supporting Documents
+                  </h4>
+                  {invoice.documents && Object.keys(invoice.documents).length > 0 ? (
+                    <div className="space-y-2">
+                      {Object.entries(invoice.documents).map(([filename, ipfsHash]) => (
+                        <div key={filename} className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-700">
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-4 w-4 text-slate-400" />
+                            <div>
+                              <p className="text-sm font-medium text-slate-100">{filename}</p>
+                              <p className="text-xs text-slate-400">IPFS: {ipfsHash}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => window.open(getIPFSUrl(ipfsHash), '_blank')}
+                              className="text-slate-300 hover:text-slate-100"
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = getIPFSUrl(ipfsHash);
+                                link.download = filename;
+                                link.click();
+                              }}
+                              className="text-slate-300 hover:text-slate-100"
+                            >
+                              <Download className="h-3 w-3 mr-1" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-slate-400">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No documents uploaded</p>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -402,33 +456,7 @@ export default function InvoiceDetail() {
               </CardContent>
             </Card>
 
-            {/* Documents */}
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle className="text-slate-100">Supporting Documents</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Documents uploaded for this invoice
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {invoice.documents.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-slate-800 rounded-md">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">{doc.name}</p>
-                          <p className="text-xs text-slate-400">{formatFileSize(doc.size)}</p>
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+
           </div>
 
           {/* Sidebar */}

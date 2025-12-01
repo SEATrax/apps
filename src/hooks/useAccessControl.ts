@@ -213,17 +213,22 @@ export const useAccessControl = () => {
     }
   };
 
-  // Check if address has admin role - Mock implementation
+  // Check if address has admin role - Using environment variable
   const hasAdminRole = async (accountAddress?: string): Promise<boolean> => {
     try {
       const checkAddress = accountAddress || address;
       
       if (!checkAddress) return false;
       
-      // TODO: Implement actual contract call with Panna SDK
+      // Check against environment admin addresses
+      const adminAddresses = process.env.ADMIN_ADDRESSES?.split(',').map(addr => addr.trim().toLowerCase()) || [];
+      const isEnvAdmin = adminAddresses.includes(checkAddress.toLowerCase());
+      
+      if (isEnvAdmin) return true;
+      
+      // TODO: Also check contract-based admin role
       console.log('Would check admin role for:', checkAddress);
       
-      // Mock: return false for demo (user is exporter, not admin)
       return false;
     } catch (err: any) {
       console.error('Error checking admin role:', err);

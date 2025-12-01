@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DollarSign, Wallet, AlertCircle, CheckCircle, ArrowLeft, TrendingUp, Calendar, Target } from 'lucide-react';
+import { usePoolNFT } from '@/hooks/usePoolNFT';
+import { usePoolFunding } from '@/hooks/usePoolFunding';
+import { usePanna } from '@/hooks/usePanna';
+import { usdToWei } from '@/lib/currency';
 
 interface AddInvestmentProps {
   onBack?: () => void;
@@ -10,46 +14,60 @@ export default function AddInvestment({ onBack, onComplete }: AddInvestmentProps
   const [selectedPool, setSelectedPool] = useState<string>('');
   const [investmentAmount, setInvestmentAmount] = useState<string>('');
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [availablePools, setAvailablePools] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [investing, setInvesting] = useState(false);
 
-  // Mock data - investor balance
+  // Contract hooks
+  const { account, isConnected } = usePanna();
+  const { getAllPools } = usePoolNFT();
+  const { investInPool, getPoolFundingPercentage } = usePoolFunding();
+
+  // Mock investor balance - in real implementation, get from wallet or contract
   const investorBalance = 150000; // $150,000 available balance
 
-  // Mock data - available pools
-  const availablePools = [
-    {
-      id: 'POOL-D-2025',
-      name: 'Mixed Commodities Pool',
-      duration: '5 days',
-      funded: 212500,
-      target: 250000,
-      yieldRate: 4.0,
-      poolStatus: 'open',
-      invoiceCount: 4,
-      minInvestment: 5000,
-    },
-    {
-      id: 'POOL-E-2025',
-      name: 'Electronics Export Pool',
-      duration: '5 days',
-      funded: 280000,
-      target: 350000,
-      yieldRate: 4.0,
-      poolStatus: 'open',
-      invoiceCount: 4,
-      minInvestment: 5000,
-    },
-    {
-      id: 'POOL-F-2025',
-      name: 'Textile Export Pool',
-      duration: '5 days',
-      funded: 45000,
-      target: 100000,
-      yieldRate: 4.0,
-      poolStatus: 'open',
-      invoiceCount: 2,
-      minInvestment: 5000,
-    },
-  ];
+  // Load pools from contract
+  useEffect(() => {
+    const loadPools = async () => {
+      try {
+        setLoading(true);
+        const pools = await getAllPools();
+        
+        // Transform contract pools to component format
+        const transformedPools = await Promise.all(
+          pools.map(async (pool: any) => {
+            const fundingPercentage = await getPoolFundingPercentage(pool.id);
+            const funded = (pool.totalLoanAmount * fundingPercentage) / 100;
+            
+            return {
+              id: pool.id.toString(),
+              name: pool.name,
+              duration: '5 days', // Mock - could be calculated from start/end dates
+              funded: funded,
+              target: pool.totalLoanAmount,
+              yieldRate: 4.0, // Fixed 4% yield
+              poolStatus: pool.status === 0 ? 'open' : 
+                          pool.status === 1 ? 'funded' : 'completed',
+              invoiceCount: pool.invoiceIds?.length || 0,
+              minInvestment: 5000, // Fixed minimum investment
+            };
+          })
+        );
+        
+        // Filter only open pools
+        setAvailablePools(transformedPools.filter(pool => pool.poolStatus === 'open'));
+      } catch (error) {
+        console.error('Error loading pools:', error);
+        setAvailablePools([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isConnected) {
+      loadPools();
+    }
+  }, [isConnected, getAllPools, getPoolFundingPercentage]);
 
   const amount = parseFloat(investmentAmount) || 0;
   const pool = availablePools.find(p => p.id === selectedPool);
@@ -63,17 +81,29 @@ export default function AddInvestment({ onBack, onComplete }: AddInvestmentProps
 
   const canInvest = isSufficientBalance && meetsMinimum && withinPoolCapacity && isValidAmount && selectedPool;
 
-  const handleInvest = () => {
-    if (canInvest) {
-      setShowConfirmation(true);
+  const handleInvest = async () => {
+    if (canInvest && isConnected) {
+      try {
+        setInvesting(true);
+        
+        // Convert USD amount to Wei for smart contract
+        const amountInWei = await usdToWei(amount);
+        const poolIdBigint = BigInt(selectedPool);
+        
+        await investInPool(poolIdBigint, amountInWei);
+        setShowConfirmation(true);
+      } catch (error) {
+        console.error('Error investing in pool:', error);
+        // Handle error - could show toast notification
+      } finally {
+        setInvesting(false);
+      }
     }
   };
 
   const confirmInvestment = () => {
-    // Simulate investment submission
-    setTimeout(() => {
-      onComplete?.();
-    }, 1500);
+    // Investment already completed, just navigate back
+    onComplete?.();
   };
 
   const getPoolStatusColor = (status: string) => {
@@ -83,6 +113,21 @@ export default function AddInvestment({ onBack, onComplete }: AddInvestmentProps
       default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30';
     }
   };
+
+  // Show loading state while pools are loading
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center py-12">
+            <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <h2 className="text-xl text-white mb-2">Loading Available Pools...</h2>
+            <p className="text-slate-400">Fetching pool data from blockchain</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (showConfirmation) {
     return (
@@ -167,8 +212,17 @@ export default function AddInvestment({ onBack, onComplete }: AddInvestmentProps
             {/* Pool Selection */}
             <div className="bg-slate-900/50 backdrop-blur-xl rounded-lg p-6 border border-slate-800">
               <h3 className="text-lg text-white mb-4">Select Pool</h3>
-              <div className="space-y-3">
-                {availablePools.map((pool) => {
+              {availablePools.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Target className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <p className="text-slate-400 mb-2">No pools available</p>
+                  <p className="text-sm text-slate-500">Check back later for new investment opportunities.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {availablePools.map((pool) => {
                   const fundedPercent = (pool.funded / pool.target) * 100;
                   const remainingAmount = pool.target - pool.funded;
                   
@@ -219,10 +273,11 @@ export default function AddInvestment({ onBack, onComplete }: AddInvestmentProps
                           <div className="text-cyan-400">{pool.yieldRate}%</div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Investment Amount */}
@@ -304,15 +359,24 @@ export default function AddInvestment({ onBack, onComplete }: AddInvestmentProps
 
             <button
               onClick={handleInvest}
-              disabled={!canInvest}
+              disabled={!canInvest || investing}
               className={`w-full px-6 py-4 rounded-lg transition-all flex items-center justify-center gap-2 ${
-                canInvest
+                canInvest && !investing
                   ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-white hover:shadow-lg hover:shadow-cyan-500/50 hover-scale'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }`}
             >
-              <DollarSign className="w-5 h-5" />
-              <span>Invest ${amount > 0 ? amount.toLocaleString() : '0'}</span>
+              {investing ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Processing Investment...</span>
+                </>
+              ) : (
+                <>
+                  <DollarSign className="w-5 h-5" />
+                  <span>Invest ${amount > 0 ? amount.toLocaleString() : '0'}</span>
+                </>
+              )}
             </button>
           </div>
 

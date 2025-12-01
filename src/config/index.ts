@@ -35,7 +35,7 @@ export const appConfig = {
   // Pinata Configuration
   pinata: {
     gateway: process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs',
-    jwt: process.env.NEXT_PUBLIC_PINATA_JWT || '',
+    jwt: process.env.PINATA_JWT || '', // Server-side only
   },
   
   // Platform Settings

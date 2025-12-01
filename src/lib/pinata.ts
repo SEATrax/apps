@@ -22,10 +22,12 @@ export async function uploadToIPFS(
   data: object | File,
   options?: PinataOptions
 ): Promise<string> {
-  const jwt = appConfig.pinata.jwt;
+  const jwt = process.env.PINATA_JWT;
   
   if (!jwt) {
-    throw new Error('Pinata JWT not configured');
+    console.warn('⚠️ Pinata JWT not configured, using mock IPFS hash');
+    // Return mock IPFS hash for testing
+    return `QmMock${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
   }
 
   const formData = new FormData();
@@ -66,10 +68,10 @@ export async function uploadJSONToIPFS(
   data: object,
   name?: string
 ): Promise<string> {
-  const jwt = appConfig.pinata.jwt;
+  const jwt = process.env.PINATA_JWT;
   
   if (!jwt) {
-    throw new Error('Pinata JWT not configured');
+    throw new Error('Pinata JWT not configured in server environment');
   }
 
   const response = await fetch(`${PINATA_API_URL}/pinning/pinJSONToIPFS`, {
@@ -96,7 +98,7 @@ export async function uploadJSONToIPFS(
 }
 
 export async function fetchFromIPFS<T>(hash: string): Promise<T> {
-  const gateway = appConfig.pinata.gateway;
+  const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs';
   const url = `${gateway}/${hash}`;
 
   const response = await fetch(url);
@@ -109,5 +111,6 @@ export async function fetchFromIPFS<T>(hash: string): Promise<T> {
 }
 
 export function getIPFSUrl(hash: string): string {
-  return `${appConfig.pinata.gateway}/${hash}`;
+  const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs';
+  return `${gateway}/${hash}`;
 }

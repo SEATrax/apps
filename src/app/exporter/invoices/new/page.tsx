@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { usePanna } from '@/hooks/usePanna';
 import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { uploadToIPFS } from '@/lib/pinata';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,21 +124,48 @@ export default function CreateInvoice() {
   };
 
   const uploadDocuments = async (): Promise<string[]> => {
-    // TODO: Implement actual IPFS upload using Pinata
     const ipfsHashes: string[] = [];
     
     for (let i = 0; i < formData.documents.length; i++) {
       const file = formData.documents[i];
       setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
       
-      // Simulate upload progress
-      for (let progress = 0; progress <= 100; progress += 25) {
-        setUploadProgress(prev => ({ ...prev, [file.name]: progress }));
-        await new Promise(resolve => setTimeout(resolve, 200));
+      try {
+        // Update progress to show start
+        setUploadProgress(prev => ({ ...prev, [file.name]: 25 }));
+        
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('name', `invoice-doc-${Date.now()}-${i}`);
+        uploadFormData.append('type', 'invoice-document');
+        
+        setUploadProgress(prev => ({ ...prev, [file.name]: 50 }));
+        
+        const response = await fetch('/api/upload/document', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+        
+        setUploadProgress(prev => ({ ...prev, [file.name]: 75 }));
+        
+        if (!response.ok) {
+          throw new Error(`Failed to upload ${file.name}`);
+        }
+        
+        const result = await response.json();
+        
+        if (!result.success || !result.data?.ipfsHash) {
+          throw new Error(`Invalid response for ${file.name}`);
+        }
+        
+        ipfsHashes.push(result.data.ipfsHash);
+        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
+        
+      } catch (error) {
+        console.error(`Error uploading ${file.name}:`, error);
+        setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
+        throw new Error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      // Mock IPFS hash
-      ipfsHashes.push(`QmExample${i + 1}${file.name.replace(/[^a-zA-Z0-9]/g, '')}`);
     }
     
     return ipfsHashes;

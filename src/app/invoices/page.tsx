@@ -18,9 +18,12 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePanna } from '@/hooks/usePanna';
+import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useAccessControl } from '@/hooks/useAccessControl';
 import { formatEther, formatDate, getStatusColor } from '@/lib/utils';
+import { useEffect } from 'react';
 
-// Mock data - replace with actual contract data
+// Mock data - will be replaced by contract data when hooks are connected
 const mockInvoices = [
   {
     tokenId: 1n,
@@ -56,8 +59,11 @@ const mockInvoices = [
 
 export default function InvoicesPage() {
   const { isConnected, address } = usePanna();
+  const { getInvoicesByExporter, getInvoice, isLoading: invoiceLoading, error: invoiceError } = useInvoiceNFT();
+  const { userRoles, isLoading: roleLoading } = useAccessControl();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [contractInvoices, setContractInvoices] = useState<any[]>([]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -80,6 +86,40 @@ export default function InvoicesPage() {
   const calculateFundingPercentage = (current: bigint, total: bigint) => {
     if (total === 0n) return 0;
     return Number((current * 100n) / total);
+  };
+
+  // Load contract data when connected
+  useEffect(() => {
+    if (isConnected && address && userRoles.hasExporterRole) {
+      loadContractInvoices();
+    }
+  }, [isConnected, address, userRoles]);
+
+  const loadContractInvoices = async () => {
+    try {
+      const tokenIds = await getInvoicesByExporter(address!);
+      const invoices = (await Promise.all(
+        tokenIds.map(async (tokenId) => {
+          const invoice = await getInvoice(tokenId);
+          if (!invoice) return null;
+          return {
+            tokenId,
+            invoiceNumber: `INV-${tokenId}`,
+            exporterName: invoice.exporterCompany,
+            buyerCountry: 'Singapore', // Mock for now
+            fundingAmount: invoice.loanAmount,
+            currentFunding: invoice.amountInvested,
+            status: ['pending', 'approved', 'funding', 'funded', 'completed', 'defaulted', 'rejected'][invoice.status] || 'pending',
+            dueDate: invoice.shippingDate,
+          };
+        })
+      )).filter(invoice => invoice !== null);
+      setContractInvoices(invoices);
+    } catch (error) {
+      console.error('Failed to load contract invoices:', error);
+      // Fall back to mock data
+      setContractInvoices([]);
+    }
   };
 
   if (!isConnected) {
@@ -140,8 +180,14 @@ export default function InvoicesPage() {
         </TabsList>
 
         <TabsContent value={activeTab}>
-          <div className="grid gap-4">
-            {mockInvoices.map((invoice) => {
+          {(invoiceLoading || roleLoading) ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-muted-foreground">Loading invoices...</div>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {/* Show contract invoices if available, otherwise show mock data */}
+              {(contractInvoices.length > 0 ? contractInvoices : mockInvoices).map((invoice) => {
               const fundingPercentage = calculateFundingPercentage(
                 invoice.currentFunding,
                 invoice.fundingAmount
@@ -207,7 +253,8 @@ export default function InvoicesPage() {
                 </Card>
               );
             })}
-          </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

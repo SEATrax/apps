@@ -51,13 +51,16 @@ export const useInvoiceNFT = () => {
   const getContract = useCallback(() => {
     if (!isConnected || !account) throw new Error('Wallet not connected');
     
-    const contractAddress = process.env.NEXT_PUBLIC_INVOICE_NFT_ADDRESS || process.env.INVOICE_NFT;
-    if (!contractAddress) throw new Error('Invoice NFT contract address not configured');
+    // Use the main SEATrax contract address
+    const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+    if (!contractAddress) throw new Error('SEATrax contract address not configured');
     
-    // TODO: Implement actual contract interaction with Panna SDK
-    console.log('Contract call would use:', { contractAddress, account });
-    throw new Error('Contract interaction not yet implemented with Panna SDK');
-  }, [isConnected, account]);
+    return {
+      address: contractAddress,
+      account,
+      client
+    };
+  }, [isConnected, account, client]);
 
   const getReadOnlyContract = useCallback(() => {
     if (!client) throw new Error('Client not available');
