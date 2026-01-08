@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { usePanna } from '@/hooks/usePanna';
+import { useInvoiceNFT, INVOICE_STATUS } from '@/hooks/useInvoiceNFT';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 import { 
   ArrowLeft, 
   Search, 
@@ -19,29 +22,36 @@ import {
   AlertCircle,
   DollarSign,
   Calendar,
-  FileText
+  FileText,
+  Send,
+  Bell,
+  Download
 } from 'lucide-react';
 import Link from 'next/link';
 
 interface PaymentRecord {
-  id: number;
-  invoiceId: number;
-  tokenId: number;
+  id: string;
+  invoiceId: number | bigint;
+  tokenId: number | bigint;
   invoiceNumber: string;
   importerCompany: string;
+  exporterCompany: string;
   loanAmount: number;
+  amountWithdrawn: number;
   interestAmount: number;
   totalDue: number;
-  paymentLink: string;
-  status: 'pending' | 'link_sent' | 'paid' | 'overdue';
+  paymentLink: string | null;
+  status: 'pending' | 'link_generated' | 'link_sent' | 'paid' | 'overdue';
   sentAt?: string;
   paidAt?: string;
   dueDate: string;
   remindersSent: number;
+  createdAt: string;
 }
 
 export default function PaymentsTracking() {
   const { address, isConnected } = usePanna();
+  const { getInvoicesByExporter, getInvoice, isLoading: contractLoading } = useInvoiceNFT();
   
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<PaymentRecord[]>([]);
@@ -49,6 +59,7 @@ export default function PaymentsTracking() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [copiedLink, setCopiedLink] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isConnected && address) {
@@ -61,82 +72,111 @@ export default function PaymentsTracking() {
   }, [payments, searchTerm, statusFilter]);
 
   const loadPaymentsData = async () => {
+    if (!address) return;
+    
     try {
       setIsLoading(true);
+      setError(null);
       
-      // TODO: Replace with actual database/smart contract calls
-      // Fetch payments from Supabase where exporter = address
+      // Get all invoices for the exporter
+      const invoiceIds = await getInvoicesByExporter(address);
       
-      // Mock data for now
-      const mockPayments: PaymentRecord[] = [
-        {
-          id: 1,
-          invoiceId: 1,
-          tokenId: 1,
-          invoiceNumber: 'INV-2024-001',
-          importerCompany: 'Global Trading Ltd',
-          loanAmount: 15000,
-          interestAmount: 600, // 4% interest
-          totalDue: 15600,
-          paymentLink: `${window.location.origin}/pay/1`,
-          status: 'paid',
-          sentAt: '2024-11-26T10:30:00Z',
-          paidAt: '2024-11-28T14:20:00Z',
-          dueDate: '2024-12-15',
-          remindersSent: 0,
-        },
-        {
-          id: 2,
-          invoiceId: 2,
-          tokenId: 2,
-          invoiceNumber: 'INV-2024-002',
-          importerCompany: 'Asia Import Co',
-          loanAmount: 22000,
-          interestAmount: 880,
-          totalDue: 22880,
-          paymentLink: `${window.location.origin}/pay/2`,
-          status: 'link_sent',
-          sentAt: '2024-11-27T09:15:00Z',
-          dueDate: '2024-12-20',
-          remindersSent: 1,
-        },
-        {
-          id: 3,
-          invoiceId: 4,
-          tokenId: 3,
-          invoiceNumber: 'INV-2024-004',
-          importerCompany: 'Pacific Traders',
-          loanAmount: 12000,
-          interestAmount: 480,
-          totalDue: 12480,
-          paymentLink: `${window.location.origin}/pay/4`,
-          status: 'pending',
-          dueDate: '2024-11-30',
-          remindersSent: 0,
-        },
-        {
-          id: 4,
-          invoiceId: 5,
-          tokenId: 4,
-          invoiceNumber: 'INV-2024-005',
-          importerCompany: 'European Goods Inc',
-          loanAmount: 18000,
-          interestAmount: 720,
-          totalDue: 18720,
-          paymentLink: `${window.location.origin}/pay/5`,
-          status: 'overdue',
-          sentAt: '2024-11-20T16:45:00Z',
-          dueDate: '2024-11-25',
-          remindersSent: 3,
-        },
-      ];
+      if (!invoiceIds || invoiceIds.length === 0) {
+        setPayments([]);
+        return;
+      }
       
-      setPayments(mockPayments);
+      // Fetch detailed invoice data for each invoice
+      const paymentPromises = invoiceIds.map(async (tokenId) => {
+        try {
+          const invoice = await getInvoice(tokenId);
+          
+          // Only include invoices that have been withdrawn (ready for payment)
+          if (invoice && invoice.status === 'FUNDED' && invoice.withdrawnAmount > 0n) {
+            // Get payment metadata from Supabase
+            let paymentData = null;
+            if (isSupabaseConfigured) {
+              const { data } = await supabase
+                .from('payments')
+                .select('*')
+                .eq('invoice_id', Number(tokenId))
+                .single();
+              paymentData = data;
+            }
+            
+            // Get invoice metadata for display info
+            let invoiceMetadata = null;
+            if (isSupabaseConfigured) {
+              const { data } = await supabase
+                .from('invoice_metadata')
+                .select('*')
+                .eq('token_id', Number(tokenId))
+                .single();
+              invoiceMetadata = data;
+            }
+            
+            const loanAmount = Number(invoice.loanAmount) / 1e18; // Convert from wei
+            const interestAmount = loanAmount * 0.04; // 4% interest
+            const totalDue = loanAmount + interestAmount;
+            
+            return {
+              id: `payment-${tokenId}`,
+              invoiceId: tokenId,
+              tokenId: tokenId,
+              invoiceNumber: invoiceMetadata?.invoice_number || `INV-${tokenId}`,
+              importerCompany: invoiceMetadata?.importer_name || 'Unknown Importer',
+              exporterCompany: 'Your Company', // TODO: Get from exporter profile
+              loanAmount,
+              amountWithdrawn: Number(invoice.withdrawnAmount) / 1e18,
+              interestAmount,
+              totalDue,
+              paymentLink: paymentData?.payment_link || null,
+              status: determinePaymentStatus(invoice, paymentData),
+              sentAt: paymentData?.sent_at || undefined,
+              paidAt: paymentData?.paid_at || undefined,
+              dueDate: calculateDueDate(BigInt(invoice.createdAt)),
+              remindersSent: 0, // TODO: Track in database
+              createdAt: new Date(Number(invoice.createdAt)).toISOString(),
+            };
+          }
+          return null;
+        } catch (err) {
+          console.warn(`Failed to load invoice ${tokenId}:`, err);
+          return null;
+        }
+      });
+      
+      const paymentResults = await Promise.all(paymentPromises);
+      const validPayments = paymentResults.filter(Boolean) as PaymentRecord[];
+      
+      setPayments(validPayments);
     } catch (error) {
       console.error('Error loading payments data:', error);
+      setError('Failed to load payment data. Please try again.');
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const determinePaymentStatus = (invoice: any, paymentData: any): PaymentRecord['status'] => {
+    if (paymentData?.paid_at) return 'paid';
+    if (invoice.status === 'PAID') return 'paid';
+    if (paymentData?.sent_at) return 'link_sent';
+    if (paymentData?.payment_link) return 'link_generated';
+    
+    // Check if overdue
+    const dueDate = new Date(calculateDueDate(invoice.createdAt));
+    const now = new Date();
+    if (now > dueDate) return 'overdue';
+    
+    return 'pending';
+  };
+  
+  const calculateDueDate = (createdAt: bigint): string => {
+    const createdDate = new Date(Number(createdAt) * 1000);
+    const dueDate = new Date(createdDate);
+    dueDate.setDate(dueDate.getDate() + 30); // 30 days payment term
+    return dueDate.toISOString().split('T')[0];
   };
 
   const filterPayments = () => {
@@ -163,7 +203,7 @@ export default function PaymentsTracking() {
     setTimeout(() => setCopiedLink(''), 2000);
   };
 
-  const sendReminder = async (paymentId: number) => {
+  const sendReminder = async (paymentId: string) => {
     try {
       // TODO: Implement reminder email/notification system
       console.log('Sending reminder for payment:', paymentId);
@@ -182,38 +222,68 @@ export default function PaymentsTracking() {
   };
 
   const getStatusBadge = (status: PaymentRecord['status']) => {
-    const config = {
-      pending: { variant: 'secondary' as const, label: 'Payment Pending', color: 'bg-yellow-600' },
-      link_sent: { variant: 'default' as const, label: 'Link Sent', color: 'bg-blue-600' },
-      paid: { variant: 'default' as const, label: 'Paid', color: 'bg-green-600' },
-      overdue: { variant: 'destructive' as const, label: 'Overdue', color: 'bg-red-600' },
-    };
-
-    const { variant, label, color } = config[status];
-    
-    return (
-      <Badge variant={variant} className={`text-xs text-white ${color}`}>
-        {label}
-      </Badge>
-    );
+    switch (status) {
+      case 'pending':
+        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Payment Pending</Badge>;
+      case 'link_generated':
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Link Generated</Badge>;
+      case 'link_sent':
+        return <Badge variant="default" className="bg-blue-100 text-blue-800">Link Sent</Badge>;
+      case 'paid':
+        return <Badge variant="default" className="bg-green-100 text-green-800">Paid</Badge>;
+      case 'overdue':
+        return <Badge variant="destructive">Overdue</Badge>;
+      default:
+        return <Badge variant="secondary">Unknown</Badge>;
+    }
   };
-
+  
+  const generatePaymentLink = async (tokenId: number) => {
+    try {
+      // Generate payment link by calling API route
+      const response = await fetch(`/api/payment/${tokenId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const { paymentLink } = await response.json();
+        
+        // Update local state
+        setPayments(prev => 
+          prev.map(payment => 
+            payment.tokenId === tokenId
+              ? { ...payment, paymentLink, status: 'link_generated' as const }
+              : payment
+          )
+        );
+        
+        // Refresh data
+        loadPaymentsData();
+        return paymentLink;
+      }
+    } catch (error) {
+      console.error('Error generating payment link:', error);
+    }
+  };
+  
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
   };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+  
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     });
   };
-
+  
   const isOverdue = (dueDate: string, status: string) => {
     return status !== 'paid' && new Date(dueDate) < new Date();
   };
@@ -334,6 +404,7 @@ export default function PaymentsTracking() {
                   <SelectContent className="bg-slate-800 border-slate-700">
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="pending">Payment Pending</SelectItem>
+                    <SelectItem value="link_generated">Link Generated</SelectItem>
                     <SelectItem value="link_sent">Link Sent</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
                     <SelectItem value="overdue">Overdue</SelectItem>
@@ -355,7 +426,16 @@ export default function PaymentsTracking() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {error && (
+              <Alert className="mb-6 border-red-800 bg-red-950">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-red-200">
+                  {error}
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {isLoading || contractLoading ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="animate-pulse">
@@ -437,22 +517,36 @@ export default function PaymentsTracking() {
                     {/* Payment Actions */}
                     <div className="flex items-center justify-between pt-4 border-t border-slate-700">
                       <div className="flex items-center gap-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCopyLink(payment.paymentLink, payment.invoiceNumber)}
-                          className="border-slate-700 text-slate-300 hover:bg-slate-700"
-                        >
-                          <Copy className="mr-2 h-3 w-3" />
-                          {copiedLink === payment.invoiceNumber ? 'Copied!' : 'Copy Link'}
-                        </Button>
-                        
-                        <Link href={payment.paymentLink} target="_blank">
-                          <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-cyan-300">
-                            <ExternalLink className="mr-2 h-3 w-3" />
-                            Open Link
+                        {payment.paymentLink ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopyLink(payment.paymentLink!, payment.invoiceNumber)}
+                              className="border-slate-700 text-slate-300 hover:bg-slate-700"
+                            >
+                              <Copy className="mr-2 h-3 w-3" />
+                              {copiedLink === payment.invoiceNumber ? 'Copied!' : 'Copy Link'}
+                            </Button>
+                            
+                            <Link href={payment.paymentLink} target="_blank">
+                              <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-cyan-300">
+                                <ExternalLink className="mr-2 h-3 w-3" />
+                                Open Link
+                              </Button>
+                            </Link>
+                          </>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => generatePaymentLink(Number(payment.tokenId))}
+                            className="border-cyan-600 text-cyan-400 hover:bg-cyan-600 hover:text-white"
+                          >
+                            <Send className="mr-2 h-3 w-3" />
+                            Generate Payment Link
                           </Button>
-                        </Link>
+                        )}
 
                         {payment.status === 'link_sent' && (
                           <Button
@@ -461,6 +555,7 @@ export default function PaymentsTracking() {
                             onClick={() => sendReminder(payment.id)}
                             className="text-yellow-400 hover:text-yellow-300"
                           >
+                            <Bell className="mr-2 h-3 w-3" />
                             Send Reminder ({payment.remindersSent})
                           </Button>
                         )}
@@ -468,12 +563,14 @@ export default function PaymentsTracking() {
 
                       <div className="text-sm text-slate-400">
                         {payment.status === 'paid' && payment.paidAt && (
-                          <span className="text-green-400">
+                          <span className="text-green-400 flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" />
                             Paid on {formatDate(payment.paidAt)}
                           </span>
                         )}
                         {payment.status === 'link_sent' && payment.sentAt && (
-                          <span>
+                          <span className="flex items-center gap-1">
+                            <Send className="h-3 w-3" />
                             Sent on {formatDate(payment.sentAt)}
                           </span>
                         )}

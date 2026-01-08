@@ -1,6 +1,10 @@
 // Main hooks
 export { usePanna } from './usePanna';
 
+// Profile hooks
+export { useExporterProfile } from './useExporterProfile';
+export { useInvestorProfile } from './useInvestorProfile';
+
 // Legacy contract hook (deprecated)
 export { useContract } from './useContract';
 

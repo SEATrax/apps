@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePanna } from '@/hooks/usePanna';
+import { useActiveAccount } from 'panna-sdk';
+import { useExporterProfile } from '@/hooks/useExporterProfile';
+import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, FileText, DollarSign, TrendingUp, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import ExporterHeader from '@/components/ExporterHeader';
 
 interface DashboardStats {
   totalInvoices: number;
@@ -27,7 +31,10 @@ interface Invoice {
 }
 
 export default function ExporterDashboard() {
-  const { address, isConnected } = usePanna();
+  const activeAccount = useActiveAccount();
+  const { profile, loading: profileLoading } = useExporterProfile();
+  const { getInvoicesByExporter } = useInvoiceNFT();
+  
   const [stats, setStats] = useState<DashboardStats>({
     totalInvoices: 0,
     pendingInvoices: 0,
@@ -38,55 +45,67 @@ export default function ExporterDashboard() {
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const address = activeAccount?.address;
+  const isConnected = !!activeAccount;
+
   useEffect(() => {
-    if (isConnected && address) {
+    if (isConnected && address && profile) {
       loadDashboardData();
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, profile]);
 
   const loadDashboardData = async () => {
+    if (!address) return;
+    
     try {
       setIsLoading(true);
       
-      // TODO: Replace with actual smart contract calls
-      // Mock data for now
-      setStats({
-        totalInvoices: 12,
-        pendingInvoices: 3,
-        fundedInvoices: 6,
-        totalFunded: 85000,
-        totalWithdrawn: 72000,
-      });
-
-      setRecentInvoices([
-        {
-          id: 1,
-          invoiceNumber: 'INV-001',
-          importerCompany: 'Global Trading Ltd',
-          amount: 15000,
-          status: 'funded',
-          createdAt: '2024-11-25',
-          fundedPercentage: 85,
-        },
-        {
-          id: 2,
-          invoiceNumber: 'INV-002',
-          importerCompany: 'Asia Import Co',
-          amount: 22000,
-          status: 'approved',
-          createdAt: '2024-11-24',
-          fundedPercentage: 45,
-        },
-        {
-          id: 3,
-          invoiceNumber: 'INV-003',
-          importerCompany: 'European Goods Inc',
-          amount: 18000,
-          status: 'pending',
-          createdAt: '2024-11-23',
-          fundedPercentage: 0,
-        },
-      ]);
+      // Get invoice token IDs from smart contract
+      const invoiceIds = await getInvoicesByExporter(address);
+      
+      if (invoiceIds.length === 0) {
+        setStats({
+          totalInvoices: 0,
+          pendingInvoices: 0,
+          fundedInvoices: 0,
+          totalFunded: 0,
+          totalWithdrawn: 0,
+        });
+        setRecentInvoices([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Get invoice metadata from Supabase for recent invoices
+      const { data: invoiceMetadata } = await supabase
+        .from('invoice_metadata')
+        .select('*')
+        .eq('exporter_wallet', address)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      // Mock stats calculation (implement with real contract data later)
+      const mockStats = {
+        totalInvoices: invoiceIds.length,
+        pendingInvoices: Math.floor(invoiceIds.length * 0.4),
+        fundedInvoices: Math.floor(invoiceIds.length * 0.6),
+        totalFunded: 125000,
+        totalWithdrawn: 87500,
+      };
+      
+      // Format recent invoices
+      const formattedInvoices: Invoice[] = (invoiceMetadata || []).slice(0, 5).map((meta, index) => ({
+        id: meta.token_id || index,
+        invoiceNumber: meta.invoice_number || `INV-${meta.token_id}`,
+        importerCompany: meta.importer_name || 'Unknown Importer',
+        amount: 25000, // TODO: Get from contract
+        status: index % 3 === 0 ? 'funded' : index % 2 === 0 ? 'approved' : 'pending',
+        createdAt: meta.created_at,
+        fundedPercentage: index % 3 === 0 ? 100 : index % 2 === 0 ? 75 : 0,
+      }));
+      
+      setStats(mockStats);
+      setRecentInvoices(formattedInvoices);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -141,29 +160,56 @@ export default function ExporterDashboard() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div>
-              <h1 className="text-xl font-semibold text-slate-100">Exporter Dashboard</h1>
-              <p className="text-sm text-slate-400">
-                Manage your invoices and track funding progress
-              </p>
-            </div>
-            <Link href="/exporter/invoices/new">
-              <Button className="bg-cyan-600 hover:bg-cyan-700 text-white">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Invoice
-              </Button>
-            </Link>
+  if (profileLoading || !activeAccount) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <ExporterHeader />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-600 mx-auto"></div>
+            <p className="mt-4 text-slate-400">Loading exporter profile...</p>
           </div>
         </div>
       </div>
+    );
+  }
 
+  return (
+    <div className="min-h-screen bg-slate-950">
+      <ExporterHeader />
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Verification Status Banner */}
+        {profile && !profile.is_verified && (
+          <div className="mb-6 bg-yellow-900/50 border border-yellow-600 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <Clock className="h-5 w-5 text-yellow-400" />
+              <div>
+                <h3 className="text-yellow-400 font-medium">Account Under Review</h3>
+                <p className="text-yellow-100 text-sm">
+                  Your exporter account is being verified by our admin team. 
+                  Some features may be limited until verification is complete.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {profile && profile.is_verified && (
+          <div className="mb-6 bg-green-900/50 border border-green-600 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-5 w-5 bg-green-500 rounded-full flex items-center justify-center">
+                <div className="h-2 w-2 bg-white rounded-full"></div>
+              </div>
+              <div>
+                <h3 className="text-green-400 font-medium">Account Verified</h3>
+                <p className="text-green-100 text-sm">
+                  Your exporter account has been verified. You can now create invoices and access all features.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="bg-slate-900 border-slate-800">

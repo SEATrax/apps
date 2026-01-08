@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Upload, Check, HelpCircle } from 'lucide-react';
+import { useExporterProfile } from '@/hooks/useExporterProfile';
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { useActiveAccount } from 'panna-sdk';
+import { toast } from 'sonner';
 
 interface ExporterOnboardingProps {
   onComplete: () => void;
@@ -8,6 +12,12 @@ interface ExporterOnboardingProps {
 
 export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboardingProps) {
   const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  
+  const activeAccount = useActiveAccount();
+  const { createProfile } = useExporterProfile();
+  const { grantExporterRole } = useAccessControl();
+  
   const [formData, setFormData] = useState({
     companyName: '',
     country: '',
@@ -16,6 +26,8 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
     email: '',
     phone: '',
     picName: '',
+    address: '',
+    exportLicense: '',
   });
 
   const [uploadedDocs, setUploadedDocs] = useState({
@@ -29,14 +41,43 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
   const countries = ['Indonesia', 'Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Singapore'];
   const businessTypes = ['Manufacturing', 'Agriculture', 'Commodities', 'Textiles', 'Electronics', 'Others'];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < 3) {
       setStep(step + 1);
     } else {
-      // Simulate submission
-      setTimeout(() => {
-        onComplete();
-      }, 1000);
+      // Final submission
+      await handleSubmit();
+    }
+  };
+  
+  const handleSubmit = async () => {
+    if (!activeAccount?.address) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+    
+    try {
+      setSubmitting(true);
+      
+      // 1. Create exporter profile in Supabase
+      await createProfile({
+        company_name: formData.companyName,
+        tax_id: formData.taxId,
+        country: formData.country,
+        export_license: formData.exportLicense,
+        phone: formData.phone,
+        address: formData.address,
+      });
+      
+      // Note: Role will be granted by admin after verification
+      
+      toast.success('Registration submitted successfully! Your account will be verified by admin.');
+      onComplete();
+    } catch (error) {
+      console.error('Registration failed:', error);
+      toast.error('Registration failed. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -364,15 +405,24 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
             </button>
             <button
               onClick={handleNext}
-              disabled={!isStepValid()}
+              disabled={!isStepValid() || submitting}
               className={`flex-1 px-6 py-3 rounded-lg flex items-center justify-center gap-2 transition-all ${
-                isStepValid()
+                isStepValid() && !submitting
                   ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-white hover:shadow-lg hover:shadow-cyan-500/50 hover-scale'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }`}
             >
-              {step === 3 ? 'Complete Registration' : 'Continue'}
-              <ArrowRight className="w-5 h-5" />
+              {submitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Registering...
+                </>
+              ) : (
+                <>
+                  {step === 3 ? 'Complete Registration' : 'Continue'}
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </button>
           </div>
         </div>
