@@ -113,6 +113,13 @@ export default function TestingPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Phase A Test - Available for all users */}
+                <Link href="/testing/phase-a">
+                  <Button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white">
+                    Phase A Tests
+                  </Button>
+                </Link>
+                
                 {mockUser.startsWith('exporter') && (
                   <>
                     <Link href="/exporter">

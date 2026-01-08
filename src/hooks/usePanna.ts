@@ -105,12 +105,5 @@ export function usePanna() {
       }
     },
     
-    // Contract interaction helpers
-    readContract: async (args: any) => {
-      throw new Error('Use useContract hook for contract interactions');
-    },
-    writeContract: async (args: any) => {
-      throw new Error('Use useContract hook for contract interactions');
-    },
   };
 }

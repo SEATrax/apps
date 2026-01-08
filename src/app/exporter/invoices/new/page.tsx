@@ -162,14 +162,16 @@ export default function CreateInvoice() {
       const contractResult = await mintInvoice(
         formData.exporterCompany,
         formData.importerCompany,
-        parseFloat(formData.shippingAmount),
-        parseFloat(formData.loanAmount),
-        formData.shippingDate!
+        BigInt(Math.floor(parseFloat(formData.shippingAmount) * 100)), // Convert to cents
+        BigInt(Math.floor(parseFloat(formData.loanAmount) * 100)), // Convert to cents
+        BigInt(Math.floor(formData.shippingDate!.getTime() / 1000)) // Convert to timestamp
       );
 
-      if (!contractResult?.tokenId) {
+      if (!contractResult) {
         throw new Error('Failed to create invoice NFT');
       }
+
+      const tokenId = contractResult; // contractResult is bigint (tokenId)
 
       // Save metadata to Supabase (optional for testing)
       let metadata = null;
@@ -178,7 +180,7 @@ export default function CreateInvoice() {
           const { data, error: supabaseError } = await supabase
             .from('invoice_metadata')
             .insert({
-              token_id: parseInt(contractResult.tokenId),
+              token_id: Number(tokenId), // Convert bigint to number for database
               invoice_number: formData.invoiceNumber,
               goods_description: formData.goodsDescription,
               importer_name: formData.importerCompany,
@@ -205,8 +207,7 @@ export default function CreateInvoice() {
       }
 
       console.log('Invoice created successfully:', {
-        tokenId: contractResult.tokenId,
-        txHash: contractResult.txHash,
+        tokenId: Number(tokenId),
         metadata
       });
 

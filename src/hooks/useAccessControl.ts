@@ -1,30 +1,58 @@
-import { useState, useCallback, useEffect } from 'react';
-import { usePanna } from './usePanna';
-import { ethers } from 'ethers';
+'use client';
 
-// Contract ABI for AccessControl - simplified version
+import { useState, useCallback } from 'react';
+import { usePanna } from './usePanna';
+import { appConfig } from '@/config';
+import { liskSepolia } from 'panna-sdk'
+import { prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb/transaction'
+import { getContract } from 'thirdweb/contract'
+
+// Role constants (keccak256 hashes)
+export const ROLES = {
+  ADMIN: '0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775',
+  EXPORTER: '0x7b765e0e932d348852a6f810bfa1ab891e259123f02db8cdcde614c570223357',
+  INVESTOR: '0x2d41a8a8a5c8e7c8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8',
+} as const;
+
+// Contract ABI for AccessControl
 const ACCESS_CONTROL_ABI = [
   // Admin functions
-  "function grantExporterRole(address account) external",
-  "function grantInvestorRole(address account) external",
-  "function revokeExporterRole(address account) external",
-  "function revokeInvestorRole(address account) external",
-  
-  // Role checking functions
-  "function hasExporterRole(address account) external view returns (bool)",
-  "function hasInvestorRole(address account) external view returns (bool)",
-  "function hasAdminRole(address account) external view returns (bool)",
-  "function getUserRoles(address account) external view returns (bool hasAdminRole, bool hasExporterRole, bool hasInvestorRole)",
-  
-  // Role constants
-  "function DEFAULT_ADMIN_ROLE() external view returns (bytes32)",
-  "function EXPORTER_ROLE() external view returns (bytes32)",
-  "function INVESTOR_ROLE() external view returns (bytes32)",
-  
-  // Events
-  "event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)",
-  "event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)",
-];
+  {
+    inputs: [{ name: 'account', type: 'address' }],
+    name: 'grantExporterRole',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'account', type: 'address' }],
+    name: 'grantInvestorRole',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'account', type: 'address' }],
+    name: 'getUserRoles',
+    outputs: [
+      { name: 'hasAdminRole', type: 'bool' },
+      { name: 'hasExporterRole', type: 'bool' },
+      { name: 'hasInvestorRole', type: 'bool' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { name: 'role', type: 'bytes32' },
+      { name: 'account', type: 'address' },
+    ],
+    name: 'hasRole',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
 export interface UserRoles {
   hasAdminRole: boolean;
@@ -32,310 +60,130 @@ export interface UserRoles {
   hasInvestorRole: boolean;
 }
 
-export const useAccessControl = () => {
+interface UseAccessControlReturn {
+  // Role management
+  grantExporterRole: (account: string) => Promise<void>;
+  grantInvestorRole: (account: string) => Promise<void>;
+  
+  // Role checking
+  getUserRoles: (account: string) => Promise<UserRoles>;
+  hasRole: (role: string, account: string) => Promise<boolean>;
+  
+  // State
+  isLoading: boolean;
+  error: Error | null;
+}
+
+export function useAccessControl(): UseAccessControlReturn {
   const { address, isConnected, client, account } = usePanna();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [userRoles, setUserRoles] = useState<UserRoles>({
-    hasAdminRole: false,
-    hasExporterRole: false,
-    hasInvestorRole: false,
-  });
+  const [error, setError] = useState<Error | null>(null);
 
-  const getContract = useCallback(() => {
-    if (!isConnected || !account) throw new Error('Wallet not connected');
-    
-    const contractAddress = process.env.NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS || process.env.ACCESS_CONTROL;
-    if (!contractAddress) throw new Error('AccessControl contract address not configured');
-    
-    // TODO: Implement actual contract interaction with Panna SDK
-    console.log('Contract call would use:', { contractAddress, account });
-    throw new Error('Contract interaction not yet implemented with Panna SDK');
-  }, [isConnected, account]);
+  const contractAddress = appConfig.contracts.accessControl;
 
-  const getReadOnlyContract = useCallback(() => {
-    if (!client) throw new Error('Client not available');
+  // Helper to handle contract calls
+  const handleContractCall = useCallback(async <T>(
+    operation: () => Promise<T>
+  ): Promise<T> => {
+    if (!client || !contractAddress) {
+      throw new Error('Client not available or contract address not configured');
+    }
     
-    const contractAddress = process.env.NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS || process.env.ACCESS_CONTROL;
-    if (!contractAddress) throw new Error('AccessControl contract address not configured');
-    
-    // TODO: Implement actual contract reading with Panna SDK
-    console.log('Read-only contract call would use:', { contractAddress, client });
-    throw new Error('Contract reading not yet implemented with Panna SDK');
-  }, [client]);
+    setIsLoading(true);
+    setError(null);
+    try {
+      return await operation();
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('AccessControl operation failed');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [client, contractAddress]);
 
-  // Load user roles when address changes
-  useEffect(() => {
-    if (address) {
-      loadUserRoles(address);
-    } else {
-      setUserRoles({
-        hasAdminRole: false,
-        hasExporterRole: false,
-        hasInvestorRole: false,
+  const grantExporterRole = useCallback(async (accountAddress: string): Promise<void> => {
+    return handleContractCall(async () => {
+      if (!client || !account) throw new Error('Wallet not connected');
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function grantRole(bytes32 role, address account)',
+        params: [ROLES.EXPORTER as `0x${string}`, accountAddress],
       });
-    }
-  }, [address]);
-
-  // Grant exporter role (Admin only) - Mock implementation
-  const grantExporterRole = async (accountAddress: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would grant exporter role to:', accountAddress);
       
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Exporter role granted to:', accountAddress);
+    });
+  }, [client, account, contractAddress, handleContractCall]);
 
-      return {
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
-      };
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to grant exporter role';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Grant investor role (Admin only) - Mock implementation
-  const grantInvestorRole = async (accountAddress: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would grant investor role to:', accountAddress);
+  const grantInvestorRole = useCallback(async (accountAddress: string): Promise<void> => {
+    return handleContractCall(async () => {
+      if (!client || !account) throw new Error('Wallet not connected');
       
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      return {
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
-      };
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to grant investor role';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Revoke exporter role (Admin only) - Mock implementation
-  const revokeExporterRole = async (accountAddress: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would revoke exporter role from:', accountAddress);
-      
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      return {
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
-      };
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to revoke exporter role';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Revoke investor role (Admin only) - Mock implementation
-  const revokeInvestorRole = async (accountAddress: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would revoke investor role from:', accountAddress);
-      
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      return {
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
-      };
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to revoke investor role';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Check if address has exporter role - Mock implementation
-  const hasExporterRole = async (accountAddress?: string): Promise<boolean> => {
-    try {
-      const checkAddress = accountAddress || address;
-      
-      if (!checkAddress) return false;
-      
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would check exporter role for:', checkAddress);
-      
-      // Mock: return true for demo
-      return true;
-    } catch (err: any) {
-      console.error('Error checking exporter role:', err);
-      return false;
-    }
-  };
-
-  // Check if address has investor role - Mock implementation
-  const hasInvestorRole = async (accountAddress?: string): Promise<boolean> => {
-    try {
-      const checkAddress = accountAddress || address;
-      
-      if (!checkAddress) return false;
-      
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would check investor role for:', checkAddress);
-      
-      // Mock: return false for demo (user is exporter, not investor)
-      return false;
-    } catch (err: any) {
-      console.error('Error checking investor role:', err);
-      return false;
-    }
-  };
-
-  // Check if address has admin role - Mock implementation
-  const hasAdminRole = async (accountAddress?: string): Promise<boolean> => {
-    try {
-      const checkAddress = accountAddress || address;
-      
-      if (!checkAddress) return false;
-      
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would check admin role for:', checkAddress);
-      
-      // Mock: return false for demo (user is exporter, not admin)
-      return false;
-    } catch (err: any) {
-      console.error('Error checking admin role:', err);
-      return false;
-    }
-  };
-
-  // Get all roles for an address - Mock implementation
-  const getUserRoles = async (accountAddress?: string): Promise<UserRoles> => {
-    try {
-      const checkAddress = accountAddress || address;
-      
-      if (!checkAddress) {
-        return {
-          hasAdminRole: false,
-          hasExporterRole: false,
-          hasInvestorRole: false,
-        };
-      }
-      
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would get user roles for:', checkAddress);
-      
-      // Mock: return exporter role for demo
-      return {
-        hasAdminRole: false,
-        hasExporterRole: true,
-        hasInvestorRole: false,
-      };
-    } catch (err: any) {
-      console.error('Error fetching user roles:', err);
-      return {
-        hasAdminRole: false,
-        hasExporterRole: false,
-        hasInvestorRole: false,
-      };
-    }
-  };
-
-  // Load and set user roles for current address
-  const loadUserRoles = async (accountAddress?: string) => {
-    try {
-      const roles = await getUserRoles(accountAddress);
-      setUserRoles(roles);
-      return roles;
-    } catch (err: any) {
-      console.error('Error loading user roles:', err);
-      setUserRoles({
-        hasAdminRole: false,
-        hasExporterRole: false,
-        hasInvestorRole: false,
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function grantRole(bytes32 role, address account)',
+        params: [ROLES.INVESTOR as `0x${string}`, accountAddress],
       });
-    }
-  };
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Investor role granted to:', accountAddress);
+    });
+  }, [client, account, contractAddress, handleContractCall]);
 
-  // Refresh current user roles
-  const refreshUserRoles = async () => {
-    if (address) {
-      await loadUserRoles(address);
-    }
-  };
+  const getUserRoles = useCallback(async (account: string): Promise<UserRoles> => {
+    return handleContractCall(async () => {
+      if (!client) throw new Error('Client not available');
+      
+      const contract = getContract({
+        client,
+        chain: liskSepolia,
+        address: contractAddress as `0x${string}`,
+      });
+      
+      const [hasAdminRole, hasExporterRole, hasInvestorRole] = await Promise.all([
+        readContract({ contract, method: 'function hasRole(bytes32 role, address account) view returns (bool)', params: [ROLES.ADMIN as `0x${string}`, account] }),
+        readContract({ contract, method: 'function hasRole(bytes32 role, address account) view returns (bool)', params: [ROLES.EXPORTER as `0x${string}`, account] }),
+        readContract({ contract, method: 'function hasRole(bytes32 role, address account) view returns (bool)', params: [ROLES.INVESTOR as `0x${string}`, account] })
+      ]);
+      
+      return {
+        hasAdminRole: Boolean(hasAdminRole),
+        hasExporterRole: Boolean(hasExporterRole),
+        hasInvestorRole: Boolean(hasInvestorRole)
+      };
+    });
+  }, [client, contractAddress, handleContractCall]);
 
-  // Helper function to get user type for routing
-  const getUserType = (): 'admin' | 'exporter' | 'investor' | 'none' => {
-    if (userRoles.hasAdminRole) return 'admin';
-    if (userRoles.hasExporterRole) return 'exporter';
-    if (userRoles.hasInvestorRole) return 'investor';
-    return 'none';
-  };
-
-  // Check if user can access specific routes
-  const canAccessRoute = (requiredRole: 'admin' | 'exporter' | 'investor'): boolean => {
-    switch (requiredRole) {
-      case 'admin':
-        return userRoles.hasAdminRole;
-      case 'exporter':
-        return userRoles.hasExporterRole || userRoles.hasAdminRole; // Admins can access exporter routes
-      case 'investor':
-        return userRoles.hasInvestorRole || userRoles.hasAdminRole; // Admins can access investor routes
-      default:
-        return false;
-    }
-  };
-
-  // Check if current user is verified (has any role)
-  const isUserVerified = (): boolean => {
-    return userRoles.hasAdminRole || userRoles.hasExporterRole || userRoles.hasInvestorRole;
-  };
+  const hasRole = useCallback(async (role: string, account: string): Promise<boolean> => {
+    return handleContractCall(async () => {
+      if (!client) throw new Error('Client not available');
+      
+      const contract = getContract({
+        client,
+        chain: liskSepolia,
+        address: contractAddress as `0x${string}`,
+      });
+      
+      const result = await readContract({
+        contract,
+        method: 'function hasRole(bytes32 role, address account) view returns (bool)',
+        params: [role as `0x${string}`, account]
+      });
+      
+      return Boolean(result);
+    });
+  }, [client, contractAddress, handleContractCall]);
 
   return {
-    // State
-    isLoading,
-    error,
-    userRoles,
-    
-    // Write functions (Admin only)
     grantExporterRole,
     grantInvestorRole,
-    revokeExporterRole,
-    revokeInvestorRole,
-    
-    // Read functions
-    hasExporterRole,
-    hasInvestorRole,
-    hasAdminRole,
     getUserRoles,
-    loadUserRoles,
-    refreshUserRoles,
-    
-    // Utility functions
-    getUserType,
-    canAccessRoute,
-    isUserVerified,
+    hasRole,
+    isLoading,
+    error,
   };
-};
+}

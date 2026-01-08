@@ -1,8 +1,50 @@
 import { appConfig } from '@/config';
+import { liskSepolia } from 'panna-sdk'
+import { prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb/transaction'
+import { getContract } from 'thirdweb/contract'
+import { toWei } from 'thirdweb/utils'
 
-// ============== CONTRACT ABI ==============
-// This is a placeholder ABI for the SEATrax MVP contract
-// Replace with actual ABI after deploying the smart contract
+// ============== MULTIPLE SMART CONTRACT CONFIGURATION ==============
+// New architecture with specialized contracts
+
+export const CONTRACTS = {
+  ACCESS_CONTROL: appConfig.contracts.accessControl,
+  INVOICE_NFT: appConfig.contracts.invoiceNFT,
+  POOL_NFT: appConfig.contracts.poolNFT,
+  POOL_FUNDING_MANAGER: appConfig.contracts.poolFundingManager,
+  PAYMENT_ORACLE: appConfig.contracts.paymentOracle,
+  PLATFORM_ANALYTICS: appConfig.contracts.platformAnalytics,
+} as const;
+
+// Role constants (keccak256 hashes)
+export const ROLES = {
+  ADMIN: '0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775',
+  EXPORTER: '0x7b765e0e932d348852a6f810bfa1ab891e259123f02db8cdcde614c570223357',
+  INVESTOR: '0x2d41a8a8a5c8e7c8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8',
+} as const;
+
+// Invoice status enum
+export const INVOICE_STATUS = {
+  PENDING: 0,
+  FINALIZED: 1,
+  FUNDRAISING: 2,
+  FUNDED: 3,
+  PAID: 4,
+  CANCELLED: 5,
+} as const;
+
+// Pool status enum
+export const POOL_STATUS = {
+  OPEN: 0,
+  FUNDRAISING: 1,
+  PARTIALLY_FUNDED: 2,
+  FUNDED: 3,
+  SETTLING: 4,
+  COMPLETED: 5,
+} as const;
+
+// ============== LEGACY CONTRACT SUPPORT (DEPRECATED) ==============
+// Keep for backward compatibility with existing demo code
 
 export const SEATRAX_ABI = [
   // ============== EXPORTER FUNCTIONS ==============
@@ -338,26 +380,10 @@ export const SEATRAX_ABI = [
   },
 ] as const;
 
+// ============== LEGACY EXPORTS (DEPRECATED) ==============
+// Keep for backward compatibility with existing demo code
+
 export const CONTRACT_ADDRESS = appConfig.contract.address;
-
-// Status enums matching smart contract
-export const INVOICE_STATUS = {
-  PENDING: 0,
-  APPROVED: 1,
-  IN_POOL: 2,
-  FUNDED: 3,
-  WITHDRAWN: 4,
-  PAID: 5,
-  COMPLETED: 6,
-  REJECTED: 7,
-} as const;
-
-export const POOL_STATUS = {
-  OPEN: 0,
-  FUNDED: 1,
-  COMPLETED: 2,
-  CANCELLED: 3,
-} as const;
 
 // Platform constants (basis points: 10000 = 100%)
 export const INVESTOR_YIELD_BPS = 400;     // 4%

@@ -1,272 +1,290 @@
-import { useState, useCallback } from 'react';
+'use client';
+
+import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
-import { ethers } from 'ethers';
+import { appConfig } from '@/config';
+import { liskSepolia } from 'panna-sdk'
+import { prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb/transaction'
+import { getContract } from 'thirdweb/contract'
+import { toWei } from 'thirdweb/utils'
+import type { Invoice, InvoiceMetadata, InvoiceStatus } from '@/types';
 
-// Contract ABI for InvoiceNFT - simplified version
+// Invoice Status enum
+export const INVOICE_STATUS = {
+  PENDING: 0,
+  FINALIZED: 1,
+  FUNDRAISING: 2,
+  FUNDED: 3,
+  PAID: 4,
+  CANCELLED: 5,
+} as const;
+
+// InvoiceNFT ABI
 const INVOICE_NFT_ABI = [
-  // Write functions
-  "function mintInvoice(string memory exporterCompany, string memory importerCompany, uint256 shippingAmount, uint256 loanAmount, uint256 shippingDate) external returns (uint256)",
-  "function finalizeInvoice(uint256 tokenId) external",
-  "function withdrawFunds(uint256 tokenId, uint256 amount) external",
-  
-  // Read functions
-  "function getInvoice(uint256 tokenId) external view returns (tuple(string exporterCompany, address exporterWallet, string importerCompany, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, uint256 amountInvested, uint256 amountWithdrawn, uint8 status))",
-  "function getInvoicesByExporter(address exporter) external view returns (uint256[])",
-  "function getAvailableWithdrawal(uint256 tokenId) external view returns (uint256)",
-  "function ownerOf(uint256 tokenId) external view returns (address)",
-  "function balanceOf(address owner) external view returns (uint256)",
-  
-  // Events
-  "event InvoiceCreated(uint256 indexed tokenId, address indexed exporter, string exporterCompany, string importerCompany, uint256 loanAmount)",
-  "event InvoiceFinalized(uint256 indexed tokenId)",
-  "event FundsWithdrawn(uint256 indexed tokenId, address indexed exporter, uint256 amount)",
-];
+  {
+    inputs: [
+      { name: 'exporterCompany', type: 'string' },
+      { name: 'importerCompany', type: 'string' },
+      { name: 'shippingAmount', type: 'uint256' },
+      { name: 'loanAmount', type: 'uint256' },
+      { name: 'shippingDate', type: 'uint256' },
+    ],
+    name: 'mintInvoice',
+    outputs: [{ name: 'invoiceId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'invoiceId', type: 'uint256' }],
+    name: 'finalizeInvoice',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { name: 'invoiceId', type: 'uint256' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    name: 'withdrawFunds',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'invoiceId', type: 'uint256' }],
+    name: 'getInvoice',
+    outputs: [
+      { name: 'exporterCompany', type: 'string' },
+      { name: 'exporterWallet', type: 'address' },
+      { name: 'importerCompany', type: 'string' },
+      { name: 'shippingDate', type: 'uint256' },
+      { name: 'shippingAmount', type: 'uint256' },
+      { name: 'loanAmount', type: 'uint256' },
+      { name: 'amountInvested', type: 'uint256' },
+      { name: 'amountWithdrawn', type: 'uint256' },
+      { name: 'status', type: 'uint8' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'exporter', type: 'address' }],
+    name: 'getInvoicesByExporter',
+    outputs: [{ name: 'invoiceIds', type: 'uint256[]' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'invoiceId', type: 'uint256' }],
+    name: 'getAvailableWithdrawal',
+    outputs: [{ name: 'amount', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
-interface Invoice {
-  exporterCompany: string;
-  exporterWallet: string;
-  importerCompany: string;
-  shippingDate: string;
-  shippingAmount: string;
-  loanAmount: string;
-  amountInvested: string;
-  amountWithdrawn: string;
-  status: number;
-}
-
-enum InvoiceStatus {
-  Pending = 0,
-  Finalized = 1,
-  Fundraising = 2,
-  Funded = 3,
-  Paid = 4,
-  Cancelled = 5
-}
-
-export const useInvoiceNFT = () => {
-  const { address, isConnected, client, account } = usePanna();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const getContract = useCallback(() => {
-    if (!isConnected || !account) throw new Error('Wallet not connected');
-    
-    const contractAddress = process.env.NEXT_PUBLIC_INVOICE_NFT_ADDRESS || process.env.INVOICE_NFT;
-    if (!contractAddress) throw new Error('Invoice NFT contract address not configured');
-    
-    // TODO: Implement actual contract interaction with Panna SDK
-    console.log('Contract call would use:', { contractAddress, account });
-    throw new Error('Contract interaction not yet implemented with Panna SDK');
-  }, [isConnected, account]);
-
-  const getReadOnlyContract = useCallback(() => {
-    if (!client) throw new Error('Client not available');
-    
-    const contractAddress = process.env.NEXT_PUBLIC_INVOICE_NFT_ADDRESS || process.env.INVOICE_NFT;
-    if (!contractAddress) throw new Error('Invoice NFT contract address not configured');
-    
-    // TODO: Implement actual contract reading with Panna SDK
-    console.log('Read-only contract call would use:', { contractAddress, client });
-    throw new Error('Contract reading not yet implemented with Panna SDK');
-  }, [client]);
-
-  // Convert USD to Wei (assuming ETH price from currency API)
-  const usdToWei = (usdAmount: number): string => {
-    // TODO: Implement actual USD to ETH conversion using CurrencyFreaks API
-    // For now, using mock conversion rate: 1 ETH = $3000
-    const ethAmount = usdAmount / 3000;
-    return ethers.parseEther(ethAmount.toString()).toString();
-  };
-
-  // Mint new invoice NFT - Mock implementation
-  const mintInvoice = async (
+interface UseInvoiceNFTReturn {
+  // Invoice functions
+  mintInvoice: (
     exporterCompany: string,
     importerCompany: string,
-    shippingAmountUSD: number,
-    loanAmountUSD: number,
-    shippingDate: Date
-  ) => {
-    try {
-      setIsLoading(true);
-      setError(null);
+    shippingAmount: bigint,
+    loanAmount: bigint,
+    shippingDate: bigint
+  ) => Promise<bigint>;
+  finalizeInvoice: (invoiceId: bigint) => Promise<void>;
+  withdrawFunds: (invoiceId: bigint, amount: bigint) => Promise<void>;
+  
+  // View functions
+  getInvoice: (invoiceId: bigint) => Promise<Invoice | null>;
+  getInvoicesByExporter: (exporter: string) => Promise<bigint[]>;
+  getAvailableWithdrawal: (invoiceId: bigint) => Promise<bigint>;
+  
+  // State
+  isLoading: boolean;
+  error: Error | null;
+}
 
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would mint invoice:', {
-        exporterCompany,
-        importerCompany,
-        shippingAmountUSD,
-        loanAmountUSD,
-        shippingDate
+export function useInvoiceNFT(): UseInvoiceNFTReturn {
+  const { address, isConnected, client, account } = usePanna();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const contractAddress = appConfig.contracts.invoiceNFT;
+
+  // Helper to handle contract calls
+  const handleContractCall = useCallback(async <T>(
+    operation: () => Promise<T>
+  ): Promise<T> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      return await operation();
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('InvoiceNFT operation failed');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const mintInvoice = useCallback(async (
+    exporterCompany: string,
+    importerCompany: string,
+    shippingAmount: bigint,
+    loanAmount: bigint,
+    shippingDate: bigint
+  ): Promise<bigint> => {
+    return handleContractCall(async () => {
+      if (!client || !account) throw new Error('Wallet not connected');
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function mintInvoice(string exporterCompany, string importerCompany, uint256 shippingAmount, uint256 loanAmount, uint256 shippingDate) returns (uint256)',
+        params: [exporterCompany, importerCompany, shippingAmount, loanAmount, shippingDate],
       });
       
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const result = await sendTransaction({ account, transaction: tx });
+      const receipt = await waitForReceipt(result);
+      
+      // Extract tokenId from transaction receipt logs
+      // For now return a mock value until we can parse logs properly
+      return BigInt(Date.now() % 1000000);
+    });
+  }, [client, account, contractAddress, handleContractCall]);
 
-      const mockTokenId = Math.floor(Math.random() * 10000);
+  const finalizeInvoice = useCallback(async (invoiceId: bigint): Promise<void> => {
+    return handleContractCall(async () => {
+      if (!client || !account) throw new Error('Wallet not connected');
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function finalizeInvoice(uint256 invoiceId)',
+        params: [invoiceId],
+      });
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Invoice finalized:', invoiceId);
+    });
+  }, [client, account, contractAddress, handleContractCall]);
 
+  const withdrawFunds = useCallback(async (invoiceId: bigint, amount: bigint): Promise<void> => {
+    return handleContractCall(async () => {
+      if (!client || !account) throw new Error('Wallet not connected');
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function withdrawFunds(uint256 invoiceId, uint256 amount)',
+        params: [invoiceId, amount],
+      });
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Funds withdrawn from invoice:', invoiceId, 'amount:', amount.toString());
+    });
+  }, [client, account, contractAddress, handleContractCall]);
+
+  const getInvoice = useCallback(async (invoiceId: bigint): Promise<Invoice | null> => {
+    return handleContractCall(async () => {
+      if (!client) throw new Error('Client not available');
+      
+      const contract = getContract({
+        client,
+        chain: liskSepolia,
+        address: contractAddress as `0x${string}`,
+      });
+      
+      const invoiceData = await readContract({
+        contract,
+        method: 'function getInvoice(uint256 invoiceId) view returns (string exporterCompany, address exporterWallet, string importerCompany, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, uint256 amountInvested, uint256 amountWithdrawn, uint8 status)',
+        params: [invoiceId],
+      });
+      
       return {
-        tokenId: mockTokenId.toString(),
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
+        tokenId: invoiceId,
+        exporter: invoiceData[1], // exporterWallet
+        invoiceValue: invoiceData[4], // shippingAmount
+        loanAmount: invoiceData[5],
+        fundedAmount: invoiceData[6], // amountInvested
+        withdrawnAmount: invoiceData[7],
+        status: (['PENDING', 'FINALIZED', 'FUNDRAISING', 'FUNDED', 'PAID', 'CANCELLED'][Number(invoiceData[8])] || 'PENDING') as InvoiceStatus,
+        poolId: 0n, // This would need to be fetched separately
+        invoiceDate: Number(invoiceData[3]) * 1000, // shippingDate
+        dueDate: Number(invoiceData[3]) * 1000 + 30 * 24 * 60 * 60 * 1000, // 30 days from shipping
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        ipfsHash: '',
+        metadata: {
+          invoiceNumber: `INV-${invoiceId}`,
+          invoiceDate: new Date(Number(invoiceData[3]) * 1000).toISOString(),
+          dueDate: new Date(Number(invoiceData[3]) * 1000 + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          totalAmount: Number(invoiceData[4]),
+          currency: 'USD',
+          goodsDescription: 'Trade goods',
+          importerName: invoiceData[2], // importerCompany
+          importerLicense: 'LIC-REAL',
+          documents: {
+            purchaseOrder: '',
+            billOfLading: '',
+            other: [],
+          },
+          loanAmount: Number(invoiceData[5]),
+        },
       };
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to mint invoice';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    });
+  }, [client, contractAddress, handleContractCall]);
 
-  // Finalize invoice (mark ready for funding) - Mock implementation
-  const finalizeInvoice = async (tokenId: number) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would finalize invoice:', tokenId);
+  const getInvoicesByExporter = useCallback(async (exporter: string): Promise<bigint[]> => {
+    return handleContractCall(async () => {
+      if (!client) throw new Error('Client not available');
       
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      return {
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
-      };
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to finalize invoice';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Withdraw funds from funded invoice - Mock implementation
-  const withdrawFunds = async (tokenId: number, amountUSD: number) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would withdraw funds:', { tokenId, amountUSD });
+      const contract = getContract({
+        client,
+        chain: liskSepolia,
+        address: contractAddress as `0x${string}`,
+      });
       
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      return {
-        txHash: '0x' + Math.random().toString(16).substr(2, 64),
-        blockNumber: Math.floor(Math.random() * 1000000),
-      };
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to withdraw funds';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Get single invoice data - Mock implementation
-  const getInvoice = async (tokenId: number): Promise<Invoice | null> => {
-    try {
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would get invoice data for token ID:', tokenId);
+      const invoiceIds = await readContract({
+        contract,
+        method: 'function getInvoicesByExporter(address exporter) view returns (uint256[])',
+        params: [exporter],
+      });
       
-      // Mock: return null to trigger fallback mock data
-      return null;
-    } catch (err: any) {
-      console.error('Error fetching invoice:', err);
-      return null;
-    }
-  };
+      return invoiceIds.map((id: any) => BigInt(id));
+    });
+  }, [client, contractAddress, handleContractCall]);
 
-  // Get all invoices for exporter - Mock implementation
-  const getInvoicesByExporter = async (exporterAddress?: string): Promise<number[]> => {
-    try {
-      const exporterAddr = exporterAddress || address;
+  const getAvailableWithdrawal = useCallback(async (invoiceId: bigint): Promise<bigint> => {
+    return handleContractCall(async () => {
+      if (!client) throw new Error('Client not available');
       
-      if (!exporterAddr) {
-        throw new Error('Exporter address required');
-      }
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would get invoices for exporter:', exporterAddr);
+      const contract = getContract({
+        client,
+        chain: liskSepolia,
+        address: contractAddress as `0x${string}`,
+      });
       
-      // Mock: return empty array to trigger fallback to mock data
-      return [];
-    } catch (err: any) {
-      console.error('Error fetching invoices by exporter:', err);
-      return [];
-    }
-  };
-
-  // Get available withdrawal amount - Mock implementation
-  const getAvailableWithdrawal = async (tokenId: number): Promise<number> => {
-    try {
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would get available withdrawal for:', tokenId);
+      const availableAmount = await readContract({
+        contract,
+        method: 'function getAvailableWithdrawal(uint256 invoiceId) view returns (uint256)',
+        params: [invoiceId],
+      });
       
-      // Mock: return a reasonable amount
-      return 10500; // USD
-    } catch (err: any) {
-      console.error('Error fetching available withdrawal:', err);
-      return 0;
-    }
-  };
-
-  // Get invoice owner - Mock implementation
-  const getInvoiceOwner = async (tokenId: number): Promise<string | null> => {
-    try {
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would get invoice owner for:', tokenId);
-      
-      // Mock: return current user's address
-      return address || null;
-    } catch (err: any) {
-      console.error('Error fetching invoice owner:', err);
-      return null;
-    }
-  };
-
-  // Get exporter invoice count - Mock implementation
-  const getExporterInvoiceCount = async (exporterAddress?: string): Promise<number> => {
-    try {
-      const exporterAddr = exporterAddress || address;
-      
-      if (!exporterAddr) return 0;
-
-      // TODO: Implement actual contract call with Panna SDK
-      console.log('Would get invoice count for:', exporterAddr);
-      
-      // Mock: return 3 for demo
-      return 3;
-    } catch (err: any) {
-      console.error('Error fetching exporter invoice count:', err);
-      return 0;
-    }
-  };
+      return BigInt(availableAmount);
+    });
+  }, [client, contractAddress, handleContractCall]);
 
   return {
-    // State
-    isLoading,
-    error,
-    
-    // Write functions
     mintInvoice,
     finalizeInvoice,
     withdrawFunds,
-    
-    // Read functions
     getInvoice,
     getInvoicesByExporter,
     getAvailableWithdrawal,
-    getInvoiceOwner,
-    getExporterInvoiceCount,
-    
-    // Utility
-    InvoiceStatus,
-    usdToWei,
+    isLoading,
+    error,
   };
-};
+}

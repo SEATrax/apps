@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePanna } from '@/hooks/usePanna';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useInvoiceNFT, INVOICE_STATUS } from '@/hooks/useInvoiceNFT';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import Link from 'next/link';
 
 interface Invoice {
-  id: number;
-  tokenId?: number;
+  id: number | bigint;
+  tokenId?: number | bigint;
   invoiceNumber: string;
   importerCompany: string;
   exporterCompany: string;
@@ -31,7 +31,7 @@ interface Invoice {
 
 export default function InvoiceList() {
   const { address, isConnected, mockUser, setMockUser } = usePanna();
-  const { getInvoicesByExporter, getInvoice, InvoiceStatus } = useInvoiceNFT();
+  const { getInvoicesByExporter, getInvoice } = useInvoiceNFT();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -101,32 +101,32 @@ export default function InvoiceList() {
           
           // Convert status number to string
           const statusMap: Record<number, 'pending' | 'finalized' | 'fundraising' | 'funded' | 'paid' | 'cancelled'> = {
-            [InvoiceStatus.Pending]: 'pending',
-            [InvoiceStatus.Finalized]: 'finalized',
-            [InvoiceStatus.Fundraising]: 'fundraising',
-            [InvoiceStatus.Funded]: 'funded',
-            [InvoiceStatus.Paid]: 'paid',
-            [InvoiceStatus.Cancelled]: 'cancelled',
+            [INVOICE_STATUS.PENDING]: 'pending',
+            [INVOICE_STATUS.FINALIZED]: 'finalized',
+            [INVOICE_STATUS.FUNDRAISING]: 'fundraising',
+            [INVOICE_STATUS.FUNDED]: 'funded',
+            [INVOICE_STATUS.PAID]: 'paid',
+            [INVOICE_STATUS.CANCELLED]: 'cancelled',
           };
           
-          const shippingAmount = parseFloat(contractInvoice.shippingAmount) * 3000; // Convert ETH to USD (mock rate)
-          const loanAmount = parseFloat(contractInvoice.loanAmount) * 3000;
-          const amountInvested = parseFloat(contractInvoice.amountInvested) * 3000;
-          const amountWithdrawn = parseFloat(contractInvoice.amountWithdrawn) * 3000;
+          const invoiceValue = Number(contractInvoice.invoiceValue) / 100; // Convert cents to USD
+          const loanAmount = Number(contractInvoice.loanAmount) / 100;
+          const amountInvested = Number(contractInvoice.fundedAmount) / 1e18 * 3000; // Convert Wei to USD
+          const amountWithdrawn = Number(contractInvoice.withdrawnAmount) / 1e18 * 3000;
           
           return {
             id: tokenId,
             tokenId,
             invoiceNumber: metadata?.invoice_number || `INV-${tokenId}`,
-            importerCompany: contractInvoice.importerCompany,
-            exporterCompany: contractInvoice.exporterCompany,
-            shippingAmount,
+            importerCompany: metadata?.importer_name || 'Unknown Importer',
+            exporterCompany: contractInvoice.exporter || 'Unknown Exporter',
+            shippingAmount: invoiceValue,
             loanAmount,
             amountInvested,
             amountWithdrawn,
-            status: statusMap[contractInvoice.status] || 'pending',
-            shippingDate: new Date(parseInt(contractInvoice.shippingDate) * 1000).toISOString().split('T')[0],
-            createdAt: new Date().toISOString().split('T')[0], // Fallback
+            status: contractInvoice.status.toLowerCase() || 'pending',
+            shippingDate: new Date(contractInvoice.invoiceDate * 1000).toISOString().split('T')[0],
+            createdAt: new Date(contractInvoice.createdAt * 1000).toISOString().split('T')[0],
             fundedPercentage: loanAmount > 0 ? Math.round((amountInvested / loanAmount) * 100) : 0,
           };
         } catch (error) {

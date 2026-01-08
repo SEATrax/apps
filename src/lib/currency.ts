@@ -128,3 +128,19 @@ export function parseEthToWei(ethString: string): bigint {
 export function weiToEth(wei: bigint): number {
   return Number(wei) / 1e18;
 }
+
+/**
+ * Convert USD cents to Wei (for precise smart contract calls)
+ * Smart contracts often use cents to avoid floating point issues
+ */
+export async function usdCentsToWei(usdCents: number): Promise<bigint> {
+  return usdToWei(usdCents / 100);
+}
+
+/**
+ * Convert Wei to USD cents
+ */
+export async function weiToUsdCents(weiAmount: bigint): Promise<number> {
+  const usd = await weiToUsd(weiAmount);
+  return Math.round(usd * 100);
+}
