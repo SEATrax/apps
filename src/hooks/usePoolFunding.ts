@@ -3,6 +3,9 @@
 import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
 import { appConfig } from '@/config';
+import { liskSepolia } from 'panna-sdk';
+import { prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb/transaction';
+import { getContract } from 'thirdweb/contract';
 
 // PoolFundingManager ABI
 const POOL_FUNDING_MANAGER_ABI = [
@@ -103,7 +106,7 @@ interface UsePoolFundingReturn {
 }
 
 export function usePoolFunding(): UsePoolFundingReturn {
-  const { address, isConnected, client, mockUser } = usePanna();
+  const { address, isConnected, client, account } = usePanna();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -128,75 +131,195 @@ export function usePoolFunding(): UsePoolFundingReturn {
 
   const investInPool = useCallback(async (poolId: bigint, amount: bigint): Promise<void> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Investing in pool', { poolId, amount: amount.toString() });
+      if (!client || !account) throw new Error('Wallet not connected');
       
-      // Simulate successful investment
-      return;
+      console.log('🔧 usePoolFunding - Investing in pool:', { poolId, amount: amount.toString() });
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function investInPool(uint256 poolId, uint256 amount)',
+        params: [poolId, amount],
+      });
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Investment completed:', result.transactionHash);
     });
-  }, [handleContractCall]);
+  }, [client, account, contractAddress, handleContractCall]);
 
   const claimInvestorReturns = useCallback(async (poolId: bigint): Promise<void> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Claiming investor returns from pool', poolId);
+      if (!client || !account) throw new Error('Wallet not connected');
       
-      // Simulate successful claim
-      return;
+      console.log('🔧 usePoolFunding - Claiming investor returns:', poolId);
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function claimInvestorReturns(uint256 poolId)',
+        params: [poolId],
+      });
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Returns claimed:', result.transactionHash);
     });
-  }, [handleContractCall]);
+  }, [client, account, contractAddress, handleContractCall]);
 
   const allocateFundsToInvoices = useCallback(async (poolId: bigint): Promise<void> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Allocating funds to invoices for pool', poolId);
+      if (!client || !account) throw new Error('Wallet not connected');
       
-      // Simulate successful allocation
-      return;
+      console.log('🔧 usePoolFunding - Allocating funds to invoices:', poolId);
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function allocateFundsToInvoices(uint256 poolId)',
+        params: [poolId],
+      });
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Funds allocated:', result.transactionHash);
     });
-  }, [handleContractCall]);
+  }, [client, account, contractAddress, handleContractCall]);
 
   const distributeProfits = useCallback(async (poolId: bigint): Promise<void> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Distributing profits for pool', poolId);
+      if (!client || !account) throw new Error('Wallet not connected');
       
-      // Simulate successful distribution
-      return;
+      console.log('🔧 usePoolFunding - Distributing profits:', poolId);
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function distributeProfits(uint256 poolId)',
+        params: [poolId],
+      });
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Profits distributed:', result.transactionHash);
     });
-  }, [handleContractCall]);
+  }, [client, account, contractAddress, handleContractCall]);
 
   const getPoolFundingPercentage = useCallback(async (poolId: bigint): Promise<number> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Getting funding percentage for pool', poolId);
-      return 65; // 65% funded
+      if (!client) throw new Error('Client not available');
+      
+      console.log('🔧 usePoolFunding - Getting funding percentage:', poolId);
+      
+      try {
+        const contract = getContract({
+          client,
+          chain: liskSepolia,
+          address: contractAddress as `0x${string}`,
+        });
+        
+        const percentage = await readContract({
+          contract,
+          method: 'function getPoolFundingPercentage(uint256 poolId) view returns (uint256)',
+          params: [poolId],
+        });
+        
+        const result = Number(percentage);
+        console.log('✅ Funding percentage fetched:', result + '%');
+        return result;
+        
+      } catch (error) {
+        console.error('❌ Error fetching funding percentage, returning 0');
+        return 0;
+      }
     });
-  }, [handleContractCall]);
+  }, [client, contractAddress, handleContractCall]);
 
   const getInvestorReturns = useCallback(async (poolId: bigint, investor: string): Promise<bigint> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Getting investor returns', { poolId, investor });
-      return 2000n; // Mock returns
+      if (!client) throw new Error('Client not available');
+      
+      console.log('🔧 usePoolFunding - Getting investor returns:', { poolId, investor });
+      
+      try {
+        const contract = getContract({
+          client,
+          chain: liskSepolia,
+          address: contractAddress as `0x${string}`,
+        });
+        
+        const returns = await readContract({
+          contract,
+          method: 'function getInvestorReturns(uint256 poolId, address investor) view returns (uint256)',
+          params: [poolId, investor],
+        });
+        
+        const result = BigInt(returns);
+        console.log('✅ Investor returns fetched:', result.toString());
+        return result;
+        
+      } catch (error) {
+        console.error('❌ Error fetching investor returns, returning 0');
+        return 0n;
+      }
     });
-  }, [handleContractCall]);
+  }, [client, contractAddress, handleContractCall]);
 
   const getInvestorAmount = useCallback(async (poolId: bigint, investor: string): Promise<bigint> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Getting investor amount', { poolId, investor });
-      return 50000n; // Mock investment amount
+      if (!client) throw new Error('Client not available');
+      
+      console.log('🔧 usePoolFunding - Getting investor amount:', { poolId, investor });
+      
+      try {
+        const contract = getContract({
+          client,
+          chain: liskSepolia,
+          address: contractAddress as `0x${string}`,
+        });
+        
+        const amount = await readContract({
+          contract,
+          method: 'function getInvestorAmount(uint256 poolId, address investor) view returns (uint256)',
+          params: [poolId, investor],
+        });
+        
+        const result = BigInt(amount);
+        console.log('✅ Investor amount fetched:', result.toString());
+        return result;
+        
+      } catch (error) {
+        console.error('❌ Error fetching investor amount, returning 0');
+        return 0n;
+      }
     });
-  }, [handleContractCall]);
+  }, [client, contractAddress, handleContractCall]);
 
   const getPoolInvestors = useCallback(async (poolId: bigint): Promise<string[]> => {
     return handleContractCall(async () => {
-      // Mock implementation
-      console.log('Mock: Getting pool investors', poolId);
-      return ['0x1234567890123456789012345678901234567890', '0x0987654321098765432109876543210987654321']; // Mock investors
+      if (!client) throw new Error('Client not available');
+      
+      console.log('🔧 usePoolFunding - Getting pool investors:', poolId);
+      
+      try {
+        const contract = getContract({
+          client,
+          chain: liskSepolia,
+          address: contractAddress as `0x${string}`,
+        });
+        
+        const investors = await readContract({
+          contract,
+          method: 'function getPoolInvestors(uint256 poolId) view returns (address[])',
+          params: [poolId],
+        });
+        
+        const result = Array.isArray(investors) ? investors : [];
+        console.log('✅ Pool investors fetched:', result.length, 'investors');
+        return result;
+        
+      } catch (error) {
+        console.error('❌ Error fetching pool investors, returning empty array');
+        return [];
+      }
     });
-  }, [handleContractCall]);
+  }, [client, contractAddress, handleContractCall]);
 
   return {
     investInPool,
