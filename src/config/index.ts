@@ -17,12 +17,12 @@ export const appConfig = {
   
   // Multiple Smart Contracts
   contracts: {
-    accessControl: process.env.ACCESS_CONTROL || '0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F',
-    invoiceNFT: process.env.INVOICE_NFT || '0x8Da2dF6050158ae8B058b90B37851323eFd69E16',
-    poolNFT: process.env.POOL_NFT || '0x317Ce254731655E19932b9EFEAf7eeA31F0775ad',
-    poolFundingManager: process.env.POOL_FUNDING_MANAGER || '0xbD5f292F75D22996E7A4DD277083c75aB29ff45C',
-    paymentOracle: process.env.PAYMENT_ORACLE || '0x7894728174E53Df9Fec402De07d80652659296a8',
-    platformAnalytics: process.env.PLATFORM_ANALYTICS || '0xb77C5C42b93ec46A323137B64586F0F8dED987A9',
+    accessControl: process.env.NEXT_PUBLIC_ACCESS_CONTROL || '0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F',
+    invoiceNFT: process.env.NEXT_PUBLIC_INVOICE_NFT || '0x8Da2dF6050158ae8B058b90B37851323eFd69E16',
+    poolNFT: process.env.NEXT_PUBLIC_POOL_NFT || '0x317Ce254731655E19932b9EFEAf7eeA31F0775ad',
+    poolFundingManager: process.env.NEXT_PUBLIC_POOL_FUNDING_MANAGER || '0xbD5f292F75D22996E7A4DD277083c75aB29ff45C',
+    paymentOracle: process.env.NEXT_PUBLIC_PAYMENT_ORACLE || '0x7894728174E53Df9Fec402De07d80652659296a8',
+    platformAnalytics: process.env.NEXT_PUBLIC_PLATFORM_ANALYTICS || '0xb77C5C42b93ec46A323137B64586F0F8dED987A9',
   },
   
   // Legacy Contract (deprecated)

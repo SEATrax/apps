@@ -106,7 +106,7 @@ Ready to proceed with Phase B objectives:
 
 ## Testing Instructions
 
-1. Visit `http://localhost:3001/testing/phase-a`
+1. Visit `http://localhost:3000/testing/phase-a`
 2. Connect wallet via Panna SDK
 3. Test individual contract functions
 4. Verify real blockchain interactions
