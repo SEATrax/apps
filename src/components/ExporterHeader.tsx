@@ -3,11 +3,21 @@
 import { useActiveAccount, LoginButton, liskSepolia } from 'panna-sdk';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { Building2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import Link from 'next/link';
 
 export default function ExporterHeader() {
   const activeAccount = useActiveAccount();
   const { profile } = useExporterProfile();
+  const router = useRouter();
+
+  // Redirect to home when wallet disconnected
+  useEffect(() => {
+    if (!activeAccount) {
+      router.push('/');
+    }
+  }, [activeAccount, router]);
 
   return (
     <div className="bg-slate-950 border-b border-slate-800">
@@ -61,7 +71,9 @@ export default function ExporterHeader() {
             )}
 
             {/* Panna SDK Login/Logout Button */}
-            <LoginButton chain={liskSepolia} />
+            <div className="flex items-center">
+              <LoginButton chain={liskSepolia} />
+            </div>
           </div>
         </div>
       </div>

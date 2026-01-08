@@ -47,8 +47,8 @@ export default function LoginPage() {
   };
 
   const handleGetStarted = () => {
-    // This will be called after wallet connection
-    // For now, just show role selection
+    // After wallet connection, check for profiles again
+    // The useEffect will handle the redirect
   };
 
   // If not connected, show landing page with wallet connection

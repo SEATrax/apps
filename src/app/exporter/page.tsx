@@ -266,11 +266,11 @@ export default function ExporterDashboard() {
                 Your latest invoice submissions and their funding status
               </CardDescription>
             </div>
-            <Link href="/exporter/invoices">
-              <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800">
+            <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800" asChild>
+              <Link href="/exporter/invoices">
                 View All
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -324,12 +324,12 @@ export default function ExporterDashboard() {
                 <p className="text-slate-400 mb-4">
                   Create your first invoice to start getting funded
                 </p>
-                <Link href="/exporter/invoices/new">
-                  <Button className="bg-cyan-600 hover:bg-cyan-700 text-white">
+                <Button className="bg-cyan-600 hover:bg-cyan-700 text-white" asChild>
+                  <Link href="/exporter/invoices/new">
                     <Plus className="mr-2 h-4 w-4" />
                     Create Invoice
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             )}
           </CardContent>
