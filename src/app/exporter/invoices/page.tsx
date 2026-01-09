@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
+import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useInvoiceNFT, INVOICE_STATUS } from '@/hooks/useInvoiceNFT';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +34,7 @@ interface Invoice {
 
 export default function InvoiceList() {
   const { isLoaded, isConnected, address } = useWalletSession();
+  const { profile, loading: profileLoading } = useExporterProfile();
   const { getInvoicesByExporter, getInvoice } = useInvoiceNFT();
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -54,12 +56,19 @@ export default function InvoiceList() {
     }
   }, []);
 
-  // Redirect to home if not connected (immediate redirect, no screen shown)
+  // Redirect to home if not connected
   useEffect(() => {
     if (isLoaded && !isConnected) {
       router.push('/');
     }
   }, [isLoaded, isConnected, router]);
+
+  // Redirect to role selection if no profile
+  useEffect(() => {
+    if (isLoaded && isConnected && !profileLoading && !profile) {
+      router.push('/select-role');
+    }
+  }, [isLoaded, isConnected, profileLoading, profile, router]);
 
   useEffect(() => {
     if (isConnected && address) {
@@ -264,7 +273,7 @@ export default function InvoiceList() {
   };
 
   // Show loading while wallet is initializing or redirecting
-  if (!isLoaded || !isConnected) {
+  if (!isLoaded || !isConnected || (isLoaded && isConnected && !profileLoading && !profile)) {
     return (
       <div className="min-h-screen bg-slate-950">
         <ExporterHeader />
@@ -273,7 +282,9 @@ export default function InvoiceList() {
             <CardHeader className="text-center">
               <CardTitle className="text-slate-100">Loading...</CardTitle>
               <CardDescription className="text-slate-400">
-                {!isLoaded ? 'Initializing wallet connection...' : 'Redirecting...'}
+                {!isLoaded ? 'Initializing wallet connection...' :
+                 !isConnected ? 'Redirecting to home...' :
+                 !profile ? 'Redirecting to role selection...' : 'Loading...'}
               </CardDescription>
             </CardHeader>
           </Card>

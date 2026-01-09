@@ -1,8 +1,25 @@
 export const ROUTE_BY_ROLE: Record<string, string> = {
   admin: '/dashboard',
-  exporter: '/invoices',
-  investor: '/pools',
+  exporter: '/exporter',
+  investor: '/investor',
 };
+
+export const PROTECTED_ROUTES = [
+  '/exporter',
+  '/exporter/invoices',
+  '/exporter/payments', 
+  '/investor',
+  '/investor/pools',
+  '/investor/investments',
+  '/investor/returns',
+  '/admin',
+  '/admin/roles',
+  '/admin/exporters',
+  '/admin/invoices',
+  '/admin/pools',
+  '/admin/payments',
+  '/select-role',
+];
 
 export const APP_NAV = [
   { href: '/invoices', label: 'Invoices', roles: ['exporter','admin'] },

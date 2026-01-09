@@ -54,6 +54,13 @@ export default function ExporterDashboard() {
     }
   }, [isLoaded, isConnected, router]);
 
+  // Redirect to role selection if no profile
+  useEffect(() => {
+    if (isLoaded && isConnected && !profileLoading && !profile) {
+      router.push('/select-role');
+    }
+  }, [isLoaded, isConnected, profileLoading, profile, router]);
+
   useEffect(() => {
     if (isConnected && address && profile) {
       loadDashboardData();
@@ -152,14 +159,16 @@ export default function ExporterDashboard() {
   };
 
   // Show loading while wallet is initializing or redirecting
-  if (!isLoaded || !isConnected) {
+  if (!isLoaded || !isConnected || (isLoaded && isConnected && !profileLoading && !profile)) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <Card className="w-full max-w-md bg-slate-900 border-slate-800">
           <CardHeader className="text-center">
             <CardTitle className="text-slate-100">Loading...</CardTitle>
             <CardDescription className="text-slate-400">
-              {!isLoaded ? 'Initializing wallet connection...' : 'Redirecting...'}
+              {!isLoaded ? 'Initializing wallet connection...' : 
+               !isConnected ? 'Redirecting to home...' :
+               !profile ? 'Redirecting to role selection...' : 'Loading...'}
             </CardDescription>
           </CardHeader>
         </Card>

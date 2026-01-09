@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
-import LandingPage from '@/components/LandingPage';
 import RoleSelection from '@/components/RoleSelection';
 
-export default function LoginPage() {
+export default function SelectRolePage() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
   const isConnected = !!activeAccount;
@@ -18,6 +17,10 @@ export default function LoginPage() {
   
   const [checking, setChecking] = useState(false);
 
+  const handleRoleSelect = (role: 'exporter' | 'investor') => {
+    router.push(`/onboarding/${role}`);
+  };
+
   // Check if user has existing profile and redirect
   useEffect(() => {
     if (!isConnected || exporterLoading || investorLoading) {
@@ -26,48 +29,40 @@ export default function LoginPage() {
 
     setChecking(true);
     
-    // If user has exporter profile (verified or not), go to exporter dashboard
+    // If user has exporter profile, go to exporter dashboard
     if (exporterProfile) {
       router.push('/exporter');
       return;
     }
     
-    // If user has investor profile, go to investor dashboard
+    // If user has investor profile, go to investor dashboard  
     if (investorProfile) {
       router.push('/investor');
       return;
     }
     
-    // No profile found, go to role selection page
-    router.push('/select-role');
+    // No profile found, user can select role
+    setChecking(false);
   }, [isConnected, exporterProfile, investorProfile, exporterLoading, investorLoading, router]);
 
-  const handleRoleSelect = (role: 'exporter' | 'investor') => {
-    router.push(`/onboarding/${role}`);
-  };
-
-  const handleGetStarted = () => {
-    // After wallet connection, check for profiles again
-    // The useEffect will handle the redirect
-  };
-
-  // If not connected, show landing page with wallet connection
+  // If not connected, redirect to home
   if (!isConnected) {
-    return <LandingPage onGetStarted={handleGetStarted} />;
+    router.push('/');
+    return null;
   }
   
   // If checking for existing profiles, show loading
   if (checking || exporterLoading || investorLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Checking your profile...</p>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-400 mx-auto"></div>
+          <p className="mt-4 text-gray-300">Checking your profile...</p>
         </div>
       </div>
     );
   }
 
-  // This should never be reached as user will be redirected
-  return null;
+  // Show role selection for new users
+  return <RoleSelection onRoleSelect={handleRoleSelect} />;
 }

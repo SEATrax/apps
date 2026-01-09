@@ -1,6 +1,7 @@
 // Main hooks
 export { usePanna } from './usePanna';
 export { useWalletSession } from './useWalletSession';
+export { useAuthFlow } from './useAuthFlow';
 
 // Profile hooks
 export { useExporterProfile } from './useExporterProfile';
