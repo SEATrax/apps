@@ -29,13 +29,16 @@ export interface InvestorProfile {
 
 export type InvoiceStatus =
   | 'PENDING'      // Submitted, waiting review
-  | 'APPROVED'     // Approved by admin
+  | 'FINALIZED'    // Approved by admin (hook returns this)
+  | 'APPROVED'     // Approved by admin (business logic)
   | 'IN_POOL'      // Added to pool
+  | 'FUNDRAISING'  // Being raised (hook returns this) 
   | 'FUNDED'       // Received funds (>=70%)
   | 'WITHDRAWN'    // Exporter withdrew
   | 'PAID'         // Importer paid
   | 'COMPLETED'    // Profits distributed
-  | 'REJECTED';    // Rejected by admin
+  | 'REJECTED'     // Rejected by admin
+  | 'CANCELLED';   // Cancelled (hook returns this)
 
 // Invoice On-chain Data
 export interface Invoice {
