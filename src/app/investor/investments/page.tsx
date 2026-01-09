@@ -3,11 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
+import { useInvestmentStats } from '@/hooks/useInvestmentStats';
+import { usePoolNFT } from '@/hooks/usePoolNFT';
+import { usePlatformAnalytics } from '@/hooks/usePlatformAnalytics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Eye, TrendingUp, Clock, Target, ArrowRight } from 'lucide-react';
+import { Eye, TrendingUp, DollarSign, Target, Clock, ArrowRight, Wallet, BarChart3 } from 'lucide-react';
+import { formatETH, formatUSD, formatPercentage, formatDateRelative, getStatusColor, calculateDaysRemaining } from '@/lib/utils';
 
 export default function InvestmentsPage() {
   const router = useRouter();

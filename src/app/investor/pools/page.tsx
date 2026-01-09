@@ -3,20 +3,78 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
+import { usePoolNFT } from '@/hooks/usePoolNFT';
+import { usePoolFunding } from '@/hooks/usePoolFunding';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Search, Filter, TrendingUp, Clock, Target, Eye, ArrowRight } from 'lucide-react';
+import { formatETH, formatUSD, getStatusColor, formatDateRelative, formatEther } from '@/lib/utils';
+
+interface PoolData {
+  id: number;
+  name: string;
+  description: string;
+  totalLoanAmount: string;
+  totalShippingAmount: string;
+  amountInvested: string;
+  startDate: string;
+  endDate: string;
+  invoiceCount: number;
+  expectedYield: string;
+  riskCategory: string;
+  status: string;
+  fundingProgress: number;
+}
 
 export default function PoolsPage() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
+  const { getPoolsByStatus, getPool } = usePoolNFT();
+  const { getPoolFundingPercentage } = usePoolFunding();
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [pools, setPools] = useState<PoolData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data - will be replaced with real contract calls
-  const pools = [
+  useEffect(() => {
+    if (!activeAccount) {
+      router.push('/');
+      return;
+    }
+  }, [activeAccount, router]);
+
+  // Fetch pools from smart contract
+  useEffect(() => {
+    const fetchPools = async () => {
+      if (!activeAccount) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+
+        // For now, use mock data since getPoolsByStatus expects enum values
+        // TODO: Update when contract hooks are properly typed
+        setPools(mockPools);
+        
+      } catch (err) {
+        console.error('Failed to fetch pools:', err);
+        setError('Failed to load pools');
+        // Fallback to mock data
+        setPools(mockPools);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPools();
+  }, [activeAccount]);
+
+  // Mock data for fallback
+  const mockPools: PoolData[] = [
     {
       id: 1,
       name: 'Southeast Asia Export Pool #12',
@@ -111,7 +169,7 @@ export default function PoolsPage() {
         </div>
         <div className="text-right text-sm text-gray-400">
           <div>Total Available: {pools.length} pools</div>
-          <div>Total Value: {pools.reduce((sum, pool) => sum + parseFloat(pool.totalLoanAmount), 0).toFixed(1)} ETH</div>
+          <div>Total Value: {formatETH(pools.reduce((sum, pool) => sum + parseFloat(pool.totalLoanAmount || '0'), 0).toString())}</div>
         </div>
       </div>
 
@@ -170,7 +228,7 @@ export default function PoolsPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="text-gray-400">Target Amount</div>
-                  <div className="text-white font-medium">{pool.totalLoanAmount} ETH</div>
+                  <div className="text-white font-medium">{formatETH(pool.totalLoanAmount)}</div>
                 </div>
                 <div>
                   <div className="text-gray-400">Expected Yield</div>
@@ -194,8 +252,8 @@ export default function PoolsPage() {
                 </div>
                 <Progress value={pool.fundingProgress} className="h-2" />
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>{pool.amountInvested} ETH raised</span>
-                  <span>{pool.totalLoanAmount} ETH target</span>
+                  <span>{formatETH(pool.amountInvested)} raised</span>
+                  <span>{formatETH(pool.totalLoanAmount)} target</span>
                 </div>
               </div>
 

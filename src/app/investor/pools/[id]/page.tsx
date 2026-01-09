@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
+import { usePoolNFT } from '@/hooks/usePoolNFT';
+import { usePoolFunding } from '@/hooks/usePoolFunding';
+import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,16 +14,62 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, TrendingUp, Clock, Target, AlertTriangle, DollarSign, FileText, Building, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatETH, formatUSD, getStatusColor, parseEther } from '@/lib/utils';
 
 export default function PoolDetailPage() {
   const router = useRouter();
   const params = useParams();
   const activeAccount = useActiveAccount();
+  const { getPool, getPoolsByStatus } = usePoolNFT();
+  const { investInPool, getPoolFundingPercentage } = usePoolFunding();
+  const { getInvoice } = useInvoiceNFT();
+  
+  const [pool, setPool] = useState<any>(null);
+  const [poolInvoices, setPoolInvoices] = useState<any[]>([]);
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [isInvesting, setIsInvesting] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data - will be replaced with real contract calls
-  const pool = {
+  const poolId = params.id;
+
+  // Fetch pool data from smart contract
+  useEffect(() => {
+    const fetchPoolData = async () => {
+      if (!poolId || !activeAccount) return;
+      
+      try {
+        setLoading(true);
+        
+        // For development, use mock data
+        // TODO: Implement real contract integration when types are fixed
+        setPool(mockPool);
+        setPoolInvoices(mockInvoices);
+      } catch (error) {
+        console.error('Failed to fetch pool data:', error);
+        // Fallback to mock data
+        setPool(mockPool);
+        setPoolInvoices(mockInvoices);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPoolData();
+  }, [poolId, activeAccount, getPool, getPoolFundingPercentage, getInvoice]);
+
+  // Helper functions
+  const getInvoiceStatus = (status: number) => {
+    const statuses = ['Pending', 'Finalized', 'Fundraising', 'Funded', 'Paid', 'Cancelled'];
+    return statuses[status] || 'Unknown';
+  };
+
+  const getPoolStatus = (status: number) => {
+    const statuses = ['Open', 'Fundraising', 'PartiallyFunded', 'Funded', 'Settling', 'Completed'];
+    return statuses[status] || 'Unknown';
+  };
+
+  // Mock data for fallback
+  const mockPool = {
     id: 1,
     name: 'Southeast Asia Export Pool #12',
     description: 'Diversified pool of electronics and textile exports to ASEAN markets. This pool focuses on established exporters with strong track records in the electronics manufacturing and textile industries.',
@@ -40,7 +89,7 @@ export default function PoolDetailPage() {
     averageLoanTerm: '90 days'
   };
 
-  const invoices = [
+  const mockInvoices = [
     {
       id: 1,
       exporterCompany: 'TechCorp Electronics',
@@ -97,12 +146,20 @@ export default function PoolDetailPage() {
     setIsInvesting(true);
     
     try {
-      // TODO: Implement real investment via PoolFundingManager contract
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Mock delay
+      // Convert amount to Wei for smart contract
+      const amountInWei = parseEther(investmentAmount);
       
-      toast.success('Investment successful! Transaction confirmed.');
-      router.push('/investor/investments');
+      // Call smart contract investment function
+      await investInPool(pool.id, amountInWei);
+      
+      toast.success(`Successfully invested ${formatETH(investmentAmount)} in ${pool.name}`);
+      
+      // Refresh pool data
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
     } catch (error) {
+      console.error('Investment failed:', error);
       toast.error('Investment failed. Please try again.');
     } finally {
       setIsInvesting(false);
@@ -314,7 +371,7 @@ export default function PoolDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {invoices.map((invoice) => (
+                {mockInvoices.map((invoice) => (
                   <div key={invoice.id} className="bg-slate-800/50 rounded-lg p-4 space-y-3">
                     <div className="flex items-start justify-between">
                       <div>

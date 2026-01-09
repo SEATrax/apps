@@ -1,39 +1,39 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
-import { useInvestmentStats } from '@/hooks/useInvestmentStats';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { useInvestmentStats } from '@/hooks/useInvestmentStats';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, DollarSign, Target, ArrowRight, Eye, PlusCircle, BarChart3 } from 'lucide-react';
+import { TrendingUp, Wallet, DollarSign, Target, ArrowRight, Eye, PlusCircle, BarChart3 } from 'lucide-react';
 import { formatETH, formatUSD, formatPercentage, formatDateRelative, getStatusColor } from '@/lib/utils';
 
 export default function InvestorDashboard() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
-  const { stats, getRecentInvestments, calculatePortfolioPerformance, loading: statsLoading } = useInvestmentStats();
   const { profile, loading: profileLoading } = useInvestorProfile();
+  const { getUserRoles, isLoading: rolesLoading } = useAccessControl();
+  const { stats, getRecentInvestments, calculatePortfolioPerformance, loading: statsLoading } = useInvestmentStats();
 
-  const isLoading = statsLoading || profileLoading;
+  const isLoading = rolesLoading || profileLoading || statsLoading;
   const recentInvestments = getRecentInvestments(3);
   const portfolioPerformance = calculatePortfolioPerformance();
-
-  // Get user name or fallback
-  const getUserName = () => {
-    if (profile?.name) return profile.name;
-    if (activeAccount?.address) return `${activeAccount.address.slice(0, 6)}...${activeAccount.address.slice(-4)}`;
-    return 'Investor';
-  };
 
   useEffect(() => {
     if (!activeAccount) {
       router.push('/');
       return;
     }
-  }, [activeAccount, router]);
+
+    if (!profileLoading && !profile) {
+      router.push('/onboarding/investor');
+      return;
+    }
+  }, [activeAccount, profile, profileLoading, router]);
 
   if (isLoading) {
     return (
@@ -46,16 +46,20 @@ export default function InvestorDashboard() {
     );
   }
 
+  if (!profile) {
+    return null; // Will redirect to onboarding
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl text-white mb-2">
-            Welcome back, {getUserName()}
+            Welcome back, {profile.name}
           </h1>
           <p className="text-gray-300">
-            {profile?.name ? 'Track your investments and discover new opportunities' : 'Complete your profile to get started'}
+            Track your investments and discover new opportunities
           </p>
         </div>
         <Button 
@@ -66,66 +70,6 @@ export default function InvestorDashboard() {
           New Investment
         </Button>
       </div>
-
-      {/* Profile Completion Alert */}
-      {!profile && activeAccount && (
-        <Card className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-yellow-500/30">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center">
-                <Target className="w-6 h-6 text-yellow-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-white font-semibold mb-1">Complete Your Investor Profile</h3>
-                <p className="text-gray-300 text-sm mb-3">
-                  Add your personal details to unlock full access to investment opportunities and personalized features.
-                </p>
-                <Button 
-                  onClick={() => router.push('/onboarding/investor')}
-                  className="bg-gradient-to-r from-yellow-500 to-orange-400 text-white hover:shadow-lg"
-                  size="sm"
-                >
-                  Complete Profile
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Profile Summary for existing users */}
-      {profile && (
-        <Card className="bg-slate-900/50 border-slate-800">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-cyan-500/20 rounded-full flex items-center justify-center">
-                  <div className="text-cyan-400 font-bold text-lg">
-                    {profile.name.charAt(0).toUpperCase()}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold">{profile.name}</h3>
-                  <p className="text-gray-400 text-sm">
-                    Investor since {new Date(profile.created_at).toLocaleDateString('en-US', { 
-                      month: 'long', 
-                      year: 'numeric' 
-                    })}
-                  </p>
-                </div>
-              </div>
-              <Button 
-                onClick={() => router.push('/profile')}
-                variant="outline"
-                size="sm"
-                className="border-gray-600 text-gray-300 hover:bg-slate-700"
-              >
-                Edit Profile
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Portfolio Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -171,7 +115,7 @@ export default function InvestorDashboard() {
         <Card className="bg-slate-900/50 border-slate-800 hover:bg-slate-900/70 transition-all hover:scale-105">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-gray-400 flex items-center gap-2">
-              <Target className="w-4 h-4" />
+              <Wallet className="w-4 h-4" />
               Portfolio Value
             </CardTitle>
           </CardHeader>
@@ -199,7 +143,7 @@ export default function InvestorDashboard() {
         <Card className="bg-slate-900/50 border-slate-800 hover:bg-slate-900/70 transition-all cursor-pointer" 
               onClick={() => router.push('/investor/investments')}>
           <CardContent className="p-6 text-center">
-            <Target className="w-8 h-8 text-green-400 mx-auto mb-4" />
+            <Wallet className="w-8 h-8 text-green-400 mx-auto mb-4" />
             <h3 className="text-white font-medium mb-2">Manage Portfolio</h3>
             <p className="text-gray-400 text-sm">Track all your investments</p>
             <Button variant="ghost" className="mt-4 text-green-400 hover:text-green-300">
@@ -276,7 +220,7 @@ export default function InvestorDashboard() {
               })
             ) : (
               <div className="text-center py-8">
-                <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <div className="text-gray-400 mb-4">No investments yet</div>
                 <Button 
                   onClick={() => router.push('/investor/pools')}
@@ -336,19 +280,6 @@ export default function InvestorDashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Smart Contract Integration Note */}
-      <Card className="bg-slate-900/50 border-slate-800 border-cyan-500/30">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
-            <div className="text-cyan-400 font-medium">Smart Contract Integration Active</div>
-          </div>
-          <p className="text-gray-400 text-sm mt-2">
-            Dashboard is ready for real-time smart contract integration. Currently showing mock data for development testing.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

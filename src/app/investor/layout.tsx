@@ -4,7 +4,7 @@ import { ReactNode } from 'react';
 import { Ship, Target, TrendingUp, Wallet, LogOut } from 'lucide-react';
 import { useActiveAccount, LoginButton, liskSepolia } from 'panna-sdk';
 import { formatAddress } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 interface InvestorLayoutProps {
   children: ReactNode;
@@ -12,6 +12,7 @@ interface InvestorLayoutProps {
 
 export default function InvestorLayout({ children }: InvestorLayoutProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const activeAccount = useActiveAccount();
 
   const handleDisconnect = () => {
@@ -69,7 +70,7 @@ export default function InvestorLayout({ children }: InvestorLayoutProps) {
           <div className="hidden lg:block lg:col-span-3">
             <nav className="sticky top-24 space-y-2">
               {navigation.map((item) => {
-                const isActive = typeof window !== 'undefined' && window.location.pathname === item.href;
+                const isActive = pathname === item.href;
                 return (
                   <button
                     key={item.name}
@@ -92,7 +93,7 @@ export default function InvestorLayout({ children }: InvestorLayoutProps) {
           <div className="lg:hidden mb-6">
             <div className="flex overflow-x-auto space-x-2 pb-2">
               {navigation.map((item) => {
-                const isActive = typeof window !== 'undefined' && window.location.pathname === item.href;
+                const isActive = pathname === item.href;
                 return (
                   <button
                     key={item.name}

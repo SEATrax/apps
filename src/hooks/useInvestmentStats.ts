@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useActiveAccount } from 'panna-sdk';
 import { usePoolFunding } from './usePoolFunding';
 import { usePlatformAnalytics } from './usePlatformAnalytics';
+import { usePoolNFT } from './usePoolNFT';
+import { formatEther } from '@/lib/utils';
 
 export interface InvestmentStats {
   totalInvested: string;
@@ -33,6 +35,7 @@ export const useInvestmentStats = () => {
   const activeAccount = useActiveAccount();
   const { getInvestorReturns } = usePoolFunding();
   const { getInvestorStats } = usePlatformAnalytics();
+  const { getPoolsByStatus } = usePoolNFT();
   
   const [stats, setStats] = useState<InvestmentStats>({
     totalInvested: '0',
@@ -99,6 +102,17 @@ export const useInvestmentStats = () => {
 
   const fetchInvestmentData = async () => {
     if (!activeAccount) {
+      setStats({
+        totalInvested: '0',
+        totalReturns: '0',
+        activeInvestments: 0,
+        totalPools: 0,
+        averageYield: '0',
+        portfolioValue: '0',
+        unrealizedGains: '0',
+        claimableReturns: '0'
+      });
+      setInvestments([]);
       setLoading(false);
       return;
     }
@@ -107,14 +121,41 @@ export const useInvestmentStats = () => {
       setLoading(true);
       setError(null);
 
-      // TODO: Replace with real contract calls
-      // const contractStats = await getInvestorStats(activeAccount.address);
-      // setStats(contractStats);
-
-      // For now, use mock data
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-      setStats(mockStats);
-      setInvestments(mockInvestments);
+      // Get investor stats from PlatformAnalytics contract
+      const contractStats = await getInvestorStats(activeAccount.address);
+      
+      if (contractStats) {
+        const { totalInvested, totalReturns, activeInvestments } = contractStats;
+        
+        // Get open pools to calculate total pools
+        const openPools = await getPoolsByStatus(0); // 0 = Open status
+        const totalPools = openPools ? openPools.length : 0;
+        
+        // Calculate derived stats
+        const totalInvestedNum = parseFloat(formatEther(totalInvested));
+        const totalReturnsNum = parseFloat(formatEther(totalReturns));
+        const portfolioValue = totalInvestedNum + totalReturnsNum;
+        const averageYield = totalInvestedNum > 0 ? (totalReturnsNum / totalInvestedNum) * 100 : 0;
+        
+        setStats({
+          totalInvested: formatEther(totalInvested, 3),
+          totalReturns: formatEther(totalReturns, 3),
+          activeInvestments: Number(activeInvestments),
+          totalPools,
+          averageYield: averageYield.toFixed(1),
+          portfolioValue: portfolioValue.toFixed(3),
+          unrealizedGains: formatEther(totalReturns, 3),
+          claimableReturns: '0' // TODO: Calculate from mature pools
+        });
+        
+        // TODO: Fetch actual investment history from events
+        // For now, keep mock investments for UI demonstration
+        setInvestments(mockInvestments);
+      } else {
+        // Fallback to mock data if contract call fails
+        setStats(mockStats);
+        setInvestments(mockInvestments);
+      }
 
     } catch (err) {
       console.error('Failed to fetch investment stats:', err);
