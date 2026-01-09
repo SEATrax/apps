@@ -105,45 +105,152 @@ const AdminPage = () => {
 ## 🎯 **PRIORITY 2: Finalize Payment Flow** (Target: 2-3 days)
 
 ### Overview
-Complete the payment confirmation system to enable end-to-end invoice funding and repayment cycle. Payment pages exist but payment confirmation workflow is incomplete.
+Complete the payment system to enable importers to pay invoices through public payment links. When exporters create invoices, the system generates payment links for importers to pay the full invoice amount (shipping amount). This payment confirmation triggers the profit distribution cycle.
 
 ### ✅ **Current Status: 65% Complete**
 - [x] Payment page (`/pay/[invoiceId]/page.tsx`) - **WORKING**
+- [x] Admin payments page (`/admin/payments/page.tsx`) - **WORKING** 
 - [x] Payment API structure (`/api/currency/`, `/api/invoice/upload/`) - **WORKING**
-- [ ] Missing payment confirmation and integration with PaymentOracle
+- [ ] Missing payment API routes and confirmation workflow
+
+### 🔄 **Corrected Payment Flow Understanding:**
+```
+1. Invoice Creation:
+   ├─ Shipping Amount: $10,000 (importir must pay)
+   ├─ Loan Request: $7,000 (from investors)
+   └─ Payment Link: /pay/[invoiceId] (generated immediately)
+
+2. Investment & Withdrawal:
+   ├─ Investors fund $7,000 → Pool
+   └─ Exporter withdraws $7,000
+
+3. Payment Process:
+   ├─ Importir accesses payment link
+   ├─ Pays $10,000 (shipping amount) - DUMMY SYSTEM
+   └─ Admin confirms payment
+
+4. Profit Distribution:
+   ├─ Investors: $7,280 (loan + 4% = $7,000 + $280)
+   ├─ Platform: $70 (1% of loan = $7,000 × 1%)
+   └─ Exporter: $2,650 (remaining profit)
+```
 
 ### 📋 **Tasks Breakdown**
 
-#### **Step 1: Payment API Completion** (Est: 1 day)
-- [ ] **Complete** `/api/payment/[invoiceId]/route.ts`
-  - [ ] GET: Fetch invoice details and calculate amount due (loan + 4%)
-  - [ ] POST: Process payment confirmation 
-  - [ ] Integration with PaymentOracle contract
-  - [ ] Update Supabase `payments` table
+#### **Step 1: Payment Link Generation** (Est: 0.5 days)
+- [ ] **Auto-generate payment links during invoice creation**
+  - [ ] Modify invoice creation flow to generate payment links
+  - [ ] Store payment record in Supabase `payments` table
+  - [ ] Payment amount = `invoice.shippingAmount` (full invoice value)
+  - [ ] Link available immediately after invoice approval
 
-#### **Step 2: Payment Link Generation** (Est: 0.5 days)
-- [ ] **Auto-generate payment links** after exporter withdrawal
-  - [ ] Trigger in exporter withdrawal completion
-  - [ ] Create payment record in Supabase
-  - [ ] Send link to exporter for importer sharing
+#### **Step 2: Payment API Implementation** (Est: 1 day)
+- [ ] **Create** `/api/payment/[invoiceId]/route.ts`
+  - [ ] GET: Fetch invoice + payment details
+    - [ ] Return: invoice data, importir info, amount due (shipping amount)
+    - [ ] Calculate payment status from contract + Supabase
+  - [ ] POST: Process dummy payment confirmation 
+    - [ ] Create payment record with "pending_confirmation" status
+    - [ ] Send notification to admin for payment confirmation
 
-#### **Step 3: Payment Confirmation Flow** (Est: 0.5 days)
-- [ ] **Payment confirmation integration**
-  - [ ] Connect payment page to PaymentOracle
-  - [ ] Admin payment confirmation in `/admin/payments/`
-  - [ ] Automatic profit distribution trigger when pool invoices all paid
+#### **Step 3: Payment Confirmation Workflow** (Est: 0.5 days)
+- [ ] **Enhance admin payment confirmation**
+  - [ ] Show pending payments from importers in admin dashboard
+  - [ ] "Confirm Payment" button → PaymentOracle.markInvoicePaid()
+  - [ ] Update Supabase payment status to "confirmed"
+  - [ ] Trigger profit distribution check if all pool invoices paid
 
-#### **Step 4: Integration Testing** (Est: 1 day)
-- [ ] **End-to-end payment flow testing**
-  - [ ] Test invoice creation → funding → withdrawal → payment → profit distribution
-  - [ ] Verify PaymentOracle integration
-  - [ ] Test profit distribution calculations (4% investor + 1% platform)
+#### **Step 4: PaymentOracle Integration** (Est: 1 day)
+- [ ] **Complete PaymentOracle contract integration**
+  - [ ] Integrate `markInvoicePaid(invoiceId)` function
+  - [ ] Auto-trigger profit distribution when all pool invoices paid
+  - [ ] Update invoice status: FUNDED → PAID → COMPLETED
+  - [ ] Implement profit calculation: 4% to investors, 1% platform fee
+
+### 🔧 **Implementation Details**
+
+#### **Payment Link Generation (Invoice Creation)**
+```typescript
+// In invoice creation process
+const createInvoice = async (invoiceData) => {
+  // ... existing invoice creation ...
+  
+  // Generate payment record immediately
+  await supabase.from('payments').insert({
+    invoice_id: tokenId,
+    amount_usd: invoiceData.shippingAmount, // Full invoice amount
+    payment_link: `/pay/${tokenId}`,
+    status: 'pending',
+    created_at: new Date().toISOString()
+  });
+};
+```
+
+#### **Payment API Structure**
+```typescript
+// /api/payment/[invoiceId]/route.ts
+export async function GET(req, { params }) {
+  const invoice = await getInvoice(params.invoiceId);
+  const payment = await getPaymentRecord(params.invoiceId);
+  
+  return {
+    invoice: {
+      id: invoice.tokenId,
+      amount: invoice.shippingAmount, // Full invoice amount to pay
+      exporter: invoice.exporterCompany,
+      importer: invoice.importerCompany,
+    },
+    payment: {
+      status: payment.status,
+      dueDate: invoice.shippingDate + (30 * 24 * 60 * 60 * 1000), // 30 days
+    }
+  };
+}
+
+export async function POST(req, { params }) {
+  // Dummy payment processing
+  await supabase.from('payments').update({
+    status: 'pending_confirmation',
+    submitted_at: new Date().toISOString()
+  }).eq('invoice_id', params.invoiceId);
+  
+  return { success: true, message: 'Payment submitted for confirmation' };
+}
+```
+
+#### **Admin Payment Confirmation**
+```typescript
+// Admin confirms payment
+const confirmPayment = async (invoiceId) => {
+  // 1. Mark as paid in PaymentOracle
+  await markInvoicePaid(BigInt(invoiceId));
+  
+  // 2. Update payment status
+  await supabase.from('payments').update({ 
+    status: 'paid',
+    paid_at: new Date().toISOString() 
+  }).eq('invoice_id', invoiceId);
+  
+  // 3. Check if all pool invoices are paid
+  const pool = await getPoolContainingInvoice(invoiceId);
+  if (pool) {
+    const allPaid = await checkAllPoolInvoicesPaid(pool.invoiceIds);
+    if (allPaid) {
+      // 4. Trigger profit distribution
+      await distributeProfits(pool.poolId);
+    }
+  }
+};
+```
 
 ### 📊 **Success Criteria**
-- [ ] Complete payment confirmation workflow
-- [ ] PaymentOracle contract integration working
-- [ ] Automatic payment link generation
-- [ ] End-to-end testing successful
+- [ ] Payment links auto-generated during invoice creation
+- [ ] Public payment page shows correct invoice amount (shipping amount)
+- [ ] Dummy payment confirmation workflow working
+- [ ] PaymentOracle integration functional
+- [ ] Admin can confirm payments and trigger profit distribution
+- [ ] Profit calculation: 4% investors + 1% platform fee working
+- [ ] End-to-end flow: Invoice → Payment Link → Importir Pay → Admin Confirm → Profit Distribution
 
 ---
 
