@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
+import { useAccessControl } from '@/hooks/useAccessControl';
 import LandingPage from '@/components/LandingPage';
 import RoleSelection from '@/components/RoleSelection';
 
@@ -15,32 +16,61 @@ export default function LoginPage() {
   
   const { profile: exporterProfile, loading: exporterLoading } = useExporterProfile();
   const { profile: investorProfile, loading: investorLoading } = useInvestorProfile();
+  const { getUserRoles, isLoading: rolesLoading } = useAccessControl();
   
   const [checking, setChecking] = useState(false);
+  const [adminCheck, setAdminCheck] = useState(false);
 
   // Check if user has existing profile and redirect
   useEffect(() => {
-    if (!isConnected || exporterLoading || investorLoading) {
+    if (!isConnected || exporterLoading || investorLoading || rolesLoading) {
       return;
     }
 
-    setChecking(true);
-    
-    // If user has exporter profile (verified or not), go to exporter dashboard
-    if (exporterProfile) {
-      router.push('/exporter');
-      return;
+    if (!adminCheck && activeAccount?.address) {
+      setAdminCheck(true);
+      getUserRoles(activeAccount.address).then((roles) => {
+        // If user has admin role, redirect to admin dashboard
+        if (roles?.hasAdminRole) {
+          router.push('/admin');
+          return;
+        }
+        
+        setChecking(true);
+        
+        // If user has exporter profile (verified or not), go to exporter dashboard
+        if (exporterProfile) {
+          router.push('/exporter');
+          return;
+        }
+        
+        // If user has investor profile, go to investor dashboard
+        if (investorProfile) {
+          router.push('/investor');
+          return;
+        }
+        
+        // No profile found, go to role selection page
+        router.push('/select-role');
+      }).catch((error) => {
+        console.error('Error checking admin role:', error);
+        // Continue with regular flow if admin check fails
+        setChecking(true);
+        
+        if (exporterProfile) {
+          router.push('/exporter');
+          return;
+        }
+        
+        if (investorProfile) {
+          router.push('/investor');
+          return;
+        }
+        
+        router.push('/select-role');
+      });
     }
-    
-    // If user has investor profile, go to investor dashboard
-    if (investorProfile) {
-      router.push('/investor');
-      return;
-    }
-    
-    // No profile found, go to role selection page
-    router.push('/select-role');
-  }, [isConnected, exporterProfile, investorProfile, exporterLoading, investorLoading, router]);
+  }, [isConnected, exporterProfile, investorProfile, exporterLoading, investorLoading, rolesLoading, activeAccount, adminCheck, getUserRoles, router]);
 
   const handleRoleSelect = (role: 'exporter' | 'investor') => {
     router.push(`/onboarding/${role}`);
@@ -57,7 +87,7 @@ export default function LoginPage() {
   }
   
   // If checking for existing profiles, show loading
-  if (checking || exporterLoading || investorLoading) {
+  if (checking || exporterLoading || investorLoading || rolesLoading || !adminCheck) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

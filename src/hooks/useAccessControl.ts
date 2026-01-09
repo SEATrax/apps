@@ -19,6 +19,13 @@ const ACCESS_CONTROL_ABI = [
   // Admin functions
   {
     inputs: [{ name: 'account', type: 'address' }],
+    name: 'grantAdminRole',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'account', type: 'address' }],
     name: 'grantExporterRole',
     outputs: [],
     stateMutability: 'nonpayable',
@@ -62,6 +69,7 @@ export interface UserRoles {
 
 interface UseAccessControlReturn {
   // Role management
+  grantAdminRole: (account: string) => Promise<void>;
   grantExporterRole: (account: string) => Promise<void>;
   grantInvestorRole: (account: string) => Promise<void>;
   
@@ -101,6 +109,22 @@ export function useAccessControl(): UseAccessControlReturn {
       setIsLoading(false);
     }
   }, [client, contractAddress]);
+
+  const grantAdminRole = useCallback(async (accountAddress: string): Promise<void> => {
+    return handleContractCall(async () => {
+      if (!client || !account) throw new Error('Wallet not connected');
+      
+      const tx = prepareContractCall({
+        contract: getContract({ client, chain: liskSepolia, address: contractAddress as `0x${string}` }),
+        method: 'function grantRole(bytes32 role, address account)',
+        params: [ROLES.ADMIN as `0x${string}`, accountAddress],
+      });
+      
+      const result = await sendTransaction({ account, transaction: tx });
+      await waitForReceipt(result);
+      console.log('✅ Admin role granted to:', accountAddress);
+    });
+  }, [client, account, contractAddress, handleContractCall]);
 
   const grantExporterRole = useCallback(async (accountAddress: string): Promise<void> => {
     return handleContractCall(async () => {
@@ -179,6 +203,7 @@ export function useAccessControl(): UseAccessControlReturn {
   }, [client, contractAddress, handleContractCall]);
 
   return {
+    grantAdminRole,
     grantExporterRole,
     grantInvestorRole,
     getUserRoles,

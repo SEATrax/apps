@@ -1,5 +1,5 @@
 export const ROUTE_BY_ROLE: Record<string, string> = {
-  admin: '/dashboard',
+  admin: '/admin',
   exporter: '/exporter',
   investor: '/investor',
 };
@@ -28,7 +28,7 @@ export const PROTECTED_ROUTES = [
 export const APP_NAV = [
   { href: '/invoices', label: 'Invoices', roles: ['exporter','admin'] },
   { href: '/pools', label: 'Investment Pools', roles: ['investor','admin','exporter'] },
-  { href: '/dashboard', label: 'Dashboard', roles: ['admin'] },
+  { href: '/admin', label: 'Dashboard', roles: ['admin'] },
   { href: '/demo', label: 'Demo', roles: [] },
 ];
 
@@ -46,9 +46,18 @@ export const EXPORTER_NAV = [
   { href: '/exporter/payments', label: 'Payment Tracking', icon: 'CreditCard' },
 ];
 
+export const ADMIN_NAV = [
+  { href: '/admin', label: 'Dashboard', icon: 'LayoutDashboard' },
+  { href: '/admin/exporters', label: 'Verify Exporters', icon: 'UserCheck' },
+  { href: '/admin/invoices', label: 'Review Invoices', icon: 'FileText' },
+  { href: '/admin/pools', label: 'Manage Pools', icon: 'TrendingUp' },
+  { href: '/admin/payments', label: 'Payment Tracking', icon: 'CreditCard' },
+  { href: '/admin/roles', label: 'Role Management', icon: 'Shield' },
+];
+
 // Role-based default redirects
 export const getDefaultRouteForRole = (hasAdminRole: boolean, hasExporterRole: boolean, hasInvestorRole: boolean) => {
-  if (hasAdminRole) return '/dashboard';
+  if (hasAdminRole) return '/admin';
   if (hasExporterRole) return '/exporter';
   if (hasInvestorRole) return '/investor';
   return '/'; // No role assigned

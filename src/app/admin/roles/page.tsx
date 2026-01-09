@@ -14,7 +14,7 @@ import AdminHeader from '@/components/AdminHeader';
 
 export default function AdminRoleManager() {
   const { isLoaded, isConnected, account, address } = useWalletSession();
-  const { grantExporterRole, grantInvestorRole, getUserRoles, isLoading } = useAccessControl();
+  const { grantAdminRole, grantExporterRole, grantInvestorRole, getUserRoles, isLoading } = useAccessControl();
   const router = useRouter();
   
   const [targetAddress, setTargetAddress] = useState('');
@@ -83,6 +83,36 @@ export default function AdminRoleManager() {
       setMessage({ 
         type: 'error', 
         text: error.message || 'Failed to grant investor role' 
+      });
+    } finally {
+      setIsGranting(false);
+    }
+  };
+
+  const handleGrantAdminRole = async () => {
+    if (!targetAddress.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a wallet address' });
+      return;
+    }
+
+    try {
+      setIsGranting(true);
+      setMessage(null);
+      
+      await grantAdminRole(targetAddress);
+      
+      setMessage({ 
+        type: 'success', 
+        text: `Successfully granted admin role to ${targetAddress}` 
+      });
+      
+      // Clear form
+      setTargetAddress('');
+      
+    } catch (error: any) {
+      setMessage({ 
+        type: 'error', 
+        text: error.message || 'Failed to grant admin role' 
       });
     } finally {
       setIsGranting(false);
@@ -226,6 +256,14 @@ export default function AdminRoleManager() {
                 className="bg-purple-600 hover:bg-purple-700 text-white"
               >
                 {isGranting ? 'Granting...' : 'Grant Investor Role'}
+              </Button>
+              
+              <Button
+                onClick={handleGrantAdminRole}
+                disabled={isGranting || !targetAddress.trim()}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isGranting ? 'Granting...' : 'Grant Admin Role'}
               </Button>
               
               <Button
