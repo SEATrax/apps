@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePanna } from '@/hooks/usePanna';
+import { useWalletSession } from '@/hooks/useWalletSession';
 import { useInvoiceNFT, INVOICE_STATUS } from '@/hooks/useInvoiceNFT';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +27,8 @@ import {
   Bell,
   Download
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import ExporterHeader from '@/components/ExporterHeader';
 import Link from 'next/link';
 
 interface PaymentRecord {
@@ -50,8 +52,9 @@ interface PaymentRecord {
 }
 
 export default function PaymentsTracking() {
-  const { address, isConnected } = usePanna();
+  const { isLoaded, isConnected, address } = useWalletSession();
   const { getInvoicesByExporter, getInvoice, isLoading: contractLoading } = useInvoiceNFT();
+  const router = useRouter();
   
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<PaymentRecord[]>([]);
@@ -60,6 +63,13 @@ export default function PaymentsTracking() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [copiedLink, setCopiedLink] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  // Redirect to home if not connected (immediate redirect, no screen shown)
+  useEffect(() => {
+    if (isLoaded && !isConnected) {
+      router.push('/');
+    }
+  }, [isLoaded, isConnected, router]);
 
   useEffect(() => {
     if (isConnected && address) {
@@ -293,46 +303,39 @@ export default function PaymentsTracking() {
     return days;
   };
 
-  if (!isConnected) {
+  // Show loading while wallet is initializing or redirecting
+  if (!isLoaded || !isConnected) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-          <CardHeader className="text-center">
-            <CardTitle className="text-slate-100">Wallet Not Connected</CardTitle>
-            <CardDescription className="text-slate-400">
-              Please connect your wallet to view payment tracking
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      <div className="min-h-screen bg-slate-950">
+        <ExporterHeader />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800">
+            <CardHeader className="text-center">
+              <CardTitle className="text-slate-100">Loading...</CardTitle>
+              <CardDescription className="text-slate-400">
+                {!isLoaded ? 'Initializing wallet connection...' : 'Redirecting...'}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <Link href="/exporter" className="mr-4">
-                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Dashboard
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-xl font-semibold text-slate-100">Payment Tracking</h1>
-                <p className="text-sm text-slate-400">
-                  Monitor payment status and send reminders to importers
-                </p>
-              </div>
-            </div>
+      <ExporterHeader />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Page Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">Payment Tracking</h1>
+            <p className="text-slate-400 mt-1">
+              Monitor payment status and send reminders to importers
+            </p>
           </div>
         </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           {[

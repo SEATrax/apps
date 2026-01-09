@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useActiveAccount } from 'panna-sdk';
+import { useWalletSession } from '@/hooks/useWalletSession';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, FileText, DollarSign, TrendingUp, Clock } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import ExporterHeader from '@/components/ExporterHeader';
@@ -31,9 +32,10 @@ interface Invoice {
 }
 
 export default function ExporterDashboard() {
-  const activeAccount = useActiveAccount();
+  const { isLoaded, isConnected, address } = useWalletSession();
   const { profile, loading: profileLoading } = useExporterProfile();
   const { getInvoicesByExporter } = useInvoiceNFT();
+  const router = useRouter();
   
   const [stats, setStats] = useState<DashboardStats>({
     totalInvoices: 0,
@@ -45,8 +47,12 @@ export default function ExporterDashboard() {
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const address = activeAccount?.address;
-  const isConnected = !!activeAccount;
+  // Redirect to home if not connected (immediate redirect, no screen shown)
+  useEffect(() => {
+    if (isLoaded && !isConnected) {
+      router.push('/');
+    }
+  }, [isLoaded, isConnected, router]);
 
   useEffect(() => {
     if (isConnected && address && profile) {
@@ -145,14 +151,15 @@ export default function ExporterDashboard() {
     }).format(amount);
   };
 
-  if (!isConnected) {
+  // Show loading while wallet is initializing or redirecting
+  if (!isLoaded || !isConnected) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <Card className="w-full max-w-md bg-slate-900 border-slate-800">
           <CardHeader className="text-center">
-            <CardTitle className="text-slate-100">Wallet Not Connected</CardTitle>
+            <CardTitle className="text-slate-100">Loading...</CardTitle>
             <CardDescription className="text-slate-400">
-              Please connect your wallet to access the exporter dashboard
+              {!isLoaded ? 'Initializing wallet connection...' : 'Redirecting...'}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -160,7 +167,7 @@ export default function ExporterDashboard() {
     );
   }
 
-  if (profileLoading || !activeAccount) {
+  if (profileLoading || !isConnected) {
     return (
       <div className="min-h-screen bg-slate-950">
         <ExporterHeader />

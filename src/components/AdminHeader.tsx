@@ -1,16 +1,14 @@
 'use client';
 
 import { LoginButton, liskSepolia } from 'panna-sdk';
-import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useWalletSession } from '@/hooks/useWalletSession';
-import { Building2 } from 'lucide-react';
+import { Building2, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import Link from 'next/link';
 
-export default function ExporterHeader() {
+export default function AdminHeader() {
   const { isLoaded, isConnected, account, wasConnected } = useWalletSession();
-  const { profile } = useExporterProfile();
   const router = useRouter();
 
   // Immediate logout detection - if was connected but now disconnected
@@ -20,7 +18,7 @@ export default function ExporterHeader() {
     }
   }, [isLoaded, wasConnected, isConnected, router]);
 
-  // Fallback redirect for users who never connected and try to access exporter pages
+  // Fallback redirect for users who never connected and try to access admin pages
   useEffect(() => {
     if (isLoaded && !isConnected && !wasConnected) {
       router.push('/');
@@ -33,48 +31,55 @@ export default function ExporterHeader() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex items-center">
-            <Link href="/exporter" className="flex items-center space-x-3">
+            <Link href="/" className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-teal-400 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">S</span>
               </div>
               <span className="text-xl font-bold text-white">SEATrax</span>
+              <div className="ml-2 px-2 py-1 bg-red-600 text-white text-xs rounded">
+                ADMIN
+              </div>
             </Link>
           </div>
 
           {/* Navigation */}
           <nav className="flex items-center space-x-6">
             <Link
-              href="/exporter"
+              href="/admin/roles"
               className="text-slate-300 hover:text-cyan-400 px-3 py-2 text-sm font-medium transition-colors"
             >
-              Dashboard
+              Role Manager
             </Link>
             <Link
-              href="/exporter/invoices"
+              href="/admin/exporters"
+              className="text-slate-300 hover:text-cyan-400 px-3 py-2 text-sm font-medium transition-colors"
+            >
+              Exporters
+            </Link>
+            <Link
+              href="/admin/invoices"
               className="text-slate-300 hover:text-cyan-400 px-3 py-2 text-sm font-medium transition-colors"
             >
               Invoices
             </Link>
             <Link
-              href="/exporter/payments"
+              href="/admin/pools"
               className="text-slate-300 hover:text-cyan-400 px-3 py-2 text-sm font-medium transition-colors"
             >
-              Payments
+              Pools
             </Link>
           </nav>
 
-          {/* User Info & Logout */}
+          {/* Admin Info & Logout */}
           <div className="flex items-center space-x-4">
-            {/* Company Profile Info */}
-            {profile && (
+            {/* Admin Badge */}
+            {account && (
               <div className="flex items-center space-x-2 text-sm bg-slate-900 rounded-lg px-3 py-2">
-                <Building2 className="h-4 w-4 text-slate-400" />
+                <Settings className="h-4 w-4 text-slate-400" />
                 <span className="text-slate-300">
-                  {profile.company_name}
+                  Admin
                 </span>
-                {profile.is_verified && (
-                  <div className="w-2 h-2 bg-green-500 rounded-full" title="Verified Company"></div>
-                )}
+                <div className="w-2 h-2 bg-red-500 rounded-full" title="Admin Access"></div>
               </div>
             )}
 

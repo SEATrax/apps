@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { usePanna } from '@/hooks/usePanna';
+import { useState, useEffect } from 'react';
+import { useActiveAccount } from 'panna-sdk';
 import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import ExporterHeader from '@/components/ExporterHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Upload, Calendar as CalendarIcon, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Calendar as CalendarIcon, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -32,12 +34,13 @@ interface InvoiceFormData {
 }
 
 export default function CreateInvoice() {
-  const { address, isConnected, mockUser, setMockUser } = usePanna();
+  const activeAccount = useActiveAccount();
   const { mintInvoice, isLoading: isContractLoading } = useInvoiceNFT();
+  const { profile } = useExporterProfile();
   const router = useRouter();
   
   const [formData, setFormData] = useState<InvoiceFormData>({
-    exporterCompany: 'Southeast Exports Co', // Pre-fill from user profile
+    exporterCompany: '', // Will be filled from profile
     importerCompany: '',
     importerAddress: '',
     importerCountry: '',
@@ -48,6 +51,18 @@ export default function CreateInvoice() {
     shippingDate: undefined,
     documents: [],
   });
+
+  // Fill company name from profile
+  useEffect(() => {
+    if (profile?.company_name) {
+      setFormData(prev => ({
+        ...prev,
+        exporterCompany: profile.company_name
+      }));
+    }
+  }, [profile]);
+  
+  const isConnected = !!activeAccount;
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingDocs, setIsUploadingDocs] = useState(false);
@@ -123,21 +138,59 @@ export default function CreateInvoice() {
   };
 
   const uploadDocuments = async (): Promise<string[]> => {
-    // TODO: Implement actual IPFS upload using Pinata
     const ipfsHashes: string[] = [];
     
     for (let i = 0; i < formData.documents.length; i++) {
       const file = formData.documents[i];
       setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
       
-      // Simulate upload progress
-      for (let progress = 0; progress <= 100; progress += 25) {
-        setUploadProgress(prev => ({ ...prev, [file.name]: progress }));
-        await new Promise(resolve => setTimeout(resolve, 200));
+      try {
+        // Create FormData for each file
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('name', `invoice-${formData.invoiceNumber}-doc-${i + 1}`);
+        uploadFormData.append('description', `Supporting document for invoice ${formData.invoiceNumber}`);
+        uploadFormData.append('invoice_number', formData.invoiceNumber);
+        uploadFormData.append('exporter_company', formData.exporterCompany);
+        
+        // Add attributes for document metadata
+        const attributes = [
+          { trait_type: 'Document Type', value: file.type },
+          { trait_type: 'Invoice Number', value: formData.invoiceNumber },
+          { trait_type: 'Exporter', value: formData.exporterCompany },
+          { trait_type: 'Document Index', value: (i + 1).toString() }
+        ];
+        uploadFormData.append('attributes', JSON.stringify(attributes));
+        uploadFormData.append('created_at', new Date().toISOString());
+        
+        // Upload to IPFS via API route
+        const uploadResponse = await fetch('/api/invoice/upload', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload ${file.name}`);
+        }
+        
+        const result = await uploadResponse.json();
+        
+        if (!result.success || !result.data?.metadata_cid) {
+          throw new Error(`Upload failed for ${file.name}`);
+        }
+        
+        // Update progress
+        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
+        
+        // Store the IPFS hash
+        ipfsHashes.push(result.data.metadata_cid);
+        
+        console.log(`✅ Uploaded ${file.name}:`, result.data.metadata_cid);
+        
+      } catch (error: any) {
+        console.error(`Error uploading ${file.name}:`, error);
+        throw new Error(`Failed to upload ${file.name}: ${error.message}`);
       }
-      
-      // Mock IPFS hash
-      ipfsHashes.push(`QmExample${i + 1}${file.name.replace(/[^a-zA-Z0-9]/g, '')}`);
     }
     
     return ipfsHashes;
@@ -232,69 +285,50 @@ export default function CreateInvoice() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-          <CardHeader className="text-center">
-            <CardTitle className="text-slate-100">Access Required</CardTitle>
-            <CardDescription className="text-slate-400">
-              Connect your wallet or use the testing environment to create invoices
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Debug Info */}
-            <div className="text-xs text-slate-500 p-2 bg-slate-800 rounded">
-              Debug: isConnected={isConnected.toString()}, address={address || 'none'}, mockUser={mockUser?.name || 'none'}
-            </div>
-            
-            {/* Quick Test Login */}
-            <Button 
-              onClick={() => setMockUser({
-                id: 'exporter-1',
-                name: 'Southeast Exports Co',
-                role: 'exporter',
-                address: '0xExporter123...',
-                verified: true
-              })}
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
-            >
-              Quick Login as Exporter (Test)
-            </Button>
-            
-            <Link href="/login" className="w-full">
-              <Button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white">
-                Go to Login
-              </Button>
-            </Link>
-            <Link href="/testing" className="w-full">
-              <Button variant="outline" className="w-full border-slate-700 text-slate-300 hover:bg-slate-700">
-                Use Testing Environment
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
+      <>
+        <ExporterHeader />
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800">
+            <CardHeader className="text-center">
+              <CardTitle className="text-slate-100">Access Required</CardTitle>
+              <CardDescription className="text-slate-400">
+                Connect your wallet to create invoices
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Link href="/login" className="w-full">
+                <Button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white">
+                  Go to Login
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-800">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-16">
-            <Link href="/exporter/invoices" className="mr-4">
-              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Invoices
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-xl font-semibold text-slate-100">Create New Invoice</h1>
-              <p className="text-sm text-slate-400">
-                Submit your shipping invoice for funding consideration
-              </p>
+    <>
+      <ExporterHeader />
+      <div className="min-h-screen bg-slate-950">
+        {/* Header */}
+        <div className="bg-slate-900 border-b border-slate-800">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center h-16">
+              <Link href="/exporter/invoices" className="mr-4">
+                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Invoices
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-xl font-semibold text-slate-100">Create New Invoice</h1>
+                <p className="text-sm text-slate-400">
+                  Submit your shipping invoice for funding consideration
+                </p>
+              </div>
             </div>
-          </div>
         </div>
       </div>
 
@@ -607,5 +641,6 @@ export default function CreateInvoice() {
         </form>
       </div>
     </div>
+    </>
   );
 }

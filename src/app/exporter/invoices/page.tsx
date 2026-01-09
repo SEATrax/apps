@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePanna } from '@/hooks/usePanna';
+import { useWalletSession } from '@/hooks/useWalletSession';
 import { useInvoiceNFT, INVOICE_STATUS } from '@/hooks/useInvoiceNFT';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Filter, FileText, Calendar, DollarSign, CheckCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useRouter } from 'next/navigation';
+import ExporterHeader from '@/components/ExporterHeader';
 import Link from 'next/link';
 
 interface Invoice {
@@ -30,8 +32,9 @@ interface Invoice {
 }
 
 export default function InvoiceList() {
-  const { address, isConnected, mockUser, setMockUser } = usePanna();
+  const { isLoaded, isConnected, address } = useWalletSession();
   const { getInvoicesByExporter, getInvoice } = useInvoiceNFT();
+  const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,6 +53,13 @@ export default function InvoiceList() {
       setTimeout(() => setShowSuccess(false), 5000);
     }
   }, []);
+
+  // Redirect to home if not connected (immediate redirect, no screen shown)
+  useEffect(() => {
+    if (isLoaded && !isConnected) {
+      router.push('/');
+    }
+  }, [isLoaded, isConnected, router]);
 
   useEffect(() => {
     if (isConnected && address) {
@@ -253,75 +263,45 @@ export default function InvoiceList() {
     });
   };
 
-  if (!isConnected) {
+  // Show loading while wallet is initializing or redirecting
+  if (!isLoaded || !isConnected) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-          <CardHeader className="text-center">
-            <CardTitle className="text-slate-100">Access Required</CardTitle>
-            <CardDescription className="text-slate-400">
-              Connect your wallet or use the testing environment to access invoices
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Debug Info */}
-            <div className="text-xs text-slate-500 p-2 bg-slate-800 rounded">
-              Debug: isConnected={isConnected.toString()}, address={address || 'none'}, mockUser={mockUser?.name || 'none'}
-            </div>
-            
-            {/* Quick Test Login */}
-            <Button 
-              onClick={() => setMockUser({
-                id: 'exporter-1',
-                name: 'Southeast Exports Co',
-                role: 'exporter',
-                address: '0xExporter123...',
-                verified: true
-              })}
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
-            >
-              Quick Login as Exporter (Test)
-            </Button>
-            
-            <Link href="/login" className="w-full">
-              <Button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white">
-                Go to Login
-              </Button>
-            </Link>
-            <Link href="/testing" className="w-full">
-              <Button variant="outline" className="w-full border-slate-700 text-slate-300 hover:bg-slate-700">
-                Use Testing Environment
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-slate-950">
+        <ExporterHeader />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <Card className="w-full max-w-md bg-slate-900 border-slate-800">
+            <CardHeader className="text-center">
+              <CardTitle className="text-slate-100">Loading...</CardTitle>
+              <CardDescription className="text-slate-400">
+                {!isLoaded ? 'Initializing wallet connection...' : 'Redirecting...'}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div>
-              <h1 className="text-xl font-semibold text-slate-100">My Invoices</h1>
-              <p className="text-sm text-slate-400">
-                Manage and track your invoice submissions
-              </p>
-            </div>
-            <Link href="/exporter/invoices/new">
-              <Button className="bg-cyan-600 hover:bg-cyan-700 text-white">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Invoice
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-
+      <ExporterHeader />
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Page Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">My Invoices</h1>
+            <p className="text-slate-400 mt-1">
+              Manage and track your invoice submissions
+            </p>
+          </div>
+          <Link href="/exporter/invoices/new">
+            <Button className="bg-cyan-600 hover:bg-cyan-700 text-white">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Invoice
+            </Button>
+          </Link>
+        </div>
         {/* Success Alert */}
         {showSuccess && (
           <Alert className="mb-6 bg-green-900/20 border-green-800 text-green-300">
