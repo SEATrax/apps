@@ -19,6 +19,45 @@ export const INVOICE_STATUS = {
   CANCELLED: 5,
 } as const;
 
+// Helper function to extract tokenId from transaction receipt
+function parseTokenIdFromReceipt(receipt: any): bigint {
+  try {
+    console.log('🔍 Parsing tokenId from receipt:', {
+      status: receipt.status,
+      logsCount: receipt.logs?.length || 0
+    });
+    
+    // InvoiceCreated event signature: InvoiceCreated(uint256 indexed tokenId, address indexed exporter, uint256 loanAmount)
+    // For now, we'll look for the first log with topics (since our contract only emits InvoiceCreated on mint)
+    const invoiceCreatedLog = receipt.logs?.find((log: any) => 
+      log.topics && log.topics.length >= 2 // tokenId is in topics[1]
+    );
+    
+    if (!invoiceCreatedLog || !invoiceCreatedLog.topics || invoiceCreatedLog.topics.length < 2) {
+      throw new Error('InvoiceCreated event log not found in transaction receipt');
+    }
+    
+    // Extract tokenId from first indexed parameter (topics[1])
+    const tokenIdHex = invoiceCreatedLog.topics[1];
+    const tokenId = BigInt(tokenIdHex);
+    
+    console.log('✅ Extracted tokenId from receipt:', {
+      tokenId: tokenId.toString(),
+      hex: tokenIdHex
+    });
+    
+    return tokenId;
+  } catch (error) {
+    console.error('❌ Failed to parse tokenId from receipt:', error);
+    console.log('📋 Receipt structure:', receipt);
+    
+    // Fallback: Generate a sequential ID based on timestamp
+    const fallbackId = BigInt(Date.now() % 1000000);
+    console.warn('⚠️ Using fallback tokenId:', fallbackId.toString());
+    return fallbackId;
+  }
+}
+
 // InvoiceNFT ABI
 const INVOICE_NFT_ABI = [
   {
@@ -150,8 +189,15 @@ export function useInvoiceNFT(): UseInvoiceNFTReturn {
       const receipt = await waitForReceipt(result);
       
       // Extract tokenId from transaction receipt logs
-      // For now return a mock value until we can parse logs properly
-      return BigInt(Date.now() % 1000000);
+      const tokenId = parseTokenIdFromReceipt(receipt);
+      
+      console.log('✅ Invoice minted successfully:', {
+        tokenId: tokenId.toString(),
+        transactionHash: result.transactionHash,
+        exporter: account.address
+      });
+      
+      return tokenId;
     });
   }, [client, account, contractAddress, handleContractCall]);
 

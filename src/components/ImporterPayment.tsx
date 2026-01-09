@@ -41,6 +41,8 @@ interface PaymentData {
     paymentLink: string;
     isPaid: boolean;
   };
+  dataSource?: 'contract' | 'database' | 'hybrid' | 'mock';
+  warnings?: string[];
 }
 
 export default function ImporterPayment({ invoiceId }: ImporterPaymentProps) {
@@ -246,6 +248,40 @@ export default function ImporterPayment({ invoiceId }: ImporterPaymentProps) {
           <h1 className="text-4xl font-bold text-white mb-2">Invoice Payment</h1>
           <p className="text-slate-400">Complete your payment for the shipping invoice</p>
         </div>
+
+        {/* System Status Indicators */}
+        {paymentData.warnings && paymentData.warnings.length > 0 && (
+          <div className="max-w-6xl mx-auto mb-6">
+            <Alert className="bg-yellow-900/20 border-yellow-700">
+              <Info className="h-4 w-4 text-yellow-400" />
+              <AlertDescription className="text-yellow-200">
+                <strong>System Notice:</strong>
+                <ul className="list-disc list-inside mt-1">
+                  {paymentData.warnings.map((warning, index) => (
+                    <li key={index}>{warning}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {/* Data Source Indicator (Development/Debug) */}
+        {paymentData.dataSource && paymentData.dataSource !== 'contract' && (
+          <div className="max-w-6xl mx-auto mb-6">
+            <Alert className="bg-blue-900/20 border-blue-700">
+              <Info className="h-4 w-4 text-blue-400" />
+              <AlertDescription className="text-blue-200 text-sm">
+                <strong>Data Source:</strong> {
+                  paymentData.dataSource === 'hybrid' ? '🔗 Smart Contract + 💾 Database' :
+                  paymentData.dataSource === 'database' ? '💾 Database Only (Contract Unavailable)' :
+                  paymentData.dataSource === 'mock' ? '⚠️ Mock Data (System Offline)' :
+                  'Unknown'
+                }
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
           {/* Invoice Details */}

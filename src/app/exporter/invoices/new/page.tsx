@@ -204,14 +204,41 @@ export default function CreateInvoice() {
     }
 
     setIsSubmitting(true);
+    
+    // Import compensation utilities
+    const { compensationService, checkSystemHealth } = await import('@/lib/compensation');
+    const  { TransactionState, MetadataSyncPayload, PaymentLinkPayload } = await import('@/lib/compensation');
+    
+    // Initialize transaction state for tracking
+    const state = {
+      warnings: [] as string[],
+      contractTxHash: undefined as string | undefined,
+      tokenId: undefined as bigint | undefined,
+      metadataId: undefined as string | undefined,
+      paymentId: undefined as string | undefined,
+      ipfsHashes: undefined as string[] | undefined
+    };
 
     try {
+      // Check system health before starting
+      const health = await checkSystemHealth();
+      console.log('🏥 System Health:', health);
+      
+      if (health.consensusStatus === 'critical') {
+        throw new Error('System is experiencing critical issues. Please try again later.');
+      }
+
+      // === PHASE 1: IRREVERSIBLE OPERATIONS (Smart Contract) ===
+      console.log('🔄 Phase 1: Starting blockchain operations...');
+      
       // Upload documents to IPFS
       setIsUploadingDocs(true);
       const documentHashes = await uploadDocuments();
+      state.ipfsHashes = documentHashes;
       setIsUploadingDocs(false);
+      console.log('📄 Documents uploaded to IPFS:', documentHashes.length);
 
-      // Create invoice NFT on blockchain
+      // Create invoice NFT on blockchain (PRIMARY OPERATION)
       const contractResult = await mintInvoice(
         formData.exporterCompany,
         formData.importerCompany,
@@ -221,85 +248,137 @@ export default function CreateInvoice() {
       );
 
       if (!contractResult) {
-        throw new Error('Failed to create invoice NFT');
+        throw new Error('Failed to create invoice NFT - contract transaction failed');
       }
 
-      const tokenId = contractResult; // contractResult is bigint (tokenId)
+      const tokenId = contractResult;
+      state.tokenId = tokenId;
+      state.contractTxHash = 'completed'; // We don't have direct access to tx hash from mintInvoice
+      console.log('✅ Phase 1 Complete - Invoice NFT created:', tokenId.toString());
 
-      // Save metadata to Supabase (optional for testing)
-      let metadata = null;
-      if (isSupabaseConfigured) {
+      // === PHASE 2: REVERSIBLE OPERATIONS WITH COMPENSATION ===
+      console.log('🔄 Phase 2: Starting database synchronization...');
+      
+      // Prepare metadata payload
+      const metadataPayload = {
+        exporter_wallet: activeAccount.address!,
+        invoice_number: formData.invoiceNumber,
+        goods_description: formData.goodsDescription,
+        importer_name: formData.importerCompany,
+        importer_license: `${formData.importerAddress}, ${formData.importerCountry}`,
+        documents: documentHashes.reduce((acc, hash, index) => {
+          acc[formData.documents[index].name] = hash;
+          return acc;
+        }, {} as Record<string, string>)
+      };
+
+      // Prepare payment payload
+      const shippingAmountCents = Math.floor(parseFloat(formData.shippingAmount) * 100);
+      const paymentPayload = {
+        amount_usd: shippingAmountCents,
+        interest_amount: 0,
+        total_due: shippingAmountCents,
+        payment_link: `/pay/${tokenId}`,
+        due_date: new Date(formData.shippingDate!.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      };
+
+      // Attempt database operations with compensation
+      if (isSupabaseConfigured && health.supabaseConnection) {
         try {
-          const { data, error: supabaseError } = await supabase
-            .from('invoice_metadata')
-            .insert({
-              token_id: Number(tokenId), // Convert bigint to number for database
-              invoice_number: formData.invoiceNumber,
-              goods_description: formData.goodsDescription,
-              importer_name: formData.importerCompany,
-              importer_license: `${formData.importerAddress}, ${formData.importerCountry}`,
-              documents: documentHashes.reduce((acc, hash, index) => {
-                acc[formData.documents[index].name] = hash;
-                return acc;
-              }, {} as Record<string, string>),
-            })
-            .select()
-            .single();
+          // Save metadata with retry
+          state.metadataId = await compensationService.saveMetadataWithRetry(tokenId, metadataPayload, 2);
+          console.log('✅ Metadata saved successfully');
+        } catch (metadataError) {
+          console.warn('⚠️ Metadata save failed - scheduled for compensation');
+          state.warnings.push('Invoice metadata will be synchronized in background');
+        }
 
-          if (supabaseError) {
-            console.warn('Supabase metadata save failed (non-critical for testing):', supabaseError);
-          } else {
-            metadata = data;
-            console.log('Supabase metadata saved successfully');
-          }
-        } catch (dbError) {
-          console.warn('Database operation failed (continuing with mock data):', dbError);
+        try {
+          // Create payment link with retry
+          state.paymentId = await compensationService.createPaymentWithRetry(tokenId, paymentPayload, 2);
+          console.log('✅ Payment link created successfully');
+        } catch (paymentError) {
+          console.warn('⚠️ Payment link creation failed - scheduled for compensation');
+          state.warnings.push('Payment link will be generated in background');
         }
       } else {
-        console.info('Supabase not configured, skipping metadata save (using mock data)');
+        console.info('🔄 Database sync skipped - scheduling for background processing');
+        
+        // Schedule both operations for background processing
+        await compensationService.scheduleCompensation({
+          task_type: 'metadata_sync',
+          token_id: Number(tokenId),
+          payload: metadataPayload,
+          priority: 'high'
+        });
+
+        await compensationService.scheduleCompensation({
+          task_type: 'payment_link',
+          token_id: Number(tokenId),
+          payload: paymentPayload,
+          priority: 'normal'
+        });
+
+        state.warnings.push('Database synchronization scheduled for background processing');
       }
 
-      console.log('Invoice created successfully:', {
-        tokenId: Number(tokenId),
-        metadata
+      console.log('✅ Phase 2 Complete - Transaction state:', {
+        tokenId: tokenId.toString(),
+        metadataId: state.metadataId || 'scheduled',
+        paymentId: state.paymentId || 'scheduled',
+        warnings: state.warnings
       });
 
-      // Generate payment link record
-      if (isSupabaseConfigured) {
-        try {
-          const shippingAmountCents = Math.floor(parseFloat(formData.shippingAmount) * 100);
-          const { data: paymentData, error: paymentError } = await supabase
-            .from('payments')
-            .insert({
-              invoice_id: Number(tokenId),
-              token_id: Number(tokenId),
-              amount_usd: shippingAmountCents, // Store in cents
-              interest_amount: 0, // No interest for importer payment
-              total_due: shippingAmountCents, // Same as amount_usd
-              payment_link: `/pay/${tokenId}`,
-              status: 'link_generated',
-              due_date: new Date(formData.shippingDate!.getTime() + 30 * 24 * 60 * 60 * 1000), // 30 days from shipping
-            })
-            .select()
-            .single();
-
-          if (paymentError) {
-            console.warn('Payment link generation failed (non-critical):', paymentError);
-          } else {
-            console.log('Payment link generated successfully:', paymentData);
-          }
-        } catch (paymentGenError) {
-          console.warn('Payment link generation failed (continuing):', paymentGenError);
-        }
-      } else {
-        console.info('Payment link generation skipped (Supabase not configured)');
+      // Show success message with any warnings
+      if (state.warnings.length > 0) {
+        console.warn('⚠️ Invoice created with warnings:', state.warnings);
+        // Could show a toast notification here about background processing
       }
 
       // Redirect to invoice list
       router.push('/exporter/invoices?created=true');
+      
     } catch (error: any) {
-      console.error('Error creating invoice:', error);
-      setErrors({ submit: error.message || 'Failed to create invoice. Please try again.' });
+      console.error('❌ Invoice creation failed:', error);
+      
+      // === ERROR RECOVERY AND CLEANUP ===
+      try {
+        // If we have IPFS hashes but contract failed, schedule cleanup
+        if (state.ipfsHashes && !state.tokenId) {
+          console.log('🧹 Scheduling IPFS cleanup for failed transaction');
+          const { compensationService } = await import('@/lib/compensation');
+          await compensationService.scheduleCompensation({
+            task_type: 'ipfs_cleanup',
+            token_id: 0, // No tokenId for failed contracts
+            payload: { ipfsHashes: state.ipfsHashes },
+            priority: 'low'
+          });
+        }
+
+        // If contract succeeded but we have other errors, this is still a success case
+        if (state.tokenId) {
+          console.warn('⚠️ Contract succeeded but some operations failed - treating as success');
+          router.push('/exporter/invoices?created=true&warnings=true');
+          return;
+        }
+      } catch (recoveryError) {
+        console.error('Recovery operations failed:', recoveryError);
+      }
+
+      // Determine error type for user-friendly message
+      let userMessage = 'Failed to create invoice. Please try again.';
+      
+      if (error.message.includes('wallet') || error.message.includes('connect')) {
+        userMessage = 'Wallet connection issue. Please ensure your wallet is connected and try again.';
+      } else if (error.message.includes('contract') || error.message.includes('transaction')) {
+        userMessage = 'Blockchain transaction failed. Please check your wallet and try again.';
+      } else if (error.message.includes('IPFS') || error.message.includes('upload')) {
+        userMessage = 'Document upload failed. Please check your documents and try again.';
+      } else if (error.message.includes('critical')) {
+        userMessage = error.message; // System health message
+      }
+
+      setErrors({ submit: userMessage });
     } finally {
       setIsSubmitting(false);
       setIsUploadingDocs(false);
