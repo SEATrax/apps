@@ -23,7 +23,12 @@ export default function SelectRolePage() {
 
   // Check if user has existing profile and redirect
   useEffect(() => {
-    if (!isConnected || exporterLoading || investorLoading) {
+    if (!isConnected) {
+      router.push('/');
+      return;
+    }
+    
+    if (exporterLoading || investorLoading) {
       return;
     }
 
@@ -45,14 +50,8 @@ export default function SelectRolePage() {
     setChecking(false);
   }, [isConnected, exporterProfile, investorProfile, exporterLoading, investorLoading, router]);
 
-  // If not connected, redirect to home
-  if (!isConnected) {
-    router.push('/');
-    return null;
-  }
-  
-  // If checking for existing profiles, show loading
-  if (checking || exporterLoading || investorLoading) {
+  // Show loading while checking connection or profiles
+  if (!isConnected || checking || exporterLoading || investorLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a]">
         <div className="text-center">

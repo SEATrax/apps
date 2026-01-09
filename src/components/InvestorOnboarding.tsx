@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Wallet, CreditCard, Building2 } from 'lucide-react';
+import { useActiveAccount } from 'panna-sdk';
+import { useInvestorProfile } from '@/hooks/useInvestorProfile';
+import { useAccessControl } from '@/hooks/useAccessControl';
+import { toast } from 'sonner';
 
 interface InvestorOnboardingProps {
   onComplete: () => void;
@@ -8,6 +12,7 @@ interface InvestorOnboardingProps {
 
 export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboardingProps) {
   const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -20,18 +25,59 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
     expectedAmount: '',
   });
 
-  const [walletConnected, setWalletConnected] = useState(false);
+  const activeAccount = useActiveAccount();
+  const { createProfile } = useInvestorProfile();
+  const { grantInvestorRole } = useAccessControl();
+  const [walletConnected, setWalletConnected] = useState(!!activeAccount);
 
   const countries = ['Indonesia', 'Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Singapore', 'United States', 'United Kingdom'];
   const investmentProfiles = ['Individual', 'Family Office', 'Venture Capital', 'Corporate Treasury', 'Asset Manager'];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < 2) {
       setStep(step + 1);
     } else {
+      await handleSubmit();
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!activeAccount?.address) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (submitting) return;
+
+    try {
+      setSubmitting(true);
+      
+      // 1. Create investor profile in Supabase
+      await createProfile({
+        name: formData.name,
+        address: formData.address,
+        email: formData.email,
+        phone: formData.phone,
+      });
+
+      // 2. Attempt auto-grant investor role (lower risk profile)
+      try {
+        await grantInvestorRole(activeAccount.address);
+        toast.success('Registration completed! You can now invest in pools.');
+      } catch (roleError) {
+        // Auto-grant failed, but profile created successfully
+        console.log('Auto-grant failed, requires admin approval:', roleError);
+        toast.success('Profile created! Admin will review and approve your investor role.');
+      }
+      
       setTimeout(() => {
         onComplete();
       }, 1000);
+    } catch (error: any) {
+      console.error('Registration failed:', error);
+      toast.error(error.message || 'Registration failed. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -48,27 +94,14 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
       return formData.name && formData.country && formData.email && formData.phone;
     }
     if (step === 2) {
-      return walletConnected && formData.riskTolerance;
+      return activeAccount && formData.riskTolerance;
     }
     return false;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-8">
+    <div className="min-h-screen py-8">
       <div className="max-w-3xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <button 
-            onClick={handleBack}
-            className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 mb-4 hover-color hover-scale-sm"
-          >
-            <ArrowLeft className="w-5 h-5 hover-bounce" />
-            Back
-          </button>
-          <h1 className="text-3xl text-white mb-2">Investor Registration</h1>
-          <p className="text-slate-400">Set up your account to start investing</p>
-        </div>
-
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
@@ -325,23 +358,36 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
 
           {/* Navigation Buttons */}
           <div className="flex gap-4 mt-8 pt-6 border-t border-slate-800">
-            <button
-              onClick={handleBack}
-              className="flex-1 px-6 py-3 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-800 hover-scale-sm transition-all"
-            >
-              Back
-            </button>
+            {step > 1 ? (
+              <button
+                onClick={handleBack}
+                className="flex-1 px-6 py-3 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-800 hover-scale-sm transition-all"
+              >
+                Previous Step
+              </button>
+            ) : (
+              <div className="flex-1"></div>
+            )}
             <button
               onClick={handleNext}
-              disabled={!isStepValid()}
+              disabled={!isStepValid() || submitting}
               className={`flex-1 px-6 py-3 rounded-lg flex items-center justify-center gap-2 transition-all ${
-                isStepValid()
+                isStepValid() && !submitting
                   ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-white hover:shadow-lg hover:shadow-cyan-500/50 hover-scale'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }`}
             >
-              {step === 2 ? 'Complete Registration' : 'Continue'}
-              <ArrowRight className="w-5 h-5" />
+              {submitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  {step === 2 ? 'Creating Account...' : 'Processing...'}
+                </>
+              ) : (
+                <>
+                  {step === 2 ? 'Complete Registration' : 'Continue'}
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </button>
           </div>
         </div>
