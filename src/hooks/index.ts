@@ -7,6 +7,10 @@ export { useAuthFlow } from './useAuthFlow';
 export { useExporterProfile } from './useExporterProfile';
 export { useInvestorProfile } from './useInvestorProfile';
 
+// Utility hooks
+export { useRoleBasedNavigation } from './useRoleBasedNavigation';
+export { useInvestmentStats } from './useInvestmentStats';
+
 // Legacy contract hook (deprecated)
 export { useContract } from './useContract';
 

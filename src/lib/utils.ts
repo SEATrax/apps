@@ -49,6 +49,67 @@ export function calculateFundingPercentage(current: bigint, total: bigint): numb
   return Number((current * 100n) / total);
 }
 
+// Additional utility functions for investor dashboard
+export function formatPercentage(value: number, decimals = 2): string {
+  return `${value.toFixed(decimals)}%`;
+}
+
+export function formatETH(amount: string | number, decimals = 3): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return `${num.toFixed(decimals)} ETH`;
+}
+
+export function formatUSD(ethAmount: string | number, ethPrice = 2400): string {
+  const num = typeof ethAmount === 'string' ? parseFloat(ethAmount) : ethAmount;
+  const usdValue = num * ethPrice;
+  return formatCurrency(usdValue);
+}
+
+export function formatDateRelative(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} years ago`;
+}
+
+export function calculateDaysRemaining(dateString: string): number {
+  const targetDate = new Date(dateString);
+  const now = new Date();
+  const diffTime = targetDate.getTime() - now.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+export function getStatusColor(status: string): string {
+  switch (status.toLowerCase()) {
+    case 'active':
+    case 'open':
+      return 'text-cyan-400 bg-cyan-500/20 border-cyan-500/30';
+    case 'funded':
+    case 'matured':
+      return 'text-green-400 bg-green-500/20 border-green-500/30';
+    case 'completed':
+    case 'paid':
+      return 'text-gray-400 bg-gray-500/20 border-gray-500/30';
+    case 'cancelled':
+    case 'rejected':
+      return 'text-red-400 bg-red-500/20 border-red-500/30';
+    default:
+      return 'text-gray-400 bg-gray-500/20 border-gray-500/30';
+  }
+}
+
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
+}
+
 export function calculateExpectedReturn(
   investment: bigint,
   yieldPercentage: number
@@ -60,23 +121,6 @@ export function getDaysRemaining(dueDate: number): number {
   const now = Math.floor(Date.now() / 1000);
   const diff = dueDate - now;
   return Math.max(0, Math.ceil(diff / 86400));
-}
-
-export function getStatusColor(status: string): string {
-  const colors: Record<string, string> = {
-    pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
-    approved: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-    funding: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-    funded: 'bg-green-500/10 text-green-500 border-green-500/20',
-    completed: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-    defaulted: 'bg-red-500/10 text-red-500 border-red-500/20',
-    rejected: 'bg-gray-500/10 text-gray-500 border-gray-500/20',
-    open: 'bg-green-500/10 text-green-500 border-green-500/20',
-    closed: 'bg-gray-500/10 text-gray-500 border-gray-500/20',
-    matured: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-    liquidating: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  };
-  return colors[status] || 'bg-gray-500/10 text-gray-500 border-gray-500/20';
 }
 
 export function generateIPFSUrl(hash: string, gateway?: string): string {
