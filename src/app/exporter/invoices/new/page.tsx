@@ -264,6 +264,37 @@ export default function CreateInvoice() {
         metadata
       });
 
+      // Generate payment link record
+      if (isSupabaseConfigured) {
+        try {
+          const shippingAmountCents = Math.floor(parseFloat(formData.shippingAmount) * 100);
+          const { data: paymentData, error: paymentError } = await supabase
+            .from('payments')
+            .insert({
+              invoice_id: Number(tokenId),
+              token_id: Number(tokenId),
+              amount_usd: shippingAmountCents, // Store in cents
+              interest_amount: 0, // No interest for importer payment
+              total_due: shippingAmountCents, // Same as amount_usd
+              payment_link: `/pay/${tokenId}`,
+              status: 'link_generated',
+              due_date: new Date(formData.shippingDate!.getTime() + 30 * 24 * 60 * 60 * 1000), // 30 days from shipping
+            })
+            .select()
+            .single();
+
+          if (paymentError) {
+            console.warn('Payment link generation failed (non-critical):', paymentError);
+          } else {
+            console.log('Payment link generated successfully:', paymentData);
+          }
+        } catch (paymentGenError) {
+          console.warn('Payment link generation failed (continuing):', paymentGenError);
+        }
+      } else {
+        console.info('Payment link generation skipped (Supabase not configured)');
+      }
+
       // Redirect to invoice list
       router.push('/exporter/invoices?created=true');
     } catch (error: any) {

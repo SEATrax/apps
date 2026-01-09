@@ -102,70 +102,173 @@ const AdminPage = () => {
 
 ---
 
-## 🎯 **PRIORITY 2: Finalize Payment Flow** (Target: 2-3 days)
+## 🎯 **PRIORITY 2: Hybrid Sync Architecture Implementation** (Target: 3-4 days)
 
 ### Overview
-Complete the payment system to enable importers to pay invoices through public payment links. When exporters create invoices, the system generates payment links for importers to pay the full invoice amount (shipping amount). This payment confirmation triggers the profit distribution cycle.
+Implement robust **Hybrid Sync Architecture** with Smart Contract as primary authority and Supabase as reliable fallback. This ensures production-grade reliability with simultaneous updates to both systems, comprehensive error handling, and compensation mechanisms for eventual data consistency.
 
-### ✅ **Current Status: 65% Complete**
+### ✅ **PAYMENT FLOW: 100% ✅ | HYBRID SYNC: 🔄 IN PROGRESS**
+
+#### **Completed Payment Features:**
 - [x] Payment page (`/pay/[invoiceId]/page.tsx`) - **WORKING**
 - [x] Admin payments page (`/admin/payments/page.tsx`) - **WORKING** 
-- [x] Payment API structure (`/api/currency/`, `/api/invoice/upload/`) - **WORKING**
-- [ ] Missing payment API routes and confirmation workflow
+- [x] Payment API routes (`/api/payment/[invoiceId]/route.ts`) - **WORKING**
+- [x] Payment confirmation workflow complete
+- [x] TypeScript compilation successful
+- [x] Production build successful
 
-### 🔄 **Corrected Payment Flow Understanding:**
+#### **Hybrid Sync Architecture - NEW PRIORITY:**
+- [ ] Fix Transaction Receipt Parsing (replace mock token IDs)
+- [ ] Two-Phase Invoice Creation (Contract → Database → Compensation)
+- [ ] Compensation Queue System (async retry for failed operations)
+- [ ] Enhanced Payment API Fallback Logic
+- [ ] Data Consistency Validation & Auto-healing
+- [ ] Health Check & Degraded Mode Support
+
+### 🏗️ **Hybrid Sync Implementation Strategy**
+
+**Core Principle**: Smart Contract = **Financial Authority**, Supabase = **Metadata & Relations**
+
+```typescript
+// Proposed Architecture Flow:
+Invoice Creation → SC Update + Supabase Update (Parallel)
+                     ↓              ↓
+                 Primary Source  Fallback Source
+                 (Immutable)     (Reliable)
+                     ↓              ↓
+                Payment API → Try SC First → Fallback to Supabase
 ```
-1. Invoice Creation:
-   ├─ Shipping Amount: $10,000 (importir must pay)
-   ├─ Loan Request: $7,000 (from investors)
-   └─ Payment Link: /pay/[invoiceId] (generated immediately)
 
-2. Investment & Withdrawal:
-   ├─ Investors fund $7,000 → Pool
-   └─ Exporter withdraws $7,000
+**Benefits:**
+- ✅ **Production Robustness**: Smart Contract authority with reliable fallback
+- ✅ **Always Working**: System remains functional during SC/DB partial failures  
+- ✅ **Eventual Consistency**: Async compensation ensures data synchronization
+- ✅ **Performance**: Optimized queries with intelligent fallback routing
 
-3. Payment Process:
-   ├─ Importir accesses payment link
-   ├─ Pays $10,000 (shipping amount) - DUMMY SYSTEM
-   └─ Admin confirms payment
+### 📋 **Implementation Tasks**
 
-4. Profit Distribution:
-   ├─ Investors: $7,280 (loan + 4% = $7,000 + $280)
-   ├─ Platform: $70 (1% of loan = $7,000 × 1%)
-   └─ Exporter: $2,650 (remaining profit)
+#### **Step 1: Fix Transaction Receipt Parsing** ⚡ **HIGH PRIORITY**
+- [ ] **Replace mock token ID generation** in [useInvoiceNFT.ts](src/hooks/useInvoiceNFT.ts)
+  - [ ] Parse actual `tokenId` from contract transaction logs
+  - [ ] Handle receipt parsing errors gracefully
+  - [ ] Add transaction confirmation validation
+
+#### **Step 2: Two-Phase Invoice Creation** 🔄 **CORE**
+- [ ] **Modify invoice creation flow** in [new/page.tsx](src/app/exporter/invoices/new/page.tsx)
+  - [ ] Phase 1: Contract transaction (primary, irreversible)
+  - [ ] Phase 2: Database sync (secondary, with retry)
+  - [ ] Phase 3: Async compensation for failures
+
+#### **Step 3: Compensation Queue System** 🔧 **RELIABILITY**
+- [ ] **Create compensation infrastructure**
+  - [ ] Add `compensation_queue` table for failed operations
+  - [ ] Background service for retry processing
+  - [ ] Exponential backoff strategy
+  - [ ] Dead letter queue for persistent failures
+
+#### **Step 4: Enhanced Payment API Fallback** 📡 **USER EXPERIENCE**
+- [ ] **Improve** [payment API](src/app/api/payment/[invoiceId]/route.ts)
+  - [ ] Primary: Smart contract data fetching
+  - [ ] Fallback: Supabase data with contract validation
+  - [ ] Health check integration
+  - [ ] Response caching for performance
+
+#### **Step 5: Data Consistency Validation** ✅ **QUALITY**
+- [ ] **Add validation utilities**
+  - [ ] Compare SC vs Supabase data integrity
+  - [ ] Auto-healing for detected inconsistencies
+  - [ ] Scheduled consistency checks
+  - [ ] Admin dashboard for data health monitoring
+
+#### **Step 6: Health Check & Degraded Mode** 🏥 **MONITORING**
+- [ ] **System health monitoring**
+  - [ ] Contract/Database/IPFS connection status
+  - [ ] Adaptive behavior based on component availability
+  - [ ] User notifications during degraded service
+  - [ ] Graceful degradation patterns
+
+### 🔧 **Implementation Example: Two-Phase Creation**
+
+```typescript
+// Enhanced Invoice Creation Flow
+async function createInvoiceWithHybridSync(formData: InvoiceFormData) {
+  const state: TransactionState = {};
+  
+  try {
+    // Phase 1: Irreversible Operations (Smart Contract)
+    state.ipfsHashes = await uploadDocuments(formData.documents);
+    
+    const result = await mintInvoice(
+      formData.exporterCompany,
+      formData.importerCompany,
+      BigInt(Math.floor(parseFloat(formData.shippingAmount) * 100)),
+      BigInt(Math.floor(parseFloat(formData.loanAmount) * 100)),
+      BigInt(Math.floor(formData.shippingDate!.getTime() / 1000))
+    );
+    
+    state.contractTxHash = result.transactionHash;
+    state.tokenId = await parseTokenIdFromReceipt(result); // REAL parsing!
+    
+    // Phase 2: Database Sync (with retry capability)
+    try {
+      state.metadataId = await saveMetadataWithRetry(state.tokenId, formData, state.ipfsHashes);
+      state.paymentId = await createPaymentWithRetry(state.tokenId, formData);
+    } catch (syncError) {
+      // Phase 3: Compensation (async, non-blocking)
+      await scheduleCompensation({
+        type: 'metadata_sync',
+        tokenId: state.tokenId,
+        data: { formData, ipfsHashes: state.ipfsHashes },
+        priority: 'high'
+      });
+      
+      console.warn('Database sync failed - scheduled for compensation:', syncError);
+    }
+    
+    // Return success even if database sync failed
+    return { success: true, tokenId: state.tokenId, warning: !state.metadataId };
+    
+  } catch (error) {
+    // Contract failed - complete failure
+    if (state.ipfsHashes) {
+      await cleanupIPFSFiles(state.ipfsHashes);
+    }
+    throw error;
+  }
+}
 ```
 
 ### 📋 **Tasks Breakdown**
 
-#### **Step 1: Payment Link Generation** (Est: 0.5 days)
-- [ ] **Auto-generate payment links during invoice creation**
-  - [ ] Modify invoice creation flow to generate payment links
-  - [ ] Store payment record in Supabase `payments` table
-  - [ ] Payment amount = `invoice.shippingAmount` (full invoice value)
-  - [ ] Link available immediately after invoice approval
+#### **Step 1: Payment Link Generation** ✅ **COMPLETED**
+- [x] **Auto-generate payment links during invoice creation**
+  - [x] Modify invoice creation flow to generate payment links
+  - [x] Store payment record in Supabase `payments` table
+  - [x] Payment amount = `invoice.shippingAmount` (full invoice value)
+  - [x] Link available immediately after invoice approval
 
-#### **Step 2: Payment API Implementation** (Est: 1 day)
-- [ ] **Create** `/api/payment/[invoiceId]/route.ts`
-  - [ ] GET: Fetch invoice + payment details
-    - [ ] Return: invoice data, importir info, amount due (shipping amount)
-    - [ ] Calculate payment status from contract + Supabase
-  - [ ] POST: Process dummy payment confirmation 
-    - [ ] Create payment record with "pending_confirmation" status
-    - [ ] Send notification to admin for payment confirmation
+#### **Step 2: Payment API Implementation** ✅ **COMPLETED**
+- [x] **Create** `/api/payment/[invoiceId]/route.ts`
+  - [x] GET: Fetch invoice + payment details
+    - [x] Return: invoice data, importir info, amount due (shipping amount)
+    - [x] Calculate payment status from contract + Supabase
+  - [x] POST: Process dummy payment confirmation 
+    - [x] Create payment record with "pending_confirmation" status
+    - [x] Send notification to admin for payment confirmation
 
-#### **Step 3: Payment Confirmation Workflow** (Est: 0.5 days)
-- [ ] **Enhance admin payment confirmation**
-  - [ ] Show pending payments from importers in admin dashboard
-  - [ ] "Confirm Payment" button → PaymentOracle.markInvoicePaid()
-  - [ ] Update Supabase payment status to "confirmed"
-  - [ ] Trigger profit distribution check if all pool invoices paid
+#### **Step 3: Payment Confirmation Workflow** ✅ **COMPLETED**
+- [x] **Enhance admin payment confirmation**
+  - [x] Show pending payments from importers in admin dashboard
+  - [x] "Confirm Payment" button → PaymentOracle.markInvoicePaid()
+  - [x] Update Supabase payment status to "confirmed"
+  - [x] Trigger profit distribution check if all pool invoices paid
 
-#### **Step 4: PaymentOracle Integration** (Est: 1 day)
-- [ ] **Complete PaymentOracle contract integration**
-  - [ ] Integrate `markInvoicePaid(invoiceId)` function
-  - [ ] Auto-trigger profit distribution when all pool invoices paid
-  - [ ] Update invoice status: FUNDED → PAID → COMPLETED
-  - [ ] Implement profit calculation: 4% to investors, 1% platform fee
+#### **Step 4: PaymentOracle Integration** ✅ **COMPLETED**
+- [x] **Complete PaymentOracle contract integration**
+  - [x] Integrate `markInvoicePaid(invoiceId)` function
+  - [x] Auto-trigger profit distribution when all pool invoices paid
+  - [x] Update invoice status: FUNDED → PAID → COMPLETED
+  - [x] Implement profit calculation: 4% to investors, 1% platform fee
 
 ### 🔧 **Implementation Details**
 
@@ -244,13 +347,13 @@ const confirmPayment = async (invoiceId) => {
 ```
 
 ### 📊 **Success Criteria**
-- [ ] Payment links auto-generated during invoice creation
-- [ ] Public payment page shows correct invoice amount (shipping amount)
-- [ ] Dummy payment confirmation workflow working
-- [ ] PaymentOracle integration functional
-- [ ] Admin can confirm payments and trigger profit distribution
-- [ ] Profit calculation: 4% investors + 1% platform fee working
-- [ ] End-to-end flow: Invoice → Payment Link → Importir Pay → Admin Confirm → Profit Distribution
+- [ ] ✅ **Token ID parsing**: Real tokenId extraction from contract receipts
+- [ ] 🔄 **Two-phase creation**: Contract-first with database compensation
+- [ ] 🔧 **Compensation queue**: Automatic retry for failed operations
+- [ ] 📡 **Smart fallback**: Payment API works with SC primary/DB fallback
+- [ ] ✅ **Data consistency**: Validation and auto-healing mechanisms
+- [ ] 🏥 **Health monitoring**: System status and degraded mode support
+- [ ] 🚀 **Production ready**: Robust error handling and user experience
 
 ---
 
@@ -317,10 +420,11 @@ Final polish, testing, and production preparation. Focus on error handling, mobi
 - ~~Day 4-5: Pool management pages~~ ✅
 - ✅ **Milestone ACHIEVED**: Complete admin functionality + TypeScript fixes
 
-### **Week 2: Payment & Polish** (Days 6-10)
-- Day 6-8: Payment flow completion
-- Day 9-10: Polish and testing
-- **Milestone**: Production-ready MVP
+### **Week 2: Hybrid Sync & Polish** (Days 6-10)
+- Day 6-7: Transaction receipt parsing + two-phase creation
+- Day 8-9: Compensation queue + fallback logic  
+- Day 10: Health monitoring + testing
+- **Milestone**: Production-ready platform with robust data architecture
 
 ### **Final Target**: 🎯 **100% Complete SEATrax MVP**
 

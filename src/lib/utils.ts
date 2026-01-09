@@ -34,6 +34,14 @@ export function formatDate(timestamp: number): string {
   });
 }
 
+export function formatDateString(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export function formatDateTime(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleString('en-US', {
     year: 'numeric',
