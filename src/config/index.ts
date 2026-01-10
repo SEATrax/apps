@@ -1,5 +1,5 @@
 export const appConfig = {
-  name: process.env.NEXT_PUBLIC_APP_NAME || 'SEATrax',
+  name: process.env.NEXT_PUBLIC_APP_NAME || 'SEATrax - Shipping Invoice Funding Platform',
   description: 'Shipping Invoice Funding Platform',
   
   // Chain Configuration

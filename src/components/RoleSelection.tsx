@@ -21,7 +21,7 @@ export default function RoleSelection({ onRoleSelect }: RoleSelectionProps) {
       {/* Header with wallet info */}
       <header className="w-full p-4 sm:p-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 relative z-20">
         <div className="flex items-center justify-center sm:justify-start">
-          <Logo variant="navbar" size="md" />
+          <Logo variant="navbar" size="sm" />
         </div>
         
         <div className="flex items-center justify-center sm:justify-end gap-4">

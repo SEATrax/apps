@@ -32,19 +32,19 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header - Dark Theme */}
-      <header className="bg-[#0f172a] border-b border-cyan-500/20 sticky top-0 z-50">
+      <header className="bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] backdrop-blur-sm border-b border-cyan-500/20 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             {/* Logo */}
             <Logo variant="navbar" size="sm" className="hover-scale hover-glow cursor-pointer" />
             
             {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-8">
+            {/* <nav className="hidden md:flex items-center gap-8">
               <a href="#platform" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">Platform</a>
               <a href="#solutions" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">Solutions</a>
               <a href="#developers" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">Developers</a>
               <a href="#about" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">About Us</a>
-            </nav>
+            </nav> */}
             
             {/* Auth Section */}
             <div className="flex items-center gap-3">
