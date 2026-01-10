@@ -36,7 +36,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             {/* Logo */}
-            <Logo variant="navbar" size="md" className="hover-scale hover-glow cursor-pointer" />
+            <Logo variant="navbar" size="sm" className="hover-scale hover-glow cursor-pointer" />
             
             {/* Navigation */}
             <nav className="hidden md:flex items-center gap-8">
@@ -213,14 +213,20 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           </div>
 
           {/* Hero Text */}
-          <p className="text-2xl md:text-3xl text-cyan-400 mb-12">
-            On-Chain Financing for Exporters
+          <h1 className="text-4xl md:text-5xl lg:text-6xl text-white mb-6">
+            Shipping Invoice <span className="text-cyan-400">Funding Platform</span>
+          </h1>
+          <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto">
+            Blockchain-powered trade finance connecting exporters and investors for transparent, fast invoice funding
           </p>
           
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <button 
-              onClick={onGetStarted}
+              onClick={() => {
+                const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+                if (loginBtn) loginBtn.click();
+              }}
               className="px-8 py-4 bg-cyan-400 text-slate-900 rounded-lg hover:bg-cyan-300 hover-scale hover-shine transition-all text-lg shadow-lg shadow-cyan-500/30 border-2 border-cyan-400"
             >
               Explore Platform
@@ -233,19 +239,19 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             </Link>
           </div>
 
-          {/* Live Stats */}
+          {/* Platform Features */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto">
             <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 hover-lift hover-border-glow cursor-pointer">
-              <div className="text-3xl text-cyan-400 mb-2">$24.5M</div>
-              <div className="text-gray-300">Total Funded</div>
+              <div className="text-3xl text-cyan-400 mb-2">70%</div>
+              <div className="text-gray-300">Funding Threshold</div>
             </div>
             <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 hover-lift hover-border-glow cursor-pointer">
-              <div className="text-3xl text-cyan-400 mb-2">342</div>
-              <div className="text-gray-300">Active Exporters</div>
+              <div className="text-3xl text-cyan-400 mb-2">4%</div>
+              <div className="text-gray-300">Investor Returns</div>
             </div>
             <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20 hover-lift hover-border-glow cursor-pointer">
-              <div className="text-3xl text-cyan-400 mb-2">8 hours</div>
-              <div className="text-gray-300">Avg. Funding Time</div>
+              <div className="text-3xl text-cyan-400 mb-2">100%</div>
+              <div className="text-gray-300">Blockchain Secure</div>
             </div>
           </div>
         </div>
@@ -271,44 +277,47 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            {/* Feature Cards - White with subtle shadow */}
+            {/* Step 1 */}
             <div className="bg-white rounded-2xl p-8 text-center shadow-lg hover-lift-lg border border-gray-100 cursor-pointer group">
               <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Shield className="w-10 h-10 text-white" />
+                <FileText className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-xl text-slate-900 mb-3">Secure Blockchain</h3>
+              <h3 className="text-xl text-slate-900 mb-3">1. Submit Invoice</h3>
               <p className="text-gray-600 text-sm">
-                Faster via upah teknowledgi blockchain trusted
+                Exporters tokenize shipping invoices as NFTs with document verification
               </p>
             </div>
 
+            {/* Step 2 */}
             <div className="bg-white rounded-2xl p-8 text-center shadow-lg hover-lift-lg border border-gray-100 cursor-pointer group">
               <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Globe className="w-10 h-10 text-white" />
+                <CheckCircle className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-xl text-slate-900 mb-3">Global Trade</h3>
+              <h3 className="text-xl text-slate-900 mb-3">2. Admin Review</h3>
               <p className="text-gray-600 text-sm">
-                Flourise finance-regulate local interest
+                Platform admin verifies and approves invoices for investment pools
               </p>
             </div>
 
+            {/* Step 3 */}
             <div className="bg-white rounded-2xl p-8 text-center shadow-lg hover-lift-lg border border-gray-100 cursor-pointer group">
               <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Eye className="w-10 h-10 text-white" />
+                <Users className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-xl text-slate-900 mb-3">Real-time Tracking</h3>
+              <h3 className="text-xl text-slate-900 mb-3">3. Investor Fund</h3>
               <p className="text-gray-600 text-sm">
-                Di asset intants tersediafund secured via key efficient
+                Investors browse pools and fund invoices to earn 4% returns
               </p>
             </div>
 
+            {/* Step 4 */}
             <div className="bg-white rounded-2xl p-8 text-center shadow-lg hover-lift-lg border border-gray-100 cursor-pointer group">
               <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Lock className="w-10 h-10 text-white" />
+                <DollarSign className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-xl text-slate-900 mb-3">Seamless Integration</h3>
+              <h3 className="text-xl text-slate-900 mb-3">4. Get Funded</h3>
               <p className="text-gray-600 text-sm">
-                Fostering enterprise cloud Sea discreet
+                Exporters withdraw funds at 70% threshold, importers settle invoices
               </p>
             </div>
           </div>
@@ -345,8 +354,8 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               <div className="w-16 h-16 bg-cyan-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-cyan-200 group-hover:scale-110 transition-all duration-300">
                 <TrendingUp className="w-8 h-8 text-cyan-600 group-hover:scale-110 transition-transform duration-300" />
               </div>
-              <h3 className="text-lg text-slate-900 mb-2 group-hover:text-cyan-600 transition-colors duration-300">4-8% Returns</h3>
-              <p className="text-sm text-gray-600">Earn predictable yields for investors</p>
+              <h3 className="text-lg text-slate-900 mb-2 group-hover:text-cyan-600 transition-colors duration-300">4% Returns</h3>
+              <p className="text-sm text-gray-600">Guaranteed yields for investors on successful settlements</p>
             </div>
 
             <div className="text-center group cursor-pointer">
@@ -365,8 +374,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl text-slate-900 mb-4">
-              Trusted by Exporters Across ASEAN
+              Why Choose SEATrax?
             </h2>
+            <p className="text-xl text-gray-600">
+              Blockchain-powered platform built for modern trade finance
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -381,37 +393,37 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 </div>
               </div>
               <p className="text-gray-600">
-                "SEATrax helped us secure funding for 5 shipments last month. The process is incredibly fast and transparent."
+                "Invoice tokenization as NFTs ensures transparency and immutability. Every transaction is verifiable on-chain."
               </p>
             </div>
 
             <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 hover-lift-lg cursor-pointer group">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-cyan-400 to-cyan-500 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Users className="w-6 h-6 text-white" />
+                  <Clock className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <div className="text-slate-900">Maria Santos</div>
-                  <div className="text-sm text-gray-600">Manila Commodities</div>
+                  <div className="text-slate-900">Fast Funding</div>
+                  <div className="text-sm text-gray-600">Platform Feature</div>
                 </div>
               </div>
               <p className="text-gray-600">
-                "No more waiting 60-90 days for payment. SEATrax gave us the cash flow we needed to grow."
+                "Withdraw funds when invoices reach 70% funding threshold. No need to wait for 100% pool completion."
               </p>
             </div>
 
             <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 hover-lift-lg cursor-pointer group">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-cyan-400 to-cyan-500 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Users className="w-6 h-6 text-white" />
+                  <Shield className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <div className="text-slate-900">Nguyen Van Hai</div>
-                  <div className="text-sm text-gray-600">Vietnam Agri Export</div>
+                  <div className="text-slate-900">Secure & Transparent</div>
+                  <div className="text-sm text-gray-600">Blockchain Technology</div>
                 </div>
               </div>
               <p className="text-gray-600">
-                "As a small business, traditional banks wouldn't help us. SEATrax made financing accessible and affordable."
+                "Smart contracts automate fund distribution and profit sharing. Built on Lisk Sepolia for reliability."
               </p>
             </div>
           </div>
@@ -428,7 +440,10 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             Join hundreds of exporters and investors already using SEATrax
           </p>
           <button 
-            onClick={onGetStarted}
+            onClick={() => {
+              const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+              if (loginBtn) loginBtn.click();
+            }}
             className="px-8 py-4 bg-white text-cyan-600 rounded-lg hover:bg-gray-50 hover-scale hover-shine text-lg shadow-lg transition-all"
           >
             Get Started Now
@@ -441,37 +456,57 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             <div>
-              <h3 className="text-white mb-4">Product</h3>
+              <h3 className="text-white mb-4">Platform</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">For Exporters</a></li>
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">For Investors</a></li>
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">Pricing</a></li>
+                <li>
+                  <button 
+                    onClick={() => {
+                      const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+                      if (loginBtn) loginBtn.click();
+                    }}
+                    className="hover:text-cyan-400 transition-colors text-left"
+                  >
+                    For Exporters
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => {
+                      const loginBtn = document.querySelector('.panna-login-button button') as HTMLButtonElement | null;
+                      if (loginBtn) loginBtn.click();
+                    }}
+                    className="hover:text-cyan-400 transition-colors text-left"
+                  >
+                    For Investors
+                  </button>
+                </li>
               </ul>
             </div>
             <div>
-              <h3 className="text-white mb-4">Company</h3>
+              <h3 className="text-white mb-4">Technology</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">About Us</a></li>
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">Careers</a></li>
+                <li><a href="https://lisk.com/chain/" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Smart Contracts</a></li>
+                <li><a href="https://sepolia-blockscout.lisk.com/" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Lisk Explorer</a></li>
+                <li><a href="https://pinata.cloud" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Pinata</a></li>
+                <li><a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Supabase</a></li>
               </ul>
             </div>
             <div>
               <h3 className="text-white mb-4">Resources</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">Privacy</a></li>
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">Terms</a></li>
-                <li><a href="#" className="hover:text-cyan-400 transition-colors">Contact</a></li>
+                <li><Link href="/demo" className="hover:text-cyan-400 transition-colors">Try Demo</Link></li>
+                <li><a href="https://github.com/seatrax/apps/blob/main/README.md" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Documentation</a></li>
+                <li><a href="https://sepolia-faucet.lisk.com/" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Get Testnet ETH</a></li>
               </ul>
             </div>
             <div>
               <h3 className="text-white mb-4">Connect</h3>
               <div className="flex gap-4">
-                <a href="#" className="w-10 h-10 bg-cyan-400/10 rounded-lg flex items-center justify-center hover:bg-cyan-400/20 hover-scale transition-all">
-                  <svg className="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"/></svg>
+                <a href="https://instagram.com/seatrax.corner" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-cyan-400/10 rounded-lg flex items-center justify-center hover:bg-cyan-400/20 hover-scale transition-all" aria-label="Follow us on Instagram">
+                  <svg className="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
                 </a>
-                <a href="#" className="w-10 h-10 bg-cyan-400/10 rounded-lg flex items-center justify-center hover:bg-cyan-400/20 hover-scale transition-all">
-                  <svg className="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                <a href="https://github.com/SEATrax" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-cyan-400/10 rounded-lg flex items-center justify-center hover:bg-cyan-400/20 hover-scale transition-all" aria-label="Follow us on GitHub">
+                  <svg className="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                 </a>
               </div>
             </div>
@@ -480,11 +515,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           <div className="border-t border-gray-800 pt-8">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div>
-                <Logo variant="footer" size="sm" />
-                <div className="text-xs text-gray-500 mt-2">© 2025 SEATrax. All rights reserved.</div>
+                <Logo variant="footer" size="md" />
+                <div className="text-xs text-gray-500 mt-2">© 2026 SEATrax. All rights reserved.</div>
               </div>
               <p className="text-sm text-gray-500">
-                Developed by: Hadyan, Valerie, Agung, Humam
+                Developed by SEATrax Team
               </p>
             </div>
           </div>

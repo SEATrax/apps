@@ -14,9 +14,9 @@ interface LogoProps {
 // logo.png: 767x363 (aspect ~2.11:1)
 // icon.png: 840x848 (square)
 const sizeConfig = {
-  sm: { height: 40, width: 160, className: 'h-10' },        // 40px height - small navbar
-  md: { height: 56, width: 220, className: 'h-14' },        // 56px height - default navbar
-  lg: { height: 72, width: 283, className: 'h-[72px]' },    // 72px height - large navbar
+  sm: { height: 40, width: 160, className: 'h-10' },        // 40px height - footer (larger)
+  md: { height: 56, width: 220, className: 'h-14' },        // 56px height - navbar (smaller)
+  lg: { height: 72, width: 283, className: 'h-[72px]' },    // 72px height - large
   xl: { height: 200, width: 423, className: 'h-[200px]' },  // 200px height - hero
   '2xl': { height: 280, width: 592, className: 'h-[280px]' }, // 280px height - extra large
 };
