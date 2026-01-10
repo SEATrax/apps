@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Providers } from '@/providers';
 import { FallbackBanner } from '@/components/common/fallback-banner';
+import { DevModeToggle } from '@/components/DevModeToggle';
 import { appConfig } from '@/config';
 
 export const metadata: Metadata = {
@@ -67,6 +68,8 @@ export default function RootLayout({
             <main className="flex-1">
               {children}
             </main>
+            
+            <DevModeToggle />
           </div>
         </Providers>
       </body>

@@ -1,333 +1,453 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
+import { useRouter } from 'next/navigation';
+import { usePanna } from '@/hooks/usePanna';
 import { useAccessControl } from '@/hooks/useAccessControl';
+import { useRoleCheck } from '@/hooks/useRoleCheck';
+import { Shield, UserPlus, Copy, Check } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, User, UserCheck } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
+import { useDevMode } from '@/contexts/DevModeContext';
 import AdminHeader from '@/components/AdminHeader';
 
-export default function AdminRoleManager() {
-  const { isLoaded, isConnected, account, address } = useWalletSession();
-  const { grantAdminRole, grantExporterRole, grantInvestorRole, getUserRoles, isLoading } = useAccessControl();
+export default function RoleManagementPage() {
   const router = useRouter();
-  
+  const { isConnected, address } = usePanna();
+  const { grantAdminRole, grantExporterRole, grantInvestorRole, isLoading } = useAccessControl();
+  const { isAdmin, loading: rolesLoading } = useRoleCheck();
+  const { isDevMode, devRole } = useDevMode();
+  const { toast } = useToast();
+
   const [targetAddress, setTargetAddress] = useState('');
-  const [isGranting, setIsGranting] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [roleCheck, setRoleCheck] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
 
-  // Redirect to home if not connected (immediate redirect, no screen shown)
+  // Debug logging
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-    }
-  }, [isLoaded, isConnected, router]);
+    console.log('🔍 Admin Roles Page State:', {
+      isConnected,
+      address,
+      rolesLoading,
+      isAdmin,
+      isDevMode,
+      devRole,
+    });
+  }, [isConnected, address, rolesLoading, isAdmin, isDevMode, devRole]);
 
-  const handleGrantExporterRole = async () => {
-    if (!targetAddress.trim()) {
-      setMessage({ type: 'error', text: 'Please enter a wallet address' });
+  // Redirect ONLY if user is confirmed not admin (after loading completes)
+  useEffect(() => {
+    // DISABLED AUTO-REDIRECT - Show "Access Denied" page instead
+    // This allows users to see their wallet address and copy it
+    
+    // Don't do anything until roles are fully loaded
+    if (rolesLoading) {
+      console.log('⏳ Still loading roles, not redirecting yet');
+      return;
+    }
+
+    // If dev mode is active, allow access
+    if (isDevMode && devRole === 'admin') {
+      console.log('🔧 Dev mode active as admin, allowing access');
+      return;
+    }
+
+    // Show access denied page instead of redirecting
+    if (isConnected && !isAdmin) {
+      console.log('❌ Connected but not admin. Showing access denied page. Address:', address);
+      // Don't redirect - let the component render "Access Denied" UI
+    }
+  }, [isConnected, isAdmin, rolesLoading, router, address, isDevMode, devRole]);
+
+  const handleCopyOwnAddress = () => {
+    if (address) {
+      navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({
+        title: 'Address Copied',
+        description: 'Your wallet address has been copied to clipboard',
+      });
+    }
+  };
+
+  const handleUseSelfAddress = () => {
+    if (address) {
+      setTargetAddress(address);
+      toast({
+        title: 'Address Auto-filled',
+        description: 'Your wallet address has been filled in',
+      });
+    }
+  };
+
+  const handleGrantRole = async (role: 'admin' | 'exporter' | 'investor') => {
+    if (!targetAddress) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a wallet address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check if wallet is connected (required for blockchain transaction)
+    if (!isConnected || !address) {
+      toast({
+        title: 'Wallet Not Connected',
+        description: 'You need to connect your wallet to grant roles (blockchain transaction required)',
+        variant: 'destructive',
+      });
       return;
     }
 
     try {
-      setIsGranting(true);
-      setMessage(null);
-      
-      await grantExporterRole(targetAddress);
-      
-      setMessage({ 
-        type: 'success', 
-        text: `Successfully granted exporter role to ${targetAddress}` 
+      if (role === 'admin') {
+        await grantAdminRole(targetAddress);
+      } else if (role === 'exporter') {
+        await grantExporterRole(targetAddress);
+      } else {
+        await grantInvestorRole(targetAddress);
+      }
+
+      toast({
+        title: 'Success',
+        description: `${role.charAt(0).toUpperCase() + role.slice(1)} role granted successfully!`,
       });
-      
-      // Clear form
+
       setTargetAddress('');
-      
     } catch (error: any) {
-      setMessage({ 
-        type: 'error', 
-        text: error.message || 'Failed to grant exporter role' 
-      });
-    } finally {
-      setIsGranting(false);
-    }
-  };
-
-  const handleGrantInvestorRole = async () => {
-    if (!targetAddress.trim()) {
-      setMessage({ type: 'error', text: 'Please enter a wallet address' });
-      return;
-    }
-
-    try {
-      setIsGranting(true);
-      setMessage(null);
-      
-      await grantInvestorRole(targetAddress);
-      
-      setMessage({ 
-        type: 'success', 
-        text: `Successfully granted investor role to ${targetAddress}` 
-      });
-      
-      // Clear form
-      setTargetAddress('');
-      
-    } catch (error: any) {
-      setMessage({ 
-        type: 'error', 
-        text: error.message || 'Failed to grant investor role' 
-      });
-    } finally {
-      setIsGranting(false);
-    }
-  };
-
-  const handleGrantAdminRole = async () => {
-    if (!targetAddress.trim()) {
-      setMessage({ type: 'error', text: 'Please enter a wallet address' });
-      return;
-    }
-
-    try {
-      setIsGranting(true);
-      setMessage(null);
-      
-      await grantAdminRole(targetAddress);
-      
-      setMessage({ 
-        type: 'success', 
-        text: `Successfully granted admin role to ${targetAddress}` 
-      });
-      
-      // Clear form
-      setTargetAddress('');
-      
-    } catch (error: any) {
-      setMessage({ 
-        type: 'error', 
-        text: error.message || 'Failed to grant admin role' 
-      });
-    } finally {
-      setIsGranting(false);
-    }
-  };
-
-  const handleCheckRoles = async () => {
-    if (!targetAddress.trim()) {
-      setMessage({ type: 'error', text: 'Please enter a wallet address' });
-      return;
-    }
-
-    try {
-      const roles = await getUserRoles(targetAddress);
-      setRoleCheck({ address: targetAddress, roles });
-      setMessage(null);
-    } catch (error: any) {
-      setMessage({ 
-        type: 'error', 
-        text: error.message || 'Failed to check roles' 
+      console.error('Error granting role:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to grant role',
+        variant: 'destructive',
       });
     }
   };
 
-  // Quick grant for current connected wallet
-  const handleGrantSelfExporter = async () => {
-    if (!address) {
-      setMessage({ type: 'error', text: 'No wallet connected' });
-      return;
-    }
-
-    try {
-      setIsGranting(true);
-      await grantExporterRole(address);
-      setMessage({ 
-        type: 'success', 
-        text: `Successfully granted exporter role to your wallet: ${address}` 
-      });
-    } catch (error: any) {
-      setMessage({ 
-        type: 'error', 
-        text: error.message || 'Failed to grant exporter role' 
-      });
-    } finally {
-      setIsGranting(false);
-    }
-  };
-
-  // Show loading while wallet is initializing or redirecting
-  if (!isLoaded || !isConnected) {
+  // Show loading state
+  if (rolesLoading) {
     return (
-      <div className="min-h-screen bg-slate-950">
+      <>
         <AdminHeader />
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-            <CardHeader className="text-center">
-              <CardTitle className="text-slate-100">Loading...</CardTitle>
-              <CardDescription className="text-slate-400">
-                {!isLoaded ? 'Initializing wallet connection...' : 'Redirecting...'}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-400 mx-auto"></div>
+            <p className="mt-4 text-cyan-400">Checking permissions...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
+  // Not connected - show connect wallet UI ONLY if not in dev mode
+  if (!isConnected && !isDevMode) {
+    return (
+      <>
+        <AdminHeader />
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-8">
+            <Button
+              variant="ghost"
+              onClick={() => router.push('/')}
+              className="mb-4 text-gray-400 hover:text-white"
+            >
+              ← Back to Home
+            </Button>
+          </div>
+
+          <Card className="bg-slate-800/50 border-cyan-500/20">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <Shield className="w-16 h-16 text-cyan-400" />
+              </div>
+              <CardTitle className="text-white text-2xl">Admin Role Management</CardTitle>
+              <CardDescription>Connect your wallet to access this page</CardDescription>
+            </CardHeader>
+            <CardContent className="text-center space-y-4">
+              <p className="text-gray-400">
+                This page is restricted to administrators only. Please connect your wallet to continue.
+              </p>
+              
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+                <h4 className="text-amber-400 font-semibold mb-2">💡 Quick Access Options:</h4>
+                <ol className="text-gray-300 text-sm space-y-2 list-decimal list-inside text-left">
+                  <li>Connect your Panna wallet from the homepage</li>
+                  <li>Or enable Dev Mode (⚙️ button, bottom right) and select "Admin" role</li>
+                  <li>Then navigate back to this page</li>
+                </ol>
+              </div>
+
+              <Button
+                onClick={() => router.push('/')}
+                className="bg-cyan-600 hover:bg-cyan-700"
+              >
+                Go to Homepage to Connect
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      </>
+    );
+  }
+
+  // Connected but not admin (or dev mode but wrong role)
+  if (!isAdmin && !rolesLoading) {
+    console.log('🚫 Not admin. isAdmin:', isAdmin, 'address:', address, 'isDevMode:', isDevMode);
+    
+    return (
+      <>
+        <AdminHeader />
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-8">
+            <Button
+              variant="ghost"
+              onClick={() => router.push('/')}
+              className="mb-4 text-gray-400 hover:text-white"
+            >
+              ← Back to Home
+            </Button>
+          </div>
+
+          <Card className="bg-slate-800/50 border-red-500/20">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <Shield className="w-16 h-16 text-red-400" />
+              </div>
+              <CardTitle className="text-white text-2xl">Access Denied</CardTitle>
+              <CardDescription className="text-red-400">You are not authorized to access this page</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                <p className="text-gray-300 mb-2">
+                  <strong>Your wallet address:</strong>
+                </p>
+                <code className="block bg-slate-900 text-cyan-400 p-3 rounded font-mono text-sm break-all">
+                  {address || 'Not connected'}
+                </code>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+                <h4 className="text-amber-400 font-semibold mb-2">💡 To get admin access:</h4>
+                <ol className="text-gray-300 text-sm space-y-2 list-decimal list-inside text-left">
+                  <li>Copy your wallet address above</li>
+                  <li>Add it to <code className="bg-slate-900 px-2 py-1 rounded text-xs">ADMIN_ADDRESSES</code> in <code className="bg-slate-900 px-2 py-1 rounded text-xs">.env.local</code></li>
+                  <li>Restart the dev server: <code className="bg-slate-900 px-2 py-1 rounded text-xs">Ctrl+C</code> then <code className="bg-slate-900 px-2 py-1 rounded text-xs">npm run dev</code></li>
+                  <li>Refresh this page</li>
+                </ol>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => {
+                    if (address) {
+                      navigator.clipboard.writeText(address);
+                      toast({
+                        title: 'Address Copied',
+                        description: 'Paste it in your .env.local file',
+                      });
+                    }
+                  }}
+                  className="flex-1 bg-cyan-600 hover:bg-cyan-700"
+                  disabled={!address}
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy My Address
+                </Button>
+                <Button
+                  onClick={() => router.push('/')}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Go to Homepage
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      </>
+    );
+  }
+
+  console.log('✅ Rendering admin roles page. isAdmin:', isAdmin);
+
   return (
-    <div className="min-h-screen bg-slate-950">
+    <>
       <AdminHeader />
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">Admin Role Manager</h1>
-          <p className="text-slate-400">Grant roles to users for accessing platform features</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/admin')}
+            className="mb-4 text-gray-400 hover:text-white"
+          >
+            ← Back to Admin Dashboard
+          </Button>
+          
+          <div className="flex items-center gap-3 mb-2">
+            <Shield className="w-8 h-8 text-cyan-400" />
+            <h1 className="text-3xl font-bold text-white">Role Management</h1>
+          </div>
+          <p className="text-gray-400">Grant roles to wallet addresses for testing and development</p>
         </div>
 
-        {/* Quick Grant for Self */}
+        {/* Your Address Card */}
         {address && (
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="mb-6 bg-slate-800/50 border-cyan-500/20">
             <CardHeader>
-              <CardTitle className="text-slate-100 flex items-center gap-2">
-                <UserCheck className="w-5 h-5" />
-                Quick Grant (Your Wallet)
-              </CardTitle>
-              <CardDescription className="text-slate-400">
-                Grant exporter role to your connected wallet
-              </CardDescription>
+              <CardTitle className="text-white">Your Wallet Address</CardTitle>
+              <CardDescription>This is your current wallet address</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="text-sm text-slate-400">
-                  Your Address: <span className="font-mono text-cyan-400">{address}</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-slate-900 text-cyan-400 p-3 rounded font-mono text-sm break-all">
+                  {address}
+                </code>
                 <Button
-                  onClick={handleGrantSelfExporter}
-                  disabled={isGranting}
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  variant="outline"
+                  size="icon"
+                  onClick={handleCopyOwnAddress}
+                  className="shrink-0"
                 >
-                  {isGranting ? 'Granting...' : 'Grant Exporter Role to My Wallet'}
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Manual Role Management */}
-        <Card className="bg-slate-900 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-slate-100 flex items-center gap-2">
-              <User className="w-5 h-5" />
-              Role Management
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Grant roles to specific wallet addresses
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="address" className="text-slate-300">Wallet Address</Label>
-              <Input
-                id="address"
-                placeholder="0x..."
-                value={targetAddress}
-                onChange={(e) => setTargetAddress(e.target.value)}
-                className="bg-slate-800 border-slate-700 text-slate-100"
-              />
-            </div>
-
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                onClick={handleGrantExporterRole}
-                disabled={isGranting || !targetAddress.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {isGranting ? 'Granting...' : 'Grant Exporter Role'}
-              </Button>
-              
-              <Button
-                onClick={handleGrantInvestorRole}
-                disabled={isGranting || !targetAddress.trim()}
-                className="bg-purple-600 hover:bg-purple-700 text-white"
-              >
-                {isGranting ? 'Granting...' : 'Grant Investor Role'}
-              </Button>
-              
-              <Button
-                onClick={handleGrantAdminRole}
-                disabled={isGranting || !targetAddress.trim()}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {isGranting ? 'Granting...' : 'Grant Admin Role'}
-              </Button>
-              
-              <Button
-                onClick={handleCheckRoles}
-                disabled={!targetAddress.trim()}
-                variant="outline"
-                className="border-slate-600 text-slate-300 hover:bg-slate-800"
-              >
-                Check Roles
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Messages */}
-        {message && (
-          <Alert className={`${message.type === 'success' ? 'border-green-500 bg-green-950' : 'border-red-500 bg-red-950'}`}>
-            {message.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-            <AlertDescription className={message.type === 'success' ? 'text-green-200' : 'text-red-200'}>
-              {message.text}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Role Check Results */}
-        {roleCheck && (
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-slate-100">Role Check Results</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="text-sm text-slate-400">
-                  Address: <span className="font-mono text-cyan-400">{roleCheck.address}</span>
+        {/* Dev Mode Indicator */}
+        {isDevMode && (
+          <Card className="mb-6 bg-amber-500/10 border-amber-500/30">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-shrink-0">
+                  <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
                 </div>
-                <div className="space-y-1">
-                  <div className={`text-sm ${roleCheck.roles.hasAdminRole ? 'text-green-400' : 'text-slate-500'}`}>
-                    Admin Role: {roleCheck.roles.hasAdminRole ? '✅ Yes' : '❌ No'}
-                  </div>
-                  <div className={`text-sm ${roleCheck.roles.hasExporterRole ? 'text-green-400' : 'text-slate-500'}`}>
-                    Exporter Role: {roleCheck.roles.hasExporterRole ? '✅ Yes' : '❌ No'}
-                  </div>
-                  <div className={`text-sm ${roleCheck.roles.hasInvestorRole ? 'text-green-400' : 'text-slate-500'}`}>
-                    Investor Role: {roleCheck.roles.hasInvestorRole ? '✅ Yes' : '❌ No'}
-                  </div>
+                <div>
+                  <p className="text-amber-400 font-semibold">Dev Mode Active</p>
+                  <p className="text-amber-300/70 text-sm">
+                    You can access this page without wallet, but granting roles requires wallet connection.
+                  </p>
                 </div>
               </div>
+              {!isConnected && (
+                <div className="bg-amber-500/20 border border-amber-500/30 rounded p-3 mt-3">
+                  <p className="text-amber-200 text-sm">
+                    ⚠️ <strong>Wallet not connected</strong> - To grant roles (blockchain transaction), please connect your wallet from the homepage.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {/* Instructions */}
-        <Card className="bg-slate-900 border-slate-800">
+        {/* Grant Role Card */}
+        <Card className="bg-slate-800/50 border-cyan-500/20">
           <CardHeader>
-            <CardTitle className="text-slate-100">How to Use</CardTitle>
+            <CardTitle className="text-white flex items-center gap-2">
+              <UserPlus className="w-5 h-5" />
+              Grant Role to Address
+            </CardTitle>
+            <CardDescription>
+              Enter a wallet address and grant it a specific role. You can use your own address for testing.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="text-sm text-slate-400 space-y-2">
-            <p>1. <strong>Quick Grant:</strong> Use the quick grant button to give yourself exporter role</p>
-            <p>2. <strong>Manual Grant:</strong> Enter any wallet address to grant roles</p>
-            <p>3. <strong>Check Roles:</strong> Verify which roles a wallet address has</p>
-            <p className="text-yellow-400">⚠️ Only admin wallets can grant roles. Make sure you're connected as admin.</p>
+          <CardContent className="space-y-6">
+            {/* Address Input */}
+            <div className="space-y-2">
+              <Label htmlFor="address" className="text-white">Wallet Address</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="address"
+                  type="text"
+                  placeholder="0x..."
+                  value={targetAddress}
+                  onChange={(e) => setTargetAddress(e.target.value)}
+                  className="flex-1 bg-slate-900 border-slate-700 text-white"
+                />
+                {address && (
+                  <Button
+                    variant="outline"
+                    onClick={handleUseSelfAddress}
+                    className="shrink-0"
+                  >
+                    Use My Address
+                  </Button>
+                )}
+              </div>
+              {!address && isDevMode && (
+                <p className="text-xs text-amber-400">
+                  💡 In dev mode without wallet: Enter any address to grant roles for testing
+                </p>
+              )}
+            </div>
+
+            {/* Role Buttons */}
+            <div className="space-y-3">
+              <Label className="text-white">Select Role to Grant</Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Button
+                  onClick={() => handleGrantRole('admin')}
+                  disabled={isLoading || !targetAddress}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Grant Admin
+                </Button>
+                
+                <Button
+                  onClick={() => handleGrantRole('exporter')}
+                  disabled={isLoading || !targetAddress}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Grant Exporter
+                </Button>
+                
+                <Button
+                  onClick={() => handleGrantRole('investor')}
+                  disabled={isLoading || !targetAddress}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Grant Investor
+                </Button>
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-4">
+              <h4 className="text-cyan-400 font-semibold mb-2">💡 Testing Guide</h4>
+              <ol className="text-gray-300 text-sm space-y-1 list-decimal list-inside">
+                <li>Connect your wallet from homepage (required for blockchain transactions)</li>
+                <li>Enter target address or click &quot;Use My Address&quot;</li>
+                <li>Click the role button you want to grant (Admin, Exporter, or Investor)</li>
+                <li>Confirm transaction in your wallet</li>
+                <li>Navigate to the respective dashboard to test the role</li>
+              </ol>
+              
+              {!isConnected && (
+                <div className="mt-3 pt-3 border-t border-cyan-500/20">
+                  <p className="text-amber-400 text-sm">
+                    <strong>Note:</strong> You&apos;re viewing this page in dev mode. To grant roles, you must connect your wallet first.
+                  </p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
     </div>
+    </>
   );
 }

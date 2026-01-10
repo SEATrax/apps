@@ -12,19 +12,23 @@ export default function AdminHeader() {
   const { isLoaded, isConnected, account, wasConnected } = useWalletSession();
   const router = useRouter();
 
+  // DISABLED AUTO-REDIRECT - Allow pages to handle their own redirect logic
   // Immediate logout detection - if was connected but now disconnected
   useEffect(() => {
     if (isLoaded && wasConnected && !isConnected) {
-      router.push('/');
+      // Only redirect on actual logout, not on page access
+      console.log('🔓 Logout detected in AdminHeader');
+      // router.push('/'); // Disabled - let pages handle this
     }
   }, [isLoaded, wasConnected, isConnected, router]);
 
-  // Fallback redirect for users who never connected and try to access admin pages
-  useEffect(() => {
-    if (isLoaded && !isConnected && !wasConnected) {
-      router.push('/');
-    }
-  }, [isLoaded, isConnected, wasConnected, router]);
+  // Fallback redirect for users who never connected - DISABLED
+  // Each page should handle access control independently
+  // useEffect(() => {
+  //   if (isLoaded && !isConnected && !wasConnected) {
+  //     router.push('/');
+  //   }
+  // }, [isLoaded, isConnected, wasConnected, router]);
 
   return (
     <div className="sticky top-0 z-50 bg-slate-950 border-b border-slate-800 backdrop-blur-md bg-slate-950/95">

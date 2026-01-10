@@ -142,6 +142,13 @@ export default function AdminDashboard() {
       color: 'bg-purple-500',
     },
     {
+      title: 'Manage Roles',
+      description: 'Grant roles to wallet addresses for testing',
+      icon: Shield,
+      href: '/admin/roles',
+      color: 'bg-amber-500',
+    },
+    {
       title: 'Manage Payments',
       description: 'Track invoice payments and confirmations',
       icon: CreditCard,

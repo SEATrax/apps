@@ -276,6 +276,29 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### Testing with Multiple Roles
+
+Since Panna SDK uses Account Abstraction and generates new addresses, we've implemented **3 solutions** for testing different roles:
+
+#### 1. Console Logging
+- Open browser DevTools (F12)
+- Connect wallet - your Panna address will be logged
+- Copy address to `.env.local` ADMIN_ADDRESSES
+
+#### 2. Admin Self-Service Panel (Recommended)
+- Navigate to `/admin/roles`
+- Click "Use My Address" 
+- Grant yourself any role (Admin, Exporter, Investor)
+- No need to restart server
+
+#### 3. Development Mode (Fastest)
+- Click ⚙️ Settings button (bottom right)
+- Toggle Dev Mode ON
+- Select any role instantly
+- Perfect for rapid testing
+
+**See [TESTING_GUIDE.md](./TESTING_GUIDE.md) for detailed instructions.**
+
 ### First Time Setup Tutorial
 
 #### For Exporters:

@@ -36,6 +36,14 @@ export function usePanna() {
     }
   }, []);
 
+  // Log Panna generated address for easy copying to .env
+  useEffect(() => {
+    if (activeAccount?.address) {
+      console.log('🔑 Panna Wallet Address:', activeAccount.address);
+      console.log('📋 Copy this to .env.local for admin/role testing');
+    }
+  }, [activeAccount?.address]);
+
   // Use mock user if available, otherwise use real wallet
   const isConnected = !!activeAccount || !!mockUser;
   const address = activeAccount?.address || mockUser?.address;
