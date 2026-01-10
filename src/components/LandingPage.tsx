@@ -487,6 +487,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
               <ul className="space-y-2 text-sm">
                 <li><a href="https://lisk.com/chain/" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Smart Contracts</a></li>
                 <li><a href="https://sepolia-blockscout.lisk.com/" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Lisk Explorer</a></li>
+                <li><a href="https://nextjs.org/" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Next.js</a></li>
                 <li><a href="https://github.com/LiskHQ/panna-sdk" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Panna SDK</a></li>
                 <li><a href="https://pinata.cloud" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Pinata</a></li>
                 <li><a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">Supabase</a></li>
