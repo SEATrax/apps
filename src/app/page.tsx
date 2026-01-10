@@ -17,6 +17,13 @@ export default function HomePage() {
   const { profile: exporterProfile, loading: exporterLoading } = useExporterProfile();
   const { profile: investorProfile, loading: investorLoading } = useInvestorProfile();
 
+  // Reset role selection when user disconnects
+  useEffect(() => {
+    if (!isConnected) {
+      setShowRoleSelection(false);
+    }
+  }, [isConnected]);
+
   // Auto-redirect authenticated users with existing profiles
   useEffect(() => {
     if (!isConnected || exporterLoading || investorLoading) {
