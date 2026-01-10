@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect } from 'react';
 import { PannaProvider } from 'panna-sdk';
-import { ToastProvider } from '@/components/ui';
+import { ToastProvider } from '@/hooks/use-toast';
 import { appConfig } from '@/config';
 
 interface ProvidersProps {
