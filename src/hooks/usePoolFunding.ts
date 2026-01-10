@@ -110,7 +110,7 @@ export function usePoolFunding(): UsePoolFundingReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const contractAddress = appConfig.contracts.poolFundingManager;
+  const contractAddress = appConfig.legacyContracts.poolFundingManager;
 
   // Helper to handle contract calls
   const handleContractCall = useCallback(async <T>(

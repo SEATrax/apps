@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Upload, Check, HelpCircle } from 'lucide-react';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { useActiveAccount } from 'panna-sdk';
 import { toast } from 'sonner';
 

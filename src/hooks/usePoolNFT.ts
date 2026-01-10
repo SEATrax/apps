@@ -95,7 +95,7 @@ export function usePoolNFT(): UsePoolNFTReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const contractAddress = appConfig.contracts.poolNFT;
+  const contractAddress = appConfig.legacyContracts.poolNFT;
 
   // Helper to handle contract calls
   const handleContractCall = useCallback(async <T>(

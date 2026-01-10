@@ -19,19 +19,31 @@ import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Inv
 import { ethers } from 'ethers';
 import { appConfig } from '@/config';
 
+// Extend Window interface for ethereum
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 export function useSEATrax() {
-  const { address, signer } = usePanna();
+  const { address, account, client } = usePanna();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // ============== CONTRACT INSTANCE ==============
   
-  const getContract = useCallback(() => {
-    if (!signer) {
+  const getContract = useCallback(async () => {
+    if (!account) {
       throw new Error('Wallet not connected');
     }
+    
+    // Get provider from account
+    const provider = new ethers.BrowserProvider(window.ethereum as any);
+    const signer = await provider.getSigner();
+    
     return new ethers.Contract(CONTRACT_ADDRESS, SEATRAX_ABI, signer);
-  }, [signer]);
+  }, [account]);
 
   const getReadOnlyContract = useCallback(() => {
     const provider = new ethers.JsonRpcProvider(appConfig.chain.rpcUrl);
@@ -49,7 +61,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.registerExporter();
       await tx.wait();
       
@@ -72,7 +84,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.registerInvestor();
       await tx.wait();
       
@@ -106,7 +118,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.createInvoice(
         exporterCompany,
         importerCompany,
@@ -131,7 +143,9 @@ export function useSEATrax() {
       let invoiceId = null;
       if (event) {
         const parsed = contract.interface.parseLog(event);
-        invoiceId = parsed.args.invoiceId;
+        if (parsed) {
+          invoiceId = parsed.args.invoiceId;
+        }
       }
       
       return { success: true, txHash: tx.hash, invoiceId };
@@ -154,7 +168,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.withdrawFunds(invoiceId);
       await tx.wait();
       
@@ -230,7 +244,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.createPool(name, invoiceIds, startDate, endDate);
       const receipt = await tx.wait();
       
@@ -247,7 +261,9 @@ export function useSEATrax() {
       let poolId = null;
       if (event) {
         const parsed = contract.interface.parseLog(event);
-        poolId = parsed.args.poolId;
+        if (parsed) {
+          poolId = parsed.args.poolId;
+        }
       }
       
       return { success: true, txHash: tx.hash, poolId };
@@ -360,7 +376,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.invest(poolId, { value: amount });
       await tx.wait();
       
@@ -383,7 +399,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.claimReturns(poolId);
       await tx.wait();
       
@@ -437,7 +453,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.verifyExporter(exporter);
       await tx.wait();
       
@@ -461,7 +477,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.approveInvoice(invoiceId);
       await tx.wait();
       
@@ -483,7 +499,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.rejectInvoice(invoiceId);
       await tx.wait();
       
@@ -507,7 +523,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.markInvoicePaid(invoiceId);
       await tx.wait();
       
@@ -531,7 +547,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.distributeProfits(poolId);
       await tx.wait();
       
@@ -554,7 +570,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.distributeToInvoice(poolId, invoiceId, amount);
       await tx.wait();
       
@@ -577,7 +593,7 @@ export function useSEATrax() {
       setIsLoading(true);
       setError(null);
       
-      const contract = getContract();
+      const contract = await getContract();
       const tx = await contract.grantRole(ROLES.ADMIN, account);
       await tx.wait();
       

@@ -116,7 +116,7 @@ export function usePlatformAnalytics(): UsePlatformAnalyticsReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const contractAddress = appConfig.contracts.platformAnalytics;
+  const contractAddress = appConfig.legacyContracts.platformAnalytics;
 
   // Helper to handle contract calls
   const handleContractCall = useCallback(async <T>(

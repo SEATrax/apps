@@ -150,7 +150,7 @@ export function useInvoiceNFT(): UseInvoiceNFTReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const contractAddress = appConfig.contracts.invoiceNFT;
+  const contractAddress = appConfig.legacyContracts.invoiceNFT;
 
   // Helper to handle contract calls
   const handleContractCall = useCallback(async <T>(

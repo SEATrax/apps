@@ -58,7 +58,7 @@ export function usePaymentOracle(): UsePaymentOracleReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const contractAddress = appConfig.contracts.paymentOracle;
+  const contractAddress = appConfig.legacyContracts.paymentOracle;
 
   // Helper to handle contract calls
   const handleContractCall = useCallback(async <T>(

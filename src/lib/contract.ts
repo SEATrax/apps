@@ -7,10 +7,10 @@ import SEATRAX_ABI_JSON from './seatrax-abi.json';
 export const SEATRAX_CONTRACT = {
   address: appConfig.contracts.seatrax.address,
   abi: SEATRAX_ABI_JSON,
-} as const;
+};
 
 // Export ABI separately for convenience
-export const SEATRAX_ABI = SEATRAX_ABI_JSON as const;
+export const SEATRAX_ABI = SEATRAX_ABI_JSON;
 
 // ============== CONTRACT ADDRESS ==============
 export const CONTRACT_ADDRESS = appConfig.contracts.seatrax.address;

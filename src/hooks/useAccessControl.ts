@@ -87,7 +87,7 @@ export function useAccessControl(): UseAccessControlReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const contractAddress = appConfig.contracts.accessControl;
+  const contractAddress = appConfig.legacyContracts.accessControl;
 
   // Helper to handle contract calls
   const handleContractCall = useCallback(async <T>(
