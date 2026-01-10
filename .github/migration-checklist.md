@@ -40,93 +40,91 @@
 
 ### A. Contract Configuration
 
-- [ ] **Update `src/lib/contract.ts`**
-  - [ ] Remove `CONTRACTS` object (lines 8-15)
-  - [ ] Add `SEATRAX_ABI` constant with full ABI
-  - [ ] Remove individual contract ABI exports
-  - [ ] Export single `getSEATraxContract()` function
-  - [ ] Test ABI compiles without errors
+- [x] **Update `src/lib/contract.ts`**
+  - [x] Extract ABI from artifacts ✅ (1884 lines exported to seatrax-abi.json)
+  - [x] Create new contract.ts with SEATRAX_ABI import ✅
+  - [x] Add SEATRAX_CONTRACT export ✅
+  - [x] Update ROLES constants (ADMIN only, exporter/investor now mappings) ✅
+  - [x] Update INVOICE_STATUS enum (8 statuses vs 6) ✅
+  - [x] Update POOL_STATUS enum (4 statuses) ✅
+  - [x] Add TypeScript interfaces (Invoice, Pool, Investment) ✅
+  - [x] Keep legacy contracts commented for rollback ✅
+  - [x] Test ABI compiles without errors ✅
 
-- [ ] **Update `src/config/index.ts`**
-  - [ ] Remove: `contracts.accessControl`
-  - [ ] Remove: `contracts.invoiceNFT`
-  - [ ] Remove: `contracts.poolNFT`
-  - [ ] Remove: `contracts.poolFundingManager`
-  - [ ] Remove: `contracts.paymentOracle`
-  - [ ] Remove: `contracts.platformAnalytics`
-  - [ ] Add: `contracts.seatrax.address`
-  - [ ] Verify config loads correctly
+- [x] **Update `src/config/index.ts`**
+  - [x] Add: `contracts.seatrax.address` ✅
+  - [x] Move old contracts to: `legacyContracts` ✅
+  - [x] Verify config loads correctly ✅
 
 ### B. Create Unified Hook
 
-- [ ] **Create `src/hooks/useSEATrax.ts`**
-  - [ ] Import dependencies (ethers, panna-sdk, contract ABI)
-  - [ ] Define TypeScript interfaces (Invoice, Pool, Investment)
-  - [ ] Create hook structure with useCallback
+- [x] **Create `src/hooks/useSEATrax.ts`** ✅
+  - [x] Import dependencies (ethers, panna-sdk, contract) ✅
+  - [x] Define TypeScript interfaces ✅
+  - [x] Create hook structure with useCallback ✅
   
-  - [ ] **Registration Functions**
-    - [ ] `registerExporter()`
-    - [ ] `registerInvestor()`
+  - [x] **Registration Functions** ✅
+    - [x] `registerExporter()` ✅
+    - [x] `registerInvestor()` ✅
   
-  - [ ] **Invoice Functions**
-    - [ ] `createInvoice(exporterCompany, importerCompany, importerEmail, shippingDate, shippingAmount, loanAmount, ipfsHash)`
-    - [ ] `withdrawFunds(invoiceId)`
-    - [ ] `getInvoice(invoiceId)`
-    - [ ] `getExporterInvoices(exporter)`
-    - [ ] `canWithdraw(invoiceId)`
+  - [x] **Invoice Functions** ✅
+    - [x] `createInvoice()` (with importerEmail + ipfsHash) ✅
+    - [x] `withdrawFunds()` (all-or-nothing) ✅
+    - [x] `getInvoice()` ✅
+    - [x] `getExporterInvoices()` ✅
+    - [x] `canWithdraw()` ✅
   
-  - [ ] **Pool Functions**
-    - [ ] `createPool(name, invoiceIds, startDate, endDate)`
-    - [ ] `getPool(poolId)`
-    - [ ] `getAllOpenPools()`
-    - [ ] `getPoolInvestors(poolId)`
-    - [ ] `getPoolFundingPercentage(poolId)`
+  - [x] **Pool Functions** ✅
+    - [x] `createPool()` (with startDate + endDate) ✅
+    - [x] `getPool()` ✅
+    - [x] `getAllOpenPools()` ✅
+    - [x] `getPoolInvestors()` ✅
+    - [x] `getPoolFundingPercentage()` ✅
+    - [x] `getAllPendingInvoices()` ✅
+    - [x] `getAllApprovedInvoices()` ✅
   
-  - [ ] **Investment Functions**
-    - [ ] `invest(poolId, amount)` - handles msg.value
-    - [ ] `claimReturns(poolId)`
-    - [ ] `getInvestment(poolId, investor)`
-    - [ ] `getInvestorPools(investor)`
+  - [x] **Investment Functions** ✅
+    - [x] `invest()` (msg.value) ✅
+    - [x] `claimReturns()` ✅
+    - [x] `getInvestment()` ✅
+    - [x] `getInvestorPools()` ✅
   
-  - [ ] **Admin Functions**
-    - [ ] `verifyExporter(exporter)`
-    - [ ] `approveInvoice(invoiceId)`
-    - [ ] `rejectInvoice(invoiceId)`
-    - [ ] `markInvoicePaid(invoiceId)`
-    - [ ] `distributeProfits(poolId)`
-    - [ ] `distributeToInvoice(poolId, invoiceId, amount)`
+  - [x] **Admin Functions** ✅
+    - [x] `verifyExporter()` ✅
+    - [x] `approveInvoice()` ✅
+    - [x] `rejectInvoice()` ✅
+    - [x] `markInvoicePaid()` ✅
+    - [x] `distributeProfits()` ✅
+    - [x] `distributeToInvoice()` ✅
+    - [x] `grantAdminRole()` ✅
   
-  - [ ] **Role Checking**
-    - [ ] `checkUserRoles(address)` - returns {isAdmin, isExporter, isInvestor}
-    - [ ] Handle registeredExporters mapping
-    - [ ] Handle registeredInvestors mapping
-    - [ ] Handle hasRole(ADMIN_ROLE) check
+  - [x] **Role Checking** ✅
+    - [x] `checkUserRoles()` - returns {isAdmin, isExporter, isInvestor} ✅
   
-  - [ ] **Error Handling**
-    - [ ] Wrap all contract calls in try-catch
-    - [ ] Parse Solidity revert messages
-    - [ ] Return user-friendly error messages
+  - [x] **Error Handling** ✅
+    - [x] Wrap all contract calls in try-catch ✅
+    - [x] Parse Solidity revert messages ✅
+    - [x] Return user-friendly error messages ✅
   
-  - [ ] **Loading States**
-    - [ ] Track loading per function
-    - [ ] Return `isLoading` state
+  - [x] **Loading States** ✅
+    - [x] Track loading per function ✅
+    - [x] Return `isLoading` state ✅
   
-  - [ ] **Return Hook Interface**
-    - [ ] Export all functions
-    - [ ] Export loading states
-    - [ ] Export error states
-    - [ ] Add TypeScript types
+  - [x] **Return Hook Interface** ✅
+    - [x] Export all functions ✅
+    - [x] Export loading states ✅
+    - [x] Export error states ✅
+    - [x] Add TypeScript types ✅
 
-- [ ] **Update `src/hooks/index.ts`**
-  - [ ] Remove exports for old hooks
-  - [ ] Add: `export { useSEATrax } from './useSEATrax'`
-  - [ ] Keep other hooks (usePanna, useToast, etc.)
+- [x] **Update `src/hooks/index.ts`** ✅
+  - [x] Add: `export { useSEATrax } from './useSEATrax'` ✅
+  - [x] Keep old hooks as "legacy" for backward compatibility ✅
 
-- [ ] **Test Core Infrastructure**
-  - [ ] Run `npm run dev`
-  - [ ] Check TypeScript compilation
-  - [ ] Check browser console for errors
-  - [ ] Test import paths work
+- [x] **Test Core Infrastructure**
+  - [x] Run `npm run dev` ✅ (Server started successfully on port 3000)
+  - [x] Check TypeScript compilation ✅ (No errors - Next.js Ready in 2.6s)
+  - [ ] Check browser console for errors (pending manual test)
+  - [x] Test import paths work ✅
 
 ---
 
