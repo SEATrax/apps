@@ -2,12 +2,9 @@
 
 > 🌊 **Shipping Excellence Across Borders** - Blockchain-based trade finance platform connecting exporters, investors, and administrators
 
-[![Production Ready](https://img.shields.io/badge/status-production%20ready-success)](https://github.com/seatrax/apps)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
 [![Lisk Sepolia](https://img.shields.io/badge/Blockchain-Lisk%20Sepolia-purple)](https://sepolia.lisk.com/)
-
-**📍 Current Status**: 🎉 **100% Complete - Production Ready** 🚀
 
 ---
 
@@ -29,7 +26,7 @@
 
 ## 🌊 Overview
 
-SEATrax is a **production-ready blockchain platform** that revolutionizes trade finance by tokenizing shipping invoices as NFTs and enabling decentralized funding through investor pools. The platform provides a secure, transparent, and efficient way for exporters to access immediate liquidity while offering investors attractive returns on trade finance investments.
+SEATrax is a **blockchain platform** that revolutionizes trade finance by tokenizing shipping invoices as NFTs and enabling decentralized funding through investor pools. The platform provides a secure, transparent, and efficient way for exporters to access immediate liquidity while offering investors attractive returns on trade finance investments.
 
 ### How It Works
 
@@ -89,13 +86,14 @@ SEATrax is a **production-ready blockchain platform** that revolutionizes trade 
 - **Network**: [Lisk Sepolia Testnet](https://sepolia.lisk.com/)
 - **Wallet Integration**: [Panna SDK](https://panna.io/)
 - **Smart Contract Interaction**: [Thirdweb SDK](https://thirdweb.com/)
-- **Smart Contracts**: [6 specialized contracts](https://github.com/seatrax/smart-contract)
-  - AccessControl (Role management)
-  - InvoiceNFT (Invoice tokenization)
-  - PoolNFT (Pool tokenization)
-  - PoolFundingManager (Investment & distribution)
-  - PaymentOracle (Payment verification)
-  - PlatformAnalytics (Metrics & reporting)
+- **Smart Contracts**: 6 specialized contracts
+  - **Repository**: [github.com/SEATrax/smart-contract](https://github.com/SEATrax/smart-contract)
+  - **AccessControl**: [0x6dA6C2...7bA2F](https://sepolia-blockscout.lisk.com/address/0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F)
+  - **InvoiceNFT**: [0x8Da2dF...d69E16](https://sepolia-blockscout.lisk.com/address/0x8Da2dF6050158ae8B058b90B37851323eFd69E16)
+  - **PoolNFT**: [0x317Ce2...0775ad](https://sepolia-blockscout.lisk.com/address/0x317Ce254731655E19932b9EFEAf7eeA31F0775ad)
+  - **PoolFundingManager**: [0xbD5f29...9ff45C](https://sepolia-blockscout.lisk.com/address/0xbD5f292F75D22996E7A4DD277083c75aB29ff45C)
+  - **PaymentOracle**: [0x789472...659296a8](https://sepolia-blockscout.lisk.com/address/0x7894728174E53Df9Fec402De07d80652659296a8)
+  - **PlatformAnalytics**: [0xb77C5C...ED987A9](https://sepolia-blockscout.lisk.com/address/0xb77C5C42b93ec46A323137B64586F0F8dED987A9)
 
 ### Backend & Storage
 - **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
@@ -106,7 +104,7 @@ SEATrax is a **production-ready blockchain platform** that revolutionizes trade 
 - **Package Manager**: npm
 - **Linting**: ESLint
 - **Type Checking**: TypeScript Compiler
-- **Build Tool**: Next.js Webpack
+- **Build Tool**: Next.js
 
 ---
 
@@ -406,14 +404,6 @@ apps/
 ├── tailwind.config.ts            # Tailwind config
 └── tsconfig.json                 # TypeScript config
 ```
-
-### Key Statistics
-- **Total Pages**: 35 (27 static, 8 dynamic)
-- **Components**: 50+ reusable components
-- **Custom Hooks**: 10+ for blockchain interactions
-- **Smart Contracts**: 6 (external repository)
-- **Build Time**: ~15-20 seconds
-- **TypeScript Errors**: 0
 
 ---
 
@@ -839,45 +829,7 @@ npm run start
 
 ---
 
-## 🤝 Contributing
 
-### Development Guidelines
-
-1. **Fork the Repository**
-2. **Create Feature Branch**: `git checkout -b feature/amazing-feature`
-3. **Follow Code Style**: Use existing patterns and TypeScript
-4. **Test Thoroughly**: Manual testing of all affected flows
-5. **Update Documentation**: Update README and relevant docs
-6. **Commit Changes**: `git commit -m 'Add amazing feature'`
-7. **Push to Branch**: `git push origin feature/amazing-feature`
-8. **Open Pull Request**: Describe changes and impact
-
-### Code Style Guidelines
-
-- **TypeScript**: Use strict type checking
-- **Components**: Functional components with hooks
-- **Naming**: PascalCase for components, camelCase for functions
-- **Imports**: Absolute imports using `@/` alias
-- **Formatting**: Follow existing patterns (Prettier compatible)
-- **Comments**: Document complex logic and business rules
-
-### Commit Message Format
-```
-type(scope): subject
-
-body (optional)
-
-footer (optional)
-```
-
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
-
-Examples:
-- `feat(exporter): add invoice filtering by status`
-- `fix(investor): correct pool funding calculation`
-- `docs(readme): update environment setup instructions`
-
----
 
 ## 📄 License
 
@@ -903,18 +855,12 @@ Smart contract development and deployment managed separately at:
 
 ---
 
-## 📞 Support & Contact
-
-### Getting Help
-
-- **Documentation**: Check `.github/` folder for detailed docs
-- **Issues**: Report bugs via GitHub Issues
-- **Smart Contracts**: See [smart-contract repository](https://github.com/seatrax/smart-contract)
+## 📞 Resources
 
 ### Project Links
 
-- **Frontend Repository**: [https://github.com/seatrax/apps](https://github.com/seatrax/apps)
-- **Smart Contracts**: [https://github.com/seatrax/smart-contract](https://github.com/seatrax/smart-contract)
+- **Frontend Repository**: [https://github.com/SEATrax/apps](https://github.com/SEATrax/apps)
+- **Smart Contracts**: [https://github.com/SEATrax/smart-contract](https://github.com/SEATrax/smart-contract)
 - **Lisk Sepolia Explorer**: [https://sepolia-blockscout.lisk.com/](https://sepolia-blockscout.lisk.com/)
 - **Lisk Faucet**: [https://sepolia-faucet.lisk.com/](https://sepolia-faucet.lisk.com/)
 
@@ -926,77 +872,11 @@ Smart contract development and deployment managed separately at:
 
 🌊 **Shipping Excellence Across Borders** ⚓️
 
-[![Production Ready](https://img.shields.io/badge/status-production%20ready-success)](https://github.com/seatrax/apps)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
 [![Lisk](https://img.shields.io/badge/Blockchain-Lisk%20Sepolia-purple)](https://lisk.com/)
 
 </div>
-- Mark invoices as paid
-- Distribute profits (4% investor, 1% platform)
-
-### Exporter
-- Register and get verified
-- Submit shipping invoices with documents (IPFS)
-- Track funding progress
-- Withdraw funds at ≥70% funding
-- Receive payment link for importer
-
-### Investor
-- Register as investor
-- Browse curated pools
-- Invest ETH in pools
-- Track investments and returns
-- Claim returns (principal + 4% yield)
-
-## 🏗️ Architecture
-
-### Smart Contract Features
-- **ERC-721**: Invoice NFTs with metadata
-- **Access Control**: Role-based permissions
-- **ReentrancyGuard**: Protection against reentrancy attacks
-- **Auto-Distribution**: Automatic fund distribution at 100% funding
-- **Profit Calculation**: Precise percentage-based distribution
-
-### Business Logic
-1. Exporter creates invoice → PENDING
-2. Admin approves → APPROVED
-3. Admin creates pool with approved invoices → IN_POOL
-4. Investors invest ETH → tracking percentages
-5. At ≥70%: Admin can distribute to invoices → FUNDED
-6. Exporter withdraws funds → WITHDRAWN
-7. Importer pays → PAID
-8. Admin distributes profits → COMPLETED
-
-### Key Thresholds
-- **70% Funding**: Minimum for exporter withdrawal
-- **100% Funding**: Triggers auto-distribution
-- **4% Investor Yield**: Fixed return for investors
-- **1% Platform Fee**: Platform revenue
-
-## 📚 Documentation
-
-- [QUICKSTART.md](./QUICKSTART.md) - Quick start guide
-- [PHASE1_COMPLETE.md](./PHASE1_COMPLETE.md) - Phase 1 detailed documentation
-- [contracts/README.md](./contracts/README.md) - Smart contract documentation
-- [PROMPTS.md](./.github/PROMPTS.md) - Development prompts for each phase
-- [copilot-instructions.md](./.github/copilot-instructions.md) - Project overview & specs
-
-## 🔗 Resources
-
-- **Lisk Sepolia Faucet**: https://sepolia-faucet.lisk.com/
-- **BlockScout Explorer**: https://sepolia-blockscout.lisk.com
-- **Lisk Documentation**: https://docs.lisk.com
-- **Hardhat Documentation**: https://hardhat.org/docs
-- **OpenZeppelin Contracts**: https://docs.openzeppelin.com/contracts
-
-## 🤝 Contributing
-
-This is an MVP project. For contributions:
-1. Check current phase in README
-2. Review PROMPTS.md for task descriptions
-3. Follow existing code patterns
-4. Test thoroughly before PR
 
 ## 📄 License
 
