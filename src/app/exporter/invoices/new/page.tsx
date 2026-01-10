@@ -207,7 +207,6 @@ export default function CreateInvoice() {
     
     // Import compensation utilities
     const { compensationService, checkSystemHealth } = await import('@/lib/compensation');
-    const  { TransactionState, MetadataSyncPayload, PaymentLinkPayload } = await import('@/lib/compensation');
     
     // Initialize transaction state for tracking
     const state = {
@@ -261,7 +260,7 @@ export default function CreateInvoice() {
       
       // Prepare metadata payload
       const metadataPayload = {
-        exporter_wallet: activeAccount.address!,
+        exporter_wallet: activeAccount?.address || '',
         invoice_number: formData.invoiceNumber,
         goods_description: formData.goodsDescription,
         importer_name: formData.importerCompany,

@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Ship, Wallet, Copy, ChevronDown, LogOut, User, ExternalLink } from 'lucide-react';
+import { Wallet, Copy, ChevronDown, LogOut, User, ExternalLink } from 'lucide-react';
 import { useActiveAccount, LoginButton, liskSepolia } from 'panna-sdk';
 import { appConfig } from '@/config';
 import { formatAddress } from '@/lib/utils';
 import AddInvestment from '@/components/AddInvestment';
 import Link from 'next/link';
+import { Logo } from '@/components/common/Logo';
 
 export default function PoolsPage() {
   const activeAccount = useActiveAccount();
@@ -27,12 +28,7 @@ export default function PoolsPage() {
         <header className="bg-[#0f172a] border-b border-cyan-500/20 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex justify-between items-center">
-              <Link href="/" className="flex items-center gap-3 hover-scale cursor-pointer">
-                <div className="w-10 h-10 bg-cyan-400 rounded-lg flex items-center justify-center hover-glow">
-                  <Ship className="w-6 h-6 text-slate-900" />
-                </div>
-                <span className="text-xl text-white font-bold tracking-tight">SeaTrax</span>
-              </Link>
+              <Logo variant="navbar" size="md" href="/" className="hover-scale hover-glow cursor-pointer" />
               
               <div className="flex items-center gap-3">
                 {pannaConfigured && (
@@ -94,12 +90,7 @@ export default function PoolsPage() {
       <header className="bg-[#0f172a] border-b border-cyan-500/20 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
-            <Link href="/" className="flex items-center gap-3 hover-scale cursor-pointer">
-              <div className="w-10 h-10 bg-cyan-400 rounded-lg flex items-center justify-center hover-glow">
-                <Ship className="w-6 h-6 text-slate-900" />
-              </div>
-              <span className="text-xl text-white font-bold tracking-tight">SeaTrax</span>
-            </Link>
+            <Logo variant="navbar" size="md" href="/" className="hover-scale hover-glow cursor-pointer" />
             
             <nav className="hidden md:flex items-center gap-8">
               <Link href="/dashboard" className="text-gray-300 hover:text-cyan-400 hover-color relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-cyan-400 after:transition-all after:duration-300 hover:after:w-full">Dashboard</Link>
@@ -203,12 +194,7 @@ export default function PoolsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8">
             <div className="md:col-span-2">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 bg-cyan-400 rounded-lg flex items-center justify-center">
-                  <Ship className="w-5 h-5 text-slate-900" />
-                </div>
-                <span className="text-white font-bold text-lg">SeaTrax</span>
-              </div>
+              <Logo variant="footer" size="sm" className="mb-4" />
               <p className="text-gray-400 max-w-md">
                 Empowering global trade through blockchain-based invoice funding. 
                 Connect exporters with investors for secure, transparent financing.

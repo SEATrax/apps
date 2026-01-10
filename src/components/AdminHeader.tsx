@@ -6,6 +6,7 @@ import { Building2, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { Logo } from '@/components/common/Logo';
 
 export default function AdminHeader() {
   const { isLoaded, isConnected, account, wasConnected } = useWalletSession();
@@ -32,10 +33,7 @@ export default function AdminHeader() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-teal-400 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">S</span>
-              </div>
-              <span className="text-xl font-bold text-white">SEATrax</span>
+              <Logo variant="navbar" size="sm" />
               <div className="ml-2 px-2 py-1 bg-red-600 text-white text-xs rounded">
                 ADMIN
               </div>

@@ -1,7 +1,8 @@
-import { ArrowLeft, Ship, Wallet, LogOut } from 'lucide-react';
+import { ArrowLeft, Wallet, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount, LoginButton, liskSepolia } from 'panna-sdk';
 import { formatAddress } from '@/lib/utils';
+import { Logo } from '@/components/common/Logo';
 
 interface OnboardingHeaderProps {
   role: 'exporter' | 'investor';
@@ -52,14 +53,7 @@ export default function OnboardingHeader({
                 <span className="hidden sm:inline">Back</span>
               </button>
               
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-cyan-400 rounded-lg flex items-center justify-center">
-                  <Ship className="w-5 h-5 text-slate-900" />
-                </div>
-                <span className="text-lg text-white font-bold tracking-tight hidden sm:inline">
-                  SeaTrax
-                </span>
-              </div>
+              <Logo variant="navbar" size="sm" />
             </div>
 
             {/* Center - Progress info */}

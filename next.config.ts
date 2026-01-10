@@ -4,6 +4,22 @@ const nextConfig: NextConfig = {
   // Force webpack usage instead of turbopack to avoid compatibility issues
   // Use --webpack flag in build command instead of experimental config
   
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'green-useful-eagle-967.mypinata.cloud',
+      },
+    ],
+    formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 60,
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+  },
+  
   webpack: (config, { isServer }) => {
     // Exclude test files and problematic modules from bundling
     config.resolve = {

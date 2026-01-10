@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { DollarSign, FileText, Clock, TrendingUp, Plus, Download, Eye, Bell, User, Settings, LogOut, Menu, Home, Upload, Folder, Ship, CheckCircle, Circle } from 'lucide-react';
+import { DollarSign, FileText, Clock, TrendingUp, Plus, Download, Eye, Bell, User, Settings, LogOut, Menu, Home, Upload, Folder, CheckCircle, Circle } from 'lucide-react';
+import { Logo } from '@/components/common/Logo';
 
 interface ExporterDashboardProps {
   onCreateInvoice: () => void;
@@ -93,15 +94,8 @@ export default function ExporterDashboard({ onCreateInvoice, onWithdraw }: Expor
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}>
           <div className="p-6 border-b border-cyan-500/20">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-teal-400 rounded-lg flex items-center justify-center hover-glow">
-                <Ship className="w-6 h-6 text-slate-900" />
-              </div>
-              <div>
-                <h1 className="text-xl text-white">SEATrax</h1>
-                <p className="text-sm text-slate-400 mt-0.5">Exporter Portal</p>
-              </div>
-            </div>
+            <Logo variant="navbar" size="md" />
+            <p className="text-sm text-slate-400 mt-2">Exporter Portal</p>
           </div>
 
           <nav className="p-4 space-y-2">

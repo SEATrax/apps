@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { DollarSign, TrendingUp, Wallet, Target, Plus, Eye, Bell, User, Settings, LogOut, Menu, Home, BarChart3, History, Ship } from 'lucide-react';
+import { DollarSign, TrendingUp, Wallet, Target, Plus, Eye, Bell, User, Settings, LogOut, Menu, Home, BarChart3, History } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Logo } from '@/components/common/Logo';
 
 interface InvestorDashboardProps {
   onPoolSelect: (poolId: string) => void;
@@ -108,15 +109,8 @@ export default function InvestorDashboard({ onPoolSelect, onViewPayments, onAddI
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}>
           <div className="p-6 border-b border-cyan-500/20">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-teal-400 rounded-lg flex items-center justify-center hover-glow">
-                <Ship className="w-6 h-6 text-slate-900" />
-              </div>
-              <div>
-                <h1 className="text-xl text-white">SEATrax</h1>
-                <p className="text-sm text-slate-400 mt-0.5">Investor Portal</p>
-              </div>
-            </div>
+            <Logo variant="navbar" size="md" />
+            <p className="text-sm text-slate-400 mt-2">Investor Portal</p>
           </div>
 
           <nav className="p-4 space-y-2">

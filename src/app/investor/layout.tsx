@@ -1,10 +1,11 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { Ship, Target, TrendingUp, Wallet, LogOut } from 'lucide-react';
+import { Target, TrendingUp, Wallet, LogOut } from 'lucide-react';
 import { useActiveAccount, LoginButton, liskSepolia } from 'panna-sdk';
 import { formatAddress } from '@/lib/utils';
 import { useRouter, usePathname } from 'next/navigation';
+import { Logo } from '@/components/common/Logo';
 
 interface InvestorLayoutProps {
   children: ReactNode;
@@ -34,13 +35,8 @@ export default function InvestorLayout({ children }: InvestorLayoutProps) {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-cyan-400 rounded-lg flex items-center justify-center">
-                <Ship className="w-5 h-5 text-slate-900" />
-              </div>
-              <span className="text-lg text-white font-bold tracking-tight">
-                SeaTrax
-              </span>
-              <span className="text-sm text-gray-400 border-l border-slate-700 pl-3 ml-3">
+              <Logo variant="navbar" size="sm" />
+              <span className="text-sm text-gray-400 border-l border-slate-700 pl-3">
                 Investor
               </span>
             </div>

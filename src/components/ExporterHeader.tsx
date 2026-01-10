@@ -7,6 +7,7 @@ import { Building2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { Logo } from '@/components/common/Logo';
 
 export default function ExporterHeader() {
   const { isLoaded, isConnected, account, wasConnected } = useWalletSession();
@@ -34,10 +35,7 @@ export default function ExporterHeader() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/exporter" className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-teal-400 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">S</span>
-              </div>
-              <span className="text-xl font-bold text-white">SEATrax</span>
+              <Logo variant="navbar" size="sm" />
             </Link>
           </div>
 

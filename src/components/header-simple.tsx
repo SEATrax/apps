@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { Ship, Wallet, Copy, ChevronDown, LogOut, User, Sun, Moon, ExternalLink } from 'lucide-react';
+import { Wallet, Copy, ChevronDown, LogOut, User, Sun, Moon, ExternalLink } from 'lucide-react';
 import { LoginButton, useActiveAccount, liskSepolia } from 'panna-sdk';
 import { appConfig } from '@/config';
 import { formatAddress } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/common/Logo';
 
 const navLinks = [
   { label: 'Invoices', href: '/invoices' },
@@ -54,13 +55,7 @@ export function HeaderSimple() {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="relative">
-              <Ship className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
-              <div className="absolute -inset-1 bg-primary/20 rounded-full blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <span className="text-xl font-bold tracking-tight">SEATrax</span>
-          </Link>
+          <Logo variant="navbar" size="sm" href="/" />
 
           {/* Navigation */}
           <nav className="hidden md:flex items-center gap-6">

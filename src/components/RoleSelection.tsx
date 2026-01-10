@@ -2,6 +2,7 @@ import { Ship, TrendingUp, ArrowRight, Wallet } from 'lucide-react';
 import { LoginButton, liskSepolia, useActiveAccount } from 'panna-sdk';
 import { formatAddress } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { Logo } from '@/components/common/Logo';
 
 interface RoleSelectionProps {
   onRoleSelect: (role: 'exporter' | 'investor') => void;
@@ -19,11 +20,8 @@ export default function RoleSelection({ onRoleSelect }: RoleSelectionProps) {
     <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] flex flex-col">
       {/* Header with wallet info */}
       <header className="w-full p-4 sm:p-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 relative z-20">
-        <div className="flex items-center justify-center sm:justify-start gap-3">
-          <div className="w-10 h-10 bg-cyan-400 rounded-lg flex items-center justify-center">
-            <Ship className="w-6 h-6 text-slate-900" />
-          </div>
-          <span className="text-xl text-white font-bold tracking-tight">SeaTrax</span>
+        <div className="flex items-center justify-center sm:justify-start">
+          <Logo variant="navbar" size="md" />
         </div>
         
         <div className="flex items-center justify-center sm:justify-end gap-4">
@@ -58,12 +56,10 @@ export default function RoleSelection({ onRoleSelect }: RoleSelectionProps) {
           <div className="text-center mb-12">
             {/* Logo */}
             <div className="flex justify-center mb-6">
-              <div className="w-16 h-16 bg-cyan-400 rounded-2xl flex items-center justify-center shadow-2xl shadow-cyan-500/50 hover-glow hover-bounce cursor-pointer animate-float">
-                <Ship className="w-10 h-10 text-slate-900" />
-              </div>
+              <Logo variant="full" size="lg" className="hover-bounce cursor-pointer animate-float" />
             </div>
             <h1 className="text-3xl md:text-4xl lg:text-5xl text-white mb-4 tracking-tight animate-slide-up">
-              Welcome to SeaTrax
+              Welcome to SEATrax
             </h1>
             <p className="text-lg md:text-xl text-gray-300 animate-slide-up animation-delay-200">
               Choose your role to get started

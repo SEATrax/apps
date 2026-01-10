@@ -1,9 +1,10 @@
-import { Ship, TrendingUp, Users, Clock, DollarSign, FileText, ArrowRight, CheckCircle, Shield, Globe, Eye, Lock, Wallet, Copy, ChevronDown, LogOut, User, ExternalLink } from 'lucide-react';
+import { TrendingUp, Users, Clock, DollarSign, FileText, ArrowRight, CheckCircle, Shield, Globe, Eye, Lock, Wallet, Copy, ChevronDown, LogOut, User, ExternalLink } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { LoginButton, useActiveAccount, liskSepolia } from 'panna-sdk';
 import { appConfig } from '@/config';
 import { formatAddress } from '@/lib/utils';
 import Link from 'next/link';
+import { Logo } from '@/components/common/Logo';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -35,12 +36,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             {/* Logo */}
-            <div className="flex items-center gap-3 hover-scale cursor-pointer">
-              <div className="w-10 h-10 bg-cyan-400 rounded-lg flex items-center justify-center hover-glow">
-                <Ship className="w-6 h-6 text-slate-900" />
-              </div>
-              <span className="text-xl text-white font-bold tracking-tight">SeaTrax</span>
-            </div>
+            <Logo variant="navbar" size="md" className="hover-scale hover-glow cursor-pointer" />
             
             {/* Navigation */}
             <nav className="hidden md:flex items-center gap-8">
@@ -212,17 +208,11 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           {/* Main Logo/Icon */}
           <div className="flex justify-center mb-8">
             <div className="relative hover-bounce cursor-pointer">
-              <div className="w-24 h-24 bg-cyan-400 rounded-2xl flex items-center justify-center transform rotate-12 shadow-2xl shadow-cyan-500/50 hover-glow transition-all duration-300 hover:rotate-6">
-                <Ship className="w-14 h-14 text-slate-900 -rotate-12" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-cyan-300 rounded-lg transition-all duration-300 hover:scale-110"></div>
+              <Logo variant="full" size="xl" />
             </div>
           </div>
 
           {/* Hero Text */}
-          <h1 className="text-5xl md:text-7xl text-white mb-4 tracking-tight">
-            SeaTrax
-          </h1>
           <p className="text-2xl md:text-3xl text-cyan-400 mb-12">
             On-Chain Financing for Exporters
           </p>
@@ -489,14 +479,9 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           
           <div className="border-t border-gray-800 pt-8">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-cyan-400 rounded-lg flex items-center justify-center">
-                  <Ship className="w-5 h-5 text-slate-900" />
-                </div>
-                <div>
-                  <div className="text-white">SeaTrax</div>
-                  <div className="text-xs text-gray-500">© 2025 SeaTrax. All rights reserved.</div>
-                </div>
+              <div>
+                <Logo variant="footer" size="sm" />
+                <div className="text-xs text-gray-500 mt-2">© 2025 SEATrax. All rights reserved.</div>
               </div>
               <p className="text-sm text-gray-500">
                 Developed by: Hadyan, Valerie, Agung, Humam
