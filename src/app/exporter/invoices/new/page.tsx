@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useActiveAccount } from 'panna-sdk';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import ExporterHeader from '@/components/ExporterHeader';
@@ -23,6 +23,7 @@ import { useRouter } from 'next/navigation';
 interface InvoiceFormData {
   exporterCompany: string;
   importerCompany: string;
+  importerEmail: string;
   importerAddress: string;
   importerCountry: string;
   invoiceNumber: string;
@@ -35,13 +36,14 @@ interface InvoiceFormData {
 
 export default function CreateInvoice() {
   const activeAccount = useActiveAccount();
-  const { mintInvoice, isLoading: isContractLoading } = useInvoiceNFT();
+  const { createInvoice, isLoading: isContractLoading } = useSEATrax();
   const { profile } = useExporterProfile();
   const router = useRouter();
   
   const [formData, setFormData] = useState<InvoiceFormData>({
     exporterCompany: '', // Will be filled from profile
     importerCompany: '',
+    importerEmail: '',
     importerAddress: '',
     importerCountry: '',
     invoiceNumber: '',
@@ -93,6 +95,12 @@ export default function CreateInvoice() {
 
     if (!formData.importerCompany.trim()) {
       newErrors.importerCompany = 'Importer company name is required';
+    }
+
+    if (!formData.importerEmail.trim()) {
+      newErrors.importerEmail = 'Importer email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.importerEmail)) {
+      newErrors.importerEmail = 'Please enter a valid email address';
     }
 
     if (!formData.importerAddress.trim()) {
@@ -238,21 +246,23 @@ export default function CreateInvoice() {
       console.log('📄 Documents uploaded to IPFS:', documentHashes.length);
 
       // Create invoice NFT on blockchain (PRIMARY OPERATION)
-      const contractResult = await mintInvoice(
+      const contractResult = await createInvoice(
         formData.exporterCompany,
         formData.importerCompany,
+        formData.importerEmail, // NEW: Email required
+        Math.floor(formData.shippingDate!.getTime() / 1000), // Shipping date timestamp
         BigInt(Math.floor(parseFloat(formData.shippingAmount) * 100)), // Convert to cents
         BigInt(Math.floor(parseFloat(formData.loanAmount) * 100)), // Convert to cents
-        BigInt(Math.floor(formData.shippingDate!.getTime() / 1000)) // Convert to timestamp
+        documentHashes[0] || 'QmPlaceholder' // IPFS hash of primary document
       );
 
-      if (!contractResult) {
-        throw new Error('Failed to create invoice NFT - contract transaction failed');
+      if (!contractResult.success || !contractResult.invoiceId) {
+        throw new Error(contractResult.error || 'Failed to create invoice NFT - contract transaction failed');
       }
 
-      const tokenId = contractResult;
+      const tokenId = contractResult.invoiceId;
       state.tokenId = tokenId;
-      state.contractTxHash = 'completed'; // We don't have direct access to tx hash from mintInvoice
+      state.contractTxHash = contractResult.txHash || 'completed';
       console.log('✅ Phase 1 Complete - Invoice NFT created:', tokenId.toString());
 
       // === PHASE 2: REVERSIBLE OPERATIONS WITH COMPENSATION ===
@@ -549,6 +559,21 @@ export default function CreateInvoice() {
                   />
                   {errors.importerCompany && (
                     <p className="text-red-400 text-sm mt-1">{errors.importerCompany}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="importerEmail" className="text-slate-300">Importer Email *</Label>
+                  <Input
+                    id="importerEmail"
+                    type="email"
+                    value={formData.importerEmail}
+                    onChange={(e) => handleInputChange('importerEmail', e.target.value)}
+                    placeholder="contact@globaltrading.com"
+                    className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
+                  />
+                  {errors.importerEmail && (
+                    <p className="text-red-400 text-sm mt-1">{errors.importerEmail}</p>
                   )}
                 </div>
 

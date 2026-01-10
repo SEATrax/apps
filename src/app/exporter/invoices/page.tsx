@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { useInvoiceNFT, INVOICE_STATUS } from '@/hooks/useInvoiceNFT';
+import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ interface Invoice {
   loanAmount: number;
   amountInvested: number;
   amountWithdrawn: number;
-  status: 'pending' | 'finalized' | 'fundraising' | 'funded' | 'paid' | 'cancelled';
+  status: 'pending' | 'approved' | 'in_pool' | 'funded' | 'withdrawn' | 'paid' | 'completed' | 'rejected';
   shippingDate: string;
   createdAt: string;
   fundedPercentage: number;
@@ -35,7 +35,7 @@ interface Invoice {
 export default function InvoiceList() {
   const { isLoaded, isConnected, address } = useWalletSession();
   const { profile, loading: profileLoading } = useExporterProfile();
-  const { getInvoicesByExporter, getInvoice } = useInvoiceNFT();
+  const { getExporterInvoices, getInvoice } = useSEATrax();
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
@@ -90,7 +90,7 @@ export default function InvoiceList() {
       }
       
       // Get invoice token IDs from smart contract
-      const tokenIds = await getInvoicesByExporter(address);
+      const tokenIds = await getExporterInvoices(address);
       
       if (tokenIds.length === 0) {
         setInvoices([]);
@@ -119,19 +119,21 @@ export default function InvoiceList() {
           }
           
           // Convert status number to string
-          const statusMap: Record<number, 'pending' | 'finalized' | 'fundraising' | 'funded' | 'paid' | 'cancelled'> = {
+          const statusMap: Record<number, 'pending' | 'approved' | 'in_pool' | 'funded' | 'withdrawn' | 'paid' | 'completed' | 'rejected'> = {
             [INVOICE_STATUS.PENDING]: 'pending',
-            [INVOICE_STATUS.FINALIZED]: 'finalized',
-            [INVOICE_STATUS.FUNDRAISING]: 'fundraising',
+            [INVOICE_STATUS.APPROVED]: 'approved',
+            [INVOICE_STATUS.IN_POOL]: 'in_pool',
             [INVOICE_STATUS.FUNDED]: 'funded',
+            [INVOICE_STATUS.WITHDRAWN]: 'withdrawn',
             [INVOICE_STATUS.PAID]: 'paid',
-            [INVOICE_STATUS.CANCELLED]: 'cancelled',
+            [INVOICE_STATUS.COMPLETED]: 'completed',
+            [INVOICE_STATUS.REJECTED]: 'rejected',
           };
           
-          const invoiceValue = Number(contractInvoice.invoiceValue) / 100; // Convert cents to USD
+          const invoiceValue = Number(contractInvoice.shippingAmount) / 100; // Convert cents to USD
           const loanAmount = Number(contractInvoice.loanAmount) / 100;
-          const amountInvested = Number(contractInvoice.fundedAmount) / 1e18 * 3000; // Convert Wei to USD
-          const amountWithdrawn = Number(contractInvoice.withdrawnAmount) / 1e18 * 3000;
+          const amountInvested = Number(contractInvoice.amountInvested) / 1e18 * 3000; // Convert Wei to USD
+          const amountWithdrawn = Number(contractInvoice.amountWithdrawn) / 1e18 * 3000;
           
           return {
             id: tokenId,
@@ -143,9 +145,9 @@ export default function InvoiceList() {
             loanAmount,
             amountInvested,
             amountWithdrawn,
-            status: contractInvoice.status.toLowerCase() || 'pending',
-            shippingDate: new Date(contractInvoice.invoiceDate * 1000).toISOString().split('T')[0],
-            createdAt: new Date(contractInvoice.createdAt * 1000).toISOString().split('T')[0],
+            status: statusMap[Number(contractInvoice.status)] || 'pending',
+            shippingDate: new Date(Number(contractInvoice.shippingDate) * 1000).toISOString().split('T')[0],
+            createdAt: new Date(Number(contractInvoice.createdAt) * 1000).toISOString().split('T')[0],
             fundedPercentage: loanAmount > 0 ? Math.round((amountInvested / loanAmount) * 100) : 0,
           };
         } catch (error) {
@@ -185,7 +187,7 @@ export default function InvoiceList() {
             loanAmount: 22000,
             amountInvested: 9900,
             amountWithdrawn: 0,
-            status: 'fundraising',
+            status: 'in_pool',
             shippingDate: '2024-12-20',
             createdAt: '2024-11-24',
             fundedPercentage: 45,
@@ -240,11 +242,13 @@ export default function InvoiceList() {
   const getStatusBadge = (status: Invoice['status']) => {
     const config = {
       pending: { variant: 'secondary' as const, label: 'Pending Review', color: 'bg-yellow-600' },
-      finalized: { variant: 'outline' as const, label: 'Approved', color: 'bg-blue-600' },
-      fundraising: { variant: 'default' as const, label: 'Fundraising', color: 'bg-cyan-600' },
+      approved: { variant: 'outline' as const, label: 'Approved', color: 'bg-blue-600' },
+      in_pool: { variant: 'default' as const, label: 'In Pool', color: 'bg-cyan-600' },
       funded: { variant: 'default' as const, label: 'Funded', color: 'bg-green-600' },
+      withdrawn: { variant: 'default' as const, label: 'Withdrawn', color: 'bg-purple-600' },
       paid: { variant: 'default' as const, label: 'Paid', color: 'bg-emerald-600' },
-      cancelled: { variant: 'destructive' as const, label: 'Cancelled', color: 'bg-red-600' },
+      completed: { variant: 'default' as const, label: 'Completed', color: 'bg-teal-600' },
+      rejected: { variant: 'destructive' as const, label: 'Rejected', color: 'bg-red-600' },
     };
 
     const { variant, label, color } = config[status];
@@ -442,7 +446,7 @@ export default function InvoiceList() {
                         <p className="font-semibold text-cyan-400">
                           {formatCurrency(invoice.amountInvested)}
                         </p>
-                        {invoice.status === 'fundraising' || invoice.status === 'funded' ? (
+                        {invoice.status === 'in_pool' || invoice.status === 'funded' ? (
                           <div className="w-full bg-slate-700 rounded-full h-2 mt-1">
                             <div 
                               className="bg-cyan-600 h-2 rounded-full" 

@@ -118,6 +118,7 @@
 
 - [x] **Update `src/hooks/index.ts`** ✅
   - [x] Add: `export { useSEATrax } from './useSEATrax'` ✅
+  - [x] Export: INVOICE_STATUS, POOL_STATUS from useSEATrax ✅
   - [x] Keep old hooks as "legacy" for backward compatibility ✅
 
 - [x] **Test Core Infrastructure**
@@ -132,65 +133,71 @@
 
 ### A. Onboarding
 
-- [ ] **`src/components/ExporterOnboarding.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Change: `grantExporterRole()` → `registerExporter()`
-  - [ ] Update: Success message ("Self-registered")
-  - [ ] Update: Error handling
-  - [ ] Test: Registration flow works
+- [x] **`src/components/ExporterOnboarding.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Change: `grantExporterRole()` → `registerExporter()`
+  - [x] Update: Success message ("Self-registered")
+  - [x] Update: Error handling
+  - [x] Test: Registration flow works
 
 ### B. Invoice Creation
 
-- [ ] **`src/app/exporter/invoices/new/page.tsx`**
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Add: `importerEmail` field to form
-    - [ ] Add to FormData interface
-    - [ ] Add Input component
-    - [ ] Add email validation
-  - [ ] Add: `ipfsHash` parameter (use existing IPFS upload)
-  - [ ] Change: `mintInvoice()` → `createInvoice()`
-  - [ ] Update: Parameter order to match SEATrax
-  - [ ] Remove: `finalizeInvoice()` step
-  - [ ] Update: Success message
-  - [ ] Test: Can create invoice with all fields
+- [x] **`src/app/exporter/invoices/new/page.tsx`** ✅
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Add: `importerEmail` field to form
+    - [x] Add to FormData interface
+    - [x] Add Input component
+    - [x] Add email validation
+  - [x] Add: `ipfsHash` parameter (use existing IPFS upload)
+  - [x] Change: `mintInvoice()` → `createInvoice()`
+  - [x] Update: Parameter order to match SEATrax
+  - [x] Remove: `finalizeInvoice()` step
+  - [x] Update: Success message
+  - [x] Test: Can create invoice with all fields
 
 ### C. Invoice List
 
-- [ ] **`src/app/exporter/invoices/page.tsx`**
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Update: Status enum values
+- [x] **`src/app/exporter/invoices/page.tsx`** ✅
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Update: Status enum values
     ```typescript
     // OLD: PENDING, FINALIZED, FUNDRAISING, FUNDED, PAID, CANCELLED
     // NEW: PENDING, APPROVED, IN_POOL, FUNDED, WITHDRAWN, PAID, COMPLETED, REJECTED
     ```
-  - [ ] Update: Status display labels
-  - [ ] Update: Status badge colors
-  - [ ] Test: Invoice list shows correct statuses
+  - [x] Update: Status display labels
+  - [x] Update: Status badge colors
+  - [x] Test: Invoice list shows correct statuses
 
 ### D. Invoice Detail & Withdrawal
 
-- [ ] **`src/app/exporter/invoices/[id]/page.tsx`** (if exists)
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Remove: Amount input from withdrawal form
-  - [ ] Update: "Withdraw All Available" button
-  - [ ] Change: `withdrawFunds(id, amount)` → `withdrawFunds(id)`
-  - [ ] Update: Success message
-  - [ ] Test: Can withdraw full amount
+- [x] **`src/app/exporter/invoices/[id]/page.tsx`** ✅
+  - [x] Import: `useSEATrax` hook
+  - [x] Replace: Mock data with real contract calls
+  - [x] Remove: Amount input from withdrawal form (all-or-nothing)
+  - [x] Update: "Withdraw All Available" button
+  - [x] Implement: `withdrawFunds(id)` - no amount parameter
+  - [x] Update: Status enum (6 → 8 statuses)
+  - [x] Update: Status checks ('fundraising' → 'in_pool')
+  - [x] Load: Real invoice data via `getInvoice(tokenId)`
+  - [x] Update: Success message
+  - [x] Test: Can withdraw full amount
 
 ### E. Dashboard
 
-- [ ] **`src/app/exporter/page.tsx`**
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Update: Dashboard stats calculations
-  - [ ] Update: Invoice status checks
-  - [ ] Test: Dashboard displays correctly
+- [x] **`src/app/exporter/page.tsx`** ✅
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Update: Dashboard stats calculations
+  - [x] Update: Invoice status checks
+  - [x] Test: Dashboard displays correctly
 
 ### F. Payments Page
 
-- [ ] **`src/app/exporter/payments/page.tsx`**
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Update: Payment status checks
-  - [ ] Test: Payments list works
+- [x] **`src/app/exporter/payments/page.tsx`** ✅
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Update: Payment status checks
+  - [x] Update: Field names (withdrawnAmount → amountWithdrawn)
+  - [x] Update: Status comparisons to use INVOICE_STATUS enum
+  - [x] Test: Payments list works
 
 ---
 
@@ -531,9 +538,9 @@
 
 ## 📊 Progress Tracking
 
-**Started**: _________  
-**Phase 2 Complete**: _________  
-**Phase 3 Complete**: _________  
+**Started**: January 11, 2026  
+**Phase 2 Complete**: January 11, 2026  
+**Phase 3 Complete**: January 11, 2026  
 **Phase 4 Complete**: _________  
 **Phase 5 Complete**: _________  
 **Phase 6 Complete**: _________  
@@ -560,5 +567,5 @@
 ---
 
 **Last Updated**: January 11, 2026  
-**Current Phase**: Pre-Migration  
+**Current Phase**: Phase 4 - Admin Flow  
 **Blocked By**: None

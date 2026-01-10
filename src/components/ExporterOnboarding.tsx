@@ -16,7 +16,7 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
   
   const activeAccount = useActiveAccount();
   const { createProfile } = useExporterProfile();
-  const { grantExporterRole } = useAccessControl();
+  const { registerExporter } = useSEATrax();
   
   const [formData, setFormData] = useState({
     companyName: '',
@@ -59,7 +59,14 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
     try {
       setSubmitting(true);
       
-      // 1. Create exporter profile in Supabase
+      // 1. Self-register as exporter on-chain
+      const result = await registerExporter();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to register on-chain');
+      }
+      
+      // 2. Create exporter profile in Supabase
       await createProfile({
         company_name: formData.companyName,
         tax_id: formData.taxId,
@@ -69,9 +76,7 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
         address: formData.address,
       });
       
-      // Note: Role will be granted by admin after verification
-      
-      toast.success('Registration submitted successfully! Your account will be verified by admin.');
+      toast.success('✅ Registration successful! You can now create invoices. Admin will verify your account.');
       onComplete();
     } catch (error) {
       console.error('Registration failed:', error);

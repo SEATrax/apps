@@ -690,4 +690,4 @@ export function useSEATrax() {
 
 // ============== EXPORTS ==============
 
-export { ROLES, type Invoice, type Pool, type Investment } from '@/lib/contract';
+export { ROLES, INVOICE_STATUS, POOL_STATUS, type Invoice, type Pool, type Investment } from '@/lib/contract';

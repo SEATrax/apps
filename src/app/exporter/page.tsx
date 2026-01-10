@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +34,7 @@ interface Invoice {
 export default function ExporterDashboard() {
   const { isLoaded, isConnected, address } = useWalletSession();
   const { profile, loading: profileLoading } = useExporterProfile();
-  const { getInvoicesByExporter } = useInvoiceNFT();
+  const { getExporterInvoices } = useSEATrax();
   const router = useRouter();
   
   const [stats, setStats] = useState<DashboardStats>({
@@ -74,7 +74,7 @@ export default function ExporterDashboard() {
       setIsLoading(true);
       
       // Get invoice token IDs from smart contract
-      const invoiceIds = await getInvoicesByExporter(address);
+      const invoiceIds = await getExporterInvoices(address);
       
       if (invoiceIds.length === 0) {
         setStats({
