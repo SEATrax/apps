@@ -19,7 +19,7 @@ import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
 import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment, type PoolStatus } from '@/lib/contract';
 import { liskSepolia } from 'panna-sdk';
-import { prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb';
+import { prepareContractCall, sendTransaction, readContract, waitForReceipt, prepareEvent, getContractEvents } from 'thirdweb';
 import { getContract } from 'thirdweb';
 import { toWei } from 'thirdweb/utils';
 
@@ -216,8 +216,29 @@ export function useSEATrax() {
       
       const receipt = await waitForReceipt(result);
       
-      // TODO: Parse event to get invoiceId
-      const invoiceId: bigint | null = null;
+      // Parse InvoiceCreated event to get tokenId
+      let invoiceId: bigint | null = null;
+      try {
+        const invoiceCreatedEvent = prepareEvent({
+          signature: 'event InvoiceCreated(uint256 indexed tokenId, address indexed exporter, uint256 loanAmount)'
+        });
+        
+        const events = await getContractEvents({
+          contract: getContractInstance(),
+          events: [invoiceCreatedEvent],
+          fromBlock: receipt.blockNumber,
+          toBlock: receipt.blockNumber,
+        });
+        
+        if (events.length > 0 && events[0].args) {
+          invoiceId = events[0].args.tokenId;
+          console.log('✅ Invoice created with ID:', invoiceId.toString());
+        } else {
+          console.warn('⚠️ No InvoiceCreated event found in transaction');
+        }
+      } catch (eventErr) {
+        console.warn('⚠️ Could not parse event, invoice created but ID unknown:', eventErr);
+      }
       
       return { success: true, txHash: result.transactionHash, invoiceId };
     } catch (err: any) {
@@ -280,7 +301,7 @@ export function useSEATrax() {
       const contract = getContractInstance();
       const invoice = await readContract({
         contract,
-        method: 'function getInvoice(uint256 invoiceId) view returns (string exporterCompany, address exporterWallet, string importerCompany, string importerEmail, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, uint256 amountInvested, uint256 amountWithdrawn, string ipfsHash, uint8 status)',
+        method: 'function getInvoice(uint256 _invoiceId) view returns (tuple(uint256 tokenId, address exporter, string exporterCompany, string importerCompany, string importerEmail, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, uint256 amountInvested, uint256 amountWithdrawn, uint8 status, uint256 poolId, string ipfsHash, uint256 createdAt))',
         params: [invoiceId],
       });
       return invoice as any as Invoice;
