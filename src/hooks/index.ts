@@ -15,14 +15,7 @@ export { useInvestmentStats } from './useInvestmentStats';
 export { useSEATrax, ROLES } from './useSEATrax';
 export type { Invoice, Pool, Investment } from './useSEATrax';
 
-// ============== LEGACY HOOKS (for backward compatibility during migration) ==============
-// These will be removed in Phase 8
+// Legacy useContract for backward compatibility
 export { useContract } from './useContract';
-export { useAccessControl } from './useAccessControl';
-export { useInvoiceNFT, INVOICE_STATUS } from './useInvoiceNFT';
-export { usePoolNFT, POOL_STATUS } from './usePoolNFT';
-export { usePoolFunding } from './usePoolFunding';
-export { usePaymentOracle } from './usePaymentOracle';
-export { usePlatformAnalytics } from './usePlatformAnalytics';
 
 

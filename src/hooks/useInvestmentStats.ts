@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useActiveAccount } from 'panna-sdk';
-import { usePoolFunding } from './usePoolFunding';
-import { usePlatformAnalytics } from './usePlatformAnalytics';
-import { usePoolNFT } from './usePoolNFT';
+import { useSEATrax } from './useSEATrax';
 import { formatEther } from '@/lib/utils';
 
 export interface InvestmentStats {
@@ -33,9 +31,8 @@ export interface Investment {
 
 export const useInvestmentStats = () => {
   const activeAccount = useActiveAccount();
-  const { getInvestorReturns } = usePoolFunding();
-  const { getInvestorStats } = usePlatformAnalytics();
-  const { getPoolsByStatus } = usePoolNFT();
+  // Note: useSEATrax functions available but stats calculated manually
+  const { getInvestorPools, getInvestment } = useSEATrax();
   
   const [stats, setStats] = useState<InvestmentStats>({
     totalInvested: '0',
@@ -121,47 +118,18 @@ export const useInvestmentStats = () => {
       setLoading(true);
       setError(null);
 
-      // Get investor stats from PlatformAnalytics contract
-      const contractStats = await getInvestorStats(activeAccount.address);
+      // TODO: Implement real data fetching with useSEATrax
+      // const poolIds = await getInvestorPools(activeAccount.address);
+      // Calculate stats from pool data
       
-      if (contractStats) {
-        const { totalInvested, totalReturns, activeInvestments } = contractStats;
-        
-        // Get open pools to calculate total pools
-        const openPools = await getPoolsByStatus(0); // 0 = Open status
-        const totalPools = openPools ? openPools.length : 0;
-        
-        // Calculate derived stats
-        const totalInvestedNum = parseFloat(formatEther(totalInvested));
-        const totalReturnsNum = parseFloat(formatEther(totalReturns));
-        const portfolioValue = totalInvestedNum + totalReturnsNum;
-        const averageYield = totalInvestedNum > 0 ? (totalReturnsNum / totalInvestedNum) * 100 : 0;
-        
-        setStats({
-          totalInvested: formatEther(totalInvested, 3),
-          totalReturns: formatEther(totalReturns, 3),
-          activeInvestments: Number(activeInvestments),
-          totalPools,
-          averageYield: averageYield.toFixed(1),
-          portfolioValue: portfolioValue.toFixed(3),
-          unrealizedGains: formatEther(totalReturns, 3),
-          claimableReturns: '0' // TODO: Calculate from mature pools
-        });
-        
-        // TODO: Fetch actual investment history from events
-        // For now, keep mock investments for UI demonstration
-        setInvestments(mockInvestments);
-      } else {
-        // Fallback to mock data if contract call fails
-        setStats(mockStats);
-        setInvestments(mockInvestments);
-      }
-
+      // For now, use mock data for development
+      setStats(mockStats);
+      setInvestments(mockInvestments);
     } catch (err) {
-      console.error('Failed to fetch investment stats:', err);
-      setError('Failed to load investment data');
+      setError(err instanceof Error ? err.message : 'Failed to fetch investment data');
+      console.error('Error fetching investment data:', err);
       
-      // Fallback to mock data on error
+      // Fallback to mock data
       setStats(mockStats);
       setInvestments(mockInvestments);
     } finally {

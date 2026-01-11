@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
-import { useAccessControl } from './useAccessControl';
+import { useSEATrax } from './useSEATrax';
 import { useExporterProfile } from './useExporterProfile';
 import { useInvestorProfile } from './useInvestorProfile';
 import { getDefaultRouteForRole } from '@/config/routes';
@@ -10,7 +10,7 @@ import { getDefaultRouteForRole } from '@/config/routes';
 export const useRoleBasedNavigation = () => {
   const router = useRouter();
   const activeAccount = useActiveAccount();
-  const { getUserRoles } = useAccessControl();
+  const { checkUserRoles } = useSEATrax();
   const { profile: exporterProfile, loading: exporterLoading } = useExporterProfile();
   const { profile: investorProfile, loading: investorLoading } = useInvestorProfile();
 
@@ -22,7 +22,7 @@ export const useRoleBasedNavigation = () => {
 
     try {
       // Get user roles from smart contract
-      const roles = await getUserRoles(activeAccount.address);
+      const roles = await checkUserRoles(activeAccount.address);
       
       if (!roles) {
         // No roles assigned - redirect to role selection
@@ -30,22 +30,22 @@ export const useRoleBasedNavigation = () => {
         return;
       }
 
-      const { hasAdminRole, hasExporterRole, hasInvestorRole } = roles;
+      const { isAdmin, isExporter, isInvestor } = roles;
 
       // If user has exporter role but no profile, redirect to onboarding
-      if (hasExporterRole && !exporterProfile) {
+      if (isExporter && !exporterProfile) {
         router.push('/onboarding/exporter');
         return;
       }
 
       // If user has investor role but no profile, redirect to onboarding
-      if (hasInvestorRole && !investorProfile) {
+      if (isInvestor && !investorProfile) {
         router.push('/onboarding/investor');
         return;
       }
 
       // Navigate to default route for role
-      const defaultRoute = getDefaultRouteForRole(hasAdminRole, hasExporterRole, hasInvestorRole);
+      const defaultRoute = getDefaultRouteForRole(isAdmin, isExporter, isInvestor);
       router.push(defaultRoute);
 
     } catch (error) {
@@ -58,18 +58,18 @@ export const useRoleBasedNavigation = () => {
     if (!isConnected) return false;
 
     try {
-      const roles = await getUserRoles(activeAccount.address);
+      const roles = await checkUserRoles(activeAccount.address);
       if (!roles) return false;
 
-      const { hasAdminRole, hasExporterRole, hasInvestorRole } = roles;
+      const { isAdmin, isExporter, isInvestor } = roles;
 
       switch (requiredRole) {
         case 'admin':
-          return hasAdminRole;
+          return isAdmin;
         case 'exporter':
-          return hasExporterRole && !!exporterProfile;
+          return isExporter && !!exporterProfile;
         case 'investor':
-          return hasInvestorRole && !!investorProfile;
+          return isInvestor && !!investorProfile;
         default:
           return false;
       }
