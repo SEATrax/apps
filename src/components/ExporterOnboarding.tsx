@@ -17,7 +17,7 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
   
   const activeAccount = useActiveAccount();
   const { createProfile } = useExporterProfile();
-  const { registerExporter } = useSEATrax();
+  const { registerExporter, checkUserRoles } = useSEATrax();
   
   const [formData, setFormData] = useState({
     companyName: '',
@@ -53,21 +53,54 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
   
   const handleSubmit = async () => {
     if (!activeAccount?.address) {
-      toast.error('Please connect your wallet first');
+      toast.error('❌ Please connect your wallet first');
       return;
     }
     
     try {
       setSubmitting(true);
       
+      console.log('🔍 Pre-flight checks...');
+      console.log('✓ Wallet connected:', activeAccount.address);
+      console.log('✓ Form data ready');
+      
+      // Check if already registered
+      console.log('🔍 Checking registration status...');
+      const roles = await checkUserRoles(activeAccount.address);
+      
+      if (roles.isExporter) {
+        console.log('⚠️ Already registered as exporter on blockchain');
+        toast.info('You are already registered on blockchain. Creating/updating profile...');
+        
+        // Skip blockchain registration, just create/update profile
+        console.log('📝 Creating/updating profile in database...');
+        await createProfile({
+          company_name: formData.companyName,
+          tax_id: formData.taxId,
+          country: formData.country,
+          export_license: formData.exportLicense,
+          phone: formData.phone,
+          address: formData.address,
+        });
+        
+        toast.success('✅ Profile updated! You can now create invoices.');
+        onComplete();
+        return;
+      }
+      
       // 1. Self-register as exporter on-chain
+      console.log('📝 Step 1: Registering on blockchain...');
       const result = await registerExporter();
       
       if (!result.success) {
-        throw new Error(result.error || 'Failed to register on-chain');
+        throw new Error(result.error || 'Blockchain registration failed');
       }
       
+      console.log('✅ Blockchain registration successful!');
+      console.log('📝 Transaction hash:', result.txHash);
+      
       // 2. Create exporter profile in Supabase
+      console.log('📝 Step 2: Creating profile in database...');
       await createProfile({
         company_name: formData.companyName,
         tax_id: formData.taxId,
@@ -79,9 +112,14 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
       
       toast.success('✅ Registration successful! You can now create invoices. Admin will verify your account.');
       onComplete();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Registration failed:', error);
-      toast.error('Registration failed. Please try again.');
+      console.error('Error type:', typeof error);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      
+      const errorMessage = error?.message || error?.toString() || 'Registration failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }

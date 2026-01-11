@@ -28,6 +28,43 @@ export function useSEATrax() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ============== HELPER FUNCTIONS ==============
+
+  // Helper to check if wallet and network are ready
+  const checkWalletReady = () => {
+    if (!account) {
+      throw new Error('❌ Wallet not connected. Please connect your wallet first.');
+    }
+    if (!client) {
+      throw new Error('❌ Wallet client not initialized. Please reconnect your wallet.');
+    }
+    if (!address) {
+      throw new Error('❌ Wallet address not found. Please reconnect your wallet.');
+    }
+    return true;
+  };
+
+  // Helper to extract error message from various error types
+  const extractErrorMessage = (err: any, defaultMsg: string): string => {
+    // Check for various error message locations
+    if (typeof err === 'string') return err;
+    if (err?.reason) return err.reason;
+    if (err?.message) return err.message;
+    if (err?.error?.message) return err.error.message;
+    if (err?.data?.message) return err.data.message;
+    
+    // Try to stringify if it's an object
+    try {
+      const errStr = JSON.stringify(err);
+      if (errStr !== '{}' && errStr !== 'null') {
+        return `${defaultMsg}: ${errStr}`;
+      }
+    } catch {}
+    
+    // Last resort
+    return defaultMsg;
+  };
+
   // ============== CONTRACT INSTANCE ==============
   
   const getContractInstance = useCallback(() => {
@@ -49,13 +86,16 @@ export function useSEATrax() {
    * Replaces: useAccessControl.grantExporterRole (admin-granted)
    */
   const registerExporter = useCallback(async () => {
-    if (!account || !client) {
-      return { success: false, error: 'Wallet not connected' };
-    }
-    
     try {
       setIsLoading(true);
       setError(null);
+      
+      // Pre-flight checks
+      checkWalletReady();
+      
+      console.log('🚀 Starting exporter registration...');
+      console.log('📍 Wallet address:', address);
+      console.log('🔗 Contract address:', CONTRACT_ADDRESS);
       
       const contract = getContractInstance();
       const tx = prepareContractCall({
@@ -64,36 +104,50 @@ export function useSEATrax() {
         params: [],
       });
       
+      console.log('📤 Sending transaction...');
       const result = await sendTransaction({
-        account,
+        account: account!,
         transaction: tx,
       });
       
+      console.log('⏳ Waiting for confirmation...');
+      console.log('📝 Transaction hash:', result.transactionHash);
       await waitForReceipt(result);
       
+      console.log('✅ Registration successful!');
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to register as exporter';
+      console.error('❌ Registration error:', err);
+      console.error('Error type:', typeof err);
+      console.error('Error details:', {
+        message: err?.message,
+        reason: err?.reason,
+        code: err?.code,
+        data: err?.data
+      });
+      
+      const errorMsg = extractErrorMessage(err, 'Failed to register as exporter on blockchain');
       setError(errorMsg);
-      console.error('Registration error:', err);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [account, client, getContractInstance]);
+  }, [account, client, address, getContractInstance]);
 
   /**
    * Register current user as investor (self-registration)
    * Replaces: useAccessControl.grantInvestorRole (admin-granted)
    */
   const registerInvestor = useCallback(async () => {
-    if (!account || !client) {
-      return { success: false, error: 'Wallet not connected' };
-    }
-    
     try {
       setIsLoading(true);
       setError(null);
+      
+      // Pre-flight checks
+      checkWalletReady();
+      
+      console.log('🚀 Starting investor registration...');
+      console.log('📍 Wallet address:', address);
       
       const contract = getContractInstance();
       const tx = prepareContractCall({
@@ -102,23 +156,27 @@ export function useSEATrax() {
         params: [],
       });
       
+      console.log('📤 Sending transaction...');
       const result = await sendTransaction({
-        account,
+        account: account!,
         transaction: tx,
       });
       
+      console.log('⏳ Waiting for confirmation...');
+      console.log('📝 Transaction hash:', result.transactionHash);
       await waitForReceipt(result);
       
+      console.log('✅ Registration successful!');
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to register as investor';
+      console.error('❌ Registration error:', err);
+      const errorMsg = extractErrorMessage(err, 'Failed to register as investor on blockchain');
       setError(errorMsg);
-      console.error('Registration error:', err);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [account, client, getContractInstance]);
+  }, [account, client, address, getContractInstance]);
 
   // ============== INVOICE FUNCTIONS (Exporter) ==============
 
@@ -135,7 +193,7 @@ export function useSEATrax() {
     shippingAmount: bigint,
     loanAmount: bigint,
     ipfsHash: string
-  ) => {
+  ): Promise<{ success: true; txHash: string; invoiceId: bigint | null } | { success: false; error: string }> => {
     if (!account || !client) {
       return { success: false, error: 'Wallet not connected' };
     }
@@ -159,7 +217,7 @@ export function useSEATrax() {
       const receipt = await waitForReceipt(result);
       
       // TODO: Parse event to get invoiceId
-      const invoiceId = null;
+      const invoiceId: bigint | null = null;
       
       return { success: true, txHash: result.transactionHash, invoiceId };
     } catch (err: any) {

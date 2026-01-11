@@ -28,7 +28,7 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
 
   const activeAccount = useActiveAccount();
   const { createProfile } = useInvestorProfile();
-  const { registerInvestor } = useSEATrax();
+  const { registerInvestor, checkUserRoles } = useSEATrax();
   const [walletConnected, setWalletConnected] = useState(!!activeAccount);
 
   const countries = ['Indonesia', 'Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Singapore', 'United States', 'United Kingdom'];
@@ -44,7 +44,7 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
 
   const handleSubmit = async () => {
     if (!activeAccount?.address) {
-      toast.error('Please connect your wallet first');
+      toast.error('❌ Please connect your wallet first');
       return;
     }
 
@@ -53,7 +53,45 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
     try {
       setSubmitting(true);
       
-      // 1. Create investor profile in Supabase
+      console.log('🔍 Pre-flight checks...');
+      console.log('✓ Wallet connected:', activeAccount.address);
+      console.log('✓ Form data ready');
+      
+      // Check if already registered
+      console.log('🔍 Checking registration status...');
+      const roles = await checkUserRoles(activeAccount.address);
+      
+      if (roles.isInvestor) {
+        console.log('⚠️ Already registered as investor on blockchain');
+        toast.info('You are already registered on blockchain. Creating/updating profile...');
+        
+        // Skip blockchain registration, just create/update profile
+        console.log('📝 Creating/updating profile in database...');
+        await createProfile({
+          name: formData.name,
+          address: formData.address,
+          email: formData.email,
+          phone: formData.phone,
+        });
+        
+        toast.success('✅ Profile updated! You can now invest in pools.');
+        onComplete();
+        return;
+      }
+      
+      // 1. Self-register as investor on-chain
+      console.log('📝 Step 1: Registering on blockchain...');
+      const result = await registerInvestor();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Blockchain registration failed');
+      }
+      
+      console.log('✅ Blockchain registration successful!');
+      console.log('📝 Transaction hash:', result.txHash);
+      
+      // 2. Create investor profile in Supabase
+      console.log('📝 Step 2: Creating profile in database...');
       await createProfile({
         name: formData.name,
         address: formData.address,
@@ -61,21 +99,19 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
         phone: formData.phone,
       });
 
-      // 2. Self-register as investor on-chain
-      const result = await registerInvestor();
-      
-      if (result.success) {
-        toast.success('Registration completed! You can now invest in pools.');
-      } else {
-        throw new Error(result.error || 'Failed to register as investor');
-      }
+      toast.success('✅ Registration completed! You can now invest in pools.');
       
       setTimeout(() => {
         onComplete();
       }, 1000);
     } catch (error: any) {
-      console.error('Registration failed:', error);
-      toast.error(error.message || 'Registration failed. Please try again.');
+      console.error('❌ Registration failed:', error);
+      console.error('Error type:', typeof error);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      
+      const errorMessage = error?.message || error?.toString() || 'Registration failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }

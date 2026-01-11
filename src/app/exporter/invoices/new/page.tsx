@@ -321,13 +321,25 @@ export default function CreateInvoice() {
         documentHashes[0] || 'QmPlaceholder' // IPFS hash of primary document
       );
 
-      if (!contractResult.success || !contractResult.invoiceId) {
+      if (!contractResult.success) {
         throw new Error(contractResult.error || 'Failed to create invoice NFT - contract transaction failed');
       }
 
+      // Type guard: contractResult.success is true, so we know it has txHash
+      const txHash = contractResult.txHash;
       const tokenId = contractResult.invoiceId;
+      
+      if (!tokenId) {
+        // Invoice created but ID not extracted from event
+        // This is OK - we'll use transaction hash instead
+        console.warn('⚠️ Invoice created but ID not extracted. Using tx hash:', txHash);
+        state.contractTxHash = txHash;
+        // Skip metadata save since we don't have tokenId
+        throw new Error('Invoice created on blockchain but ID not returned. Transaction: ' + txHash + '. Please check your invoices list.');
+      }
+      
       state.tokenId = tokenId;
-      state.contractTxHash = contractResult.txHash || 'completed';
+      state.contractTxHash = txHash || 'completed';
       console.log('✅ Phase 1 Complete - Invoice NFT created:', tokenId.toString());
 
       // === PHASE 2: REVERSIBLE OPERATIONS WITH COMPENSATION ===

@@ -47,21 +47,20 @@ export const useInvestorProfile = () => {
         .from('investors')
         .select('*')
         .eq('wallet_address', walletAddress)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to avoid 406
 
       if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          // No rows returned - investor doesn't exist
-          setProfile(null);
-        } else {
-          throw fetchError;
-        }
-      } else {
-        setProfile(data);
+        console.error('Supabase fetch error:', fetchError);
+        throw fetchError;
       }
-    } catch (err) {
+      
+      setProfile(data);
+    } catch (err: any) {
       console.error('Error fetching investor profile:', err);
+      console.error('Error code:', err?.code);
+      console.error('Error message:', err?.message);
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');
+      setProfile(null);
     } finally {
       setLoading(false);
     }
