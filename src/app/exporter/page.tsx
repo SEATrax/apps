@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { useSEATrax } from '@/hooks/useSEATrax';
+import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import ExporterHeader from '@/components/ExporterHeader';
+
+// Helper function to convert status number to label
+const getStatusLabel = (status: number): 'pending' | 'approved' | 'funded' | 'withdrawn' | 'paid' => {
+  if (status === INVOICE_STATUS.PENDING) return 'pending';
+  if (status === INVOICE_STATUS.APPROVED || status === INVOICE_STATUS.IN_POOL) return 'approved';
+  if (status === INVOICE_STATUS.FUNDED) return 'funded';
+  if (status === INVOICE_STATUS.WITHDRAWN) return 'withdrawn';
+  if (status === INVOICE_STATUS.PAID || status === INVOICE_STATUS.COMPLETED) return 'paid';
+  return 'pending';
+};
 
 interface DashboardStats {
   totalInvoices: number;
@@ -34,7 +44,7 @@ interface Invoice {
 export default function ExporterDashboard() {
   const { isLoaded, isConnected, address } = useWalletSession();
   const { profile, loading: profileLoading } = useExporterProfile();
-  const { getExporterInvoices } = useSEATrax();
+  const { getExporterInvoices, getInvoice } = useSEATrax();
   const router = useRouter();
   
   const [stats, setStats] = useState<DashboardStats>({
@@ -89,35 +99,93 @@ export default function ExporterDashboard() {
         return;
       }
       
-      // Get invoice metadata from Supabase for recent invoices
-      const { data: invoiceMetadata } = await supabase
-        .from('invoice_metadata')
-        .select('*')
-        .eq('exporter_wallet', address)
-        .order('created_at', { ascending: false })
-        .limit(5);
+      // Get all invoice data from blockchain
+      const invoicePromises = invoiceIds.map(async (tokenId) => {
+        try {
+          return await getInvoice(tokenId);
+        } catch (error) {
+          console.error(`Error loading invoice ${tokenId}:`, error);
+          return null;
+        }
+      });
       
-      // Mock stats calculation (implement with real contract data later)
-      const mockStats = {
+      const invoices = await Promise.all(invoicePromises);
+      const validInvoices = invoices.filter(Boolean);
+      
+      console.log('📊 Dashboard: Loaded invoices:', validInvoices.length);
+      if (validInvoices.length > 0) {
+        console.log('First invoice sample:', {
+          tokenId: validInvoices[0]?.tokenId?.toString(),
+          status: validInvoices[0]?.status,
+          amountInvested: validInvoices[0]?.amountInvested?.toString(),
+          amountWithdrawn: validInvoices[0]?.amountWithdrawn?.toString(),
+        });
+      }
+      
+      // Calculate real statistics from blockchain data
+      let pendingCount = 0;
+      let fundedCount = 0;
+      let totalFunded = 0n; // BigInt
+      let totalWithdrawn = 0n; // BigInt
+      
+      for (const invoice of validInvoices) {
+        if (invoice) {
+          // Count by status
+          if (invoice.status === INVOICE_STATUS.PENDING || invoice.status === INVOICE_STATUS.APPROVED) {
+            pendingCount++;
+          } else if (invoice.status === INVOICE_STATUS.FUNDED || 
+                     invoice.status === INVOICE_STATUS.WITHDRAWN || 
+                     invoice.status === INVOICE_STATUS.PAID || 
+                     invoice.status === INVOICE_STATUS.COMPLETED) {
+            fundedCount++;
+          }
+          
+          // Sum amounts with null safety
+          if (invoice.amountInvested !== undefined && invoice.amountInvested !== null) {
+            totalFunded += BigInt(invoice.amountInvested);
+          }
+          if (invoice.amountWithdrawn !== undefined && invoice.amountWithdrawn !== null) {
+            totalWithdrawn += BigInt(invoice.amountWithdrawn);
+          }
+        }
+      }
+      
+      const realStats = {
         totalInvoices: invoiceIds.length,
-        pendingInvoices: Math.floor(invoiceIds.length * 0.4),
-        fundedInvoices: Math.floor(invoiceIds.length * 0.6),
-        totalFunded: 125000,
-        totalWithdrawn: 87500,
+        pendingInvoices: pendingCount,
+        fundedInvoices: fundedCount,
+        totalFunded: Number(totalFunded) / 1e18, // Convert from Wei to ETH
+        totalWithdrawn: Number(totalWithdrawn) / 1e18,
       };
       
-      // Format recent invoices
-      const formattedInvoices: Invoice[] = (invoiceMetadata || []).slice(0, 5).map((meta, index) => ({
-        id: meta.token_id || index,
-        invoiceNumber: meta.invoice_number || `INV-${meta.token_id}`,
-        importerCompany: meta.importer_name || 'Unknown Importer',
-        amount: 25000, // TODO: Get from contract
-        status: index % 3 === 0 ? 'funded' : index % 2 === 0 ? 'approved' : 'pending',
-        createdAt: meta.created_at,
-        fundedPercentage: index % 3 === 0 ? 100 : index % 2 === 0 ? 75 : 0,
-      }));
+      // Format recent invoices - Start from blockchain (source of truth)
+      // Take last 5 invoices from contract
+      const recentContractInvoices = validInvoices.slice(-5).reverse();
       
-      setStats(mockStats);
+      const formattedInvoices: Invoice[] = await Promise.all(
+        recentContractInvoices.map(async (contractData) => {
+          // Try to get metadata from Supabase (optional)
+          const { data: metadata } = await supabase
+            .from('invoice_metadata')
+            .select('*')
+            .eq('token_id', Number(contractData.tokenId))
+            .single();
+          
+          return {
+            id: Number(contractData.tokenId),
+            invoiceNumber: metadata?.invoice_number || `INV-${contractData.tokenId}`,
+            importerCompany: metadata?.importer_name || contractData.importerCompany,
+            amount: Number(contractData.loanAmount) / 100, // USD cents to dollars
+            status: getStatusLabel(contractData.status),
+            createdAt: metadata?.created_at || new Date().toISOString(),
+            fundedPercentage: contractData && Number(contractData.loanAmount) > 0
+              ? Math.round((Number(contractData.amountInvested) / Number(contractData.loanAmount)) * 100)
+              : 0,
+          };
+        })
+      );
+      
+      setStats(realStats);
       setRecentInvoices(formattedInvoices);
     } catch (error) {
       console.error('Error loading dashboard data:', error);

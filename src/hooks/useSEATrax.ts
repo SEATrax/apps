@@ -17,7 +17,7 @@
 
 import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
-import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment, type PoolStatus } from '@/lib/contract';
+import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment, type PoolStatus, type InvoiceStatus } from '@/lib/contract';
 import { liskSepolia } from 'panna-sdk';
 import { prepareContractCall, sendTransaction, readContract, waitForReceipt, prepareEvent, getContractEvents } from 'thirdweb';
 import { getContract } from 'thirdweb';
@@ -216,28 +216,58 @@ export function useSEATrax() {
       
       const receipt = await waitForReceipt(result);
       
-      // Parse InvoiceCreated event to get tokenId
+      // Parse InvoiceCreated event to get tokenId with retry logic
       let invoiceId: bigint | null = null;
-      try {
-        const invoiceCreatedEvent = prepareEvent({
-          signature: 'event InvoiceCreated(uint256 indexed tokenId, address indexed exporter, uint256 loanAmount)'
-        });
-        
-        const events = await getContractEvents({
-          contract: getContractInstance(),
-          events: [invoiceCreatedEvent],
-          fromBlock: receipt.blockNumber,
-          toBlock: receipt.blockNumber,
-        });
-        
-        if (events.length > 0 && events[0].args) {
-          invoiceId = events[0].args.tokenId;
-          console.log('✅ Invoice created with ID:', invoiceId.toString());
-        } else {
-          console.warn('⚠️ No InvoiceCreated event found in transaction');
+      
+      const invoiceCreatedEvent = prepareEvent({
+        signature: 'event InvoiceCreated(uint256 indexed tokenId, address indexed exporter, uint256 loanAmount)'
+      });
+      
+      // Retry logic: Try 3 times with 1-second delay
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const events = await getContractEvents({
+            contract: getContractInstance(),
+            events: [invoiceCreatedEvent],
+            fromBlock: receipt.blockNumber > 0n ? receipt.blockNumber - 1n : receipt.blockNumber,
+            toBlock: receipt.blockNumber,
+          });
+          
+          if (events.length > 0 && events[0].args) {
+            invoiceId = events[0].args.tokenId;
+            console.log(`✅ Invoice created with ID: ${invoiceId.toString()} (attempt ${attempt})`);
+            break; // Success - exit retry loop
+          }
+          
+          if (attempt < 3) {
+            console.log(`⏳ Attempt ${attempt}: No event yet, retrying in 1s...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (eventErr) {
+          console.warn(`⚠️ Attempt ${attempt} failed:`, eventErr);
+          if (attempt < 3) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         }
-      } catch (eventErr) {
-        console.warn('⚠️ Could not parse event, invoice created but ID unknown:', eventErr);
+      }
+      
+      // Fallback: Query exporter's invoices to get the last one
+      if (!invoiceId) {
+        try {
+          console.log('🔍 Fallback: Querying exporter invoices...');
+          const exporterInvoices = await readContract({
+            contract: getContractInstance(),
+            method: 'function getExporterInvoices(address exporter) view returns (uint256[])',
+            params: [account.address],
+          });
+          
+          if (exporterInvoices && exporterInvoices.length > 0) {
+            invoiceId = exporterInvoices[exporterInvoices.length - 1];
+            console.log(`✅ Fallback success: Found invoice ID ${invoiceId.toString()}`);
+          }
+        } catch (fallbackErr) {
+          console.error('❌ Fallback query failed:', fallbackErr);
+        }
       }
       
       return { success: true, txHash: result.transactionHash, invoiceId };
@@ -299,14 +329,80 @@ export function useSEATrax() {
     
     try {
       const contract = getContractInstance();
-      const invoice = await readContract({
+      
+      // Use struct format with explicit component names
+      const result: any = await readContract({
         contract,
-        method: 'function getInvoice(uint256 _invoiceId) view returns (tuple(uint256 tokenId, address exporter, string exporterCompany, string importerCompany, string importerEmail, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, uint256 amountInvested, uint256 amountWithdrawn, uint8 status, uint256 poolId, string ipfsHash, uint256 createdAt))',
+        method: {
+          name: 'getInvoice',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [
+            {
+              name: '_invoiceId',
+              type: 'uint256',
+            }
+          ],
+          outputs: [
+            {
+              name: '',
+              type: 'tuple',
+              components: [
+                { name: 'tokenId', type: 'uint256' },
+                { name: 'exporter', type: 'address' },
+                { name: 'exporterCompany', type: 'string' },
+                { name: 'importerCompany', type: 'string' },
+                { name: 'importerEmail', type: 'string' },
+                { name: 'shippingDate', type: 'uint256' },
+                { name: 'shippingAmount', type: 'uint256' },
+                { name: 'loanAmount', type: 'uint256' },
+                { name: 'amountInvested', type: 'uint256' },
+                { name: 'amountWithdrawn', type: 'uint256' },
+                { name: 'status', type: 'uint8' },
+                { name: 'poolId', type: 'uint256' },
+                { name: 'ipfsHash', type: 'string' },
+                { name: 'createdAt', type: 'uint256' },
+              ]
+            }
+          ]
+        },
         params: [invoiceId],
       });
-      return invoice as any as Invoice;
+      
+      console.log('🔍 getInvoice result type:', typeof result, 'isArray:', Array.isArray(result));
+      
+      // Access properties with proper undefined checks (don't use || for BigInt as 0n is falsy)
+      const invoice = {
+        tokenId: result.tokenId ?? result[0],
+        exporter: result.exporter ?? result[1],
+        exporterCompany: result.exporterCompany ?? result[2],
+        importerCompany: result.importerCompany ?? result[3],
+        importerEmail: result.importerEmail ?? result[4],
+        shippingDate: result.shippingDate ?? result[5],
+        shippingAmount: result.shippingAmount ?? result[6],
+        loanAmount: result.loanAmount ?? result[7],
+        amountInvested: result.amountInvested ?? result[8],
+        amountWithdrawn: result.amountWithdrawn ?? result[9],
+        status: (result.status ?? result[10]) as InvoiceStatus,
+        poolId: result.poolId ?? result[11],
+        ipfsHash: result.ipfsHash ?? result[12],
+        createdAt: result.createdAt ?? result[13],
+      };
+      
+      console.log('✅ Parsed invoice:', {
+        tokenId: invoice.tokenId?.toString(),
+        amountInvested: invoice.amountInvested?.toString(),
+        amountWithdrawn: invoice.amountWithdrawn?.toString(),
+      });
+      
+      return invoice;
     } catch (err: any) {
       console.error('Failed to get invoice:', err);
+      console.error('Error details:', {
+        message: err.message,
+        name: err.name,
+        invoiceId: invoiceId.toString(),
+      });
       return null;
     }
   }, [client, getContractInstance]);
@@ -412,43 +508,27 @@ export function useSEATrax() {
 
     try {
       const contract = getContractInstance();
-      const result = await readContract({
+      const result: any = await readContract({
         contract,
         method: 'function getPool(uint256) view returns (uint256,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint256[],uint256)',
         params: [poolId],
       });
       
-      // Convert tuple to Pool object
-      // Struct order: poolId, name, startDate, endDate, totalLoanAmount, totalShippingAmount,
-      //               amountInvested, amountDistributed, feePaid, status, invoiceIds, createdAt
-      const [
-        poolIdResult,
-        name,
-        startDate,
-        endDate,
-        totalLoanAmount,
-        totalShippingAmount,
-        amountInvested,
-        amountDistributed,
-        feePaid,
-        status,
-        invoiceIds,
-        createdAt,
-      ] = result as readonly [bigint, string, bigint, bigint, bigint, bigint, bigint, bigint, bigint, number, readonly bigint[], bigint];
+      const isArray = Array.isArray(result);
       
       return {
-        poolId: poolIdResult,
-        name,
-        startDate,
-        endDate,
-        invoiceIds: [...invoiceIds],
-        totalLoanAmount,
-        totalShippingAmount,
-        amountInvested,
-        amountDistributed,
-        feePaid,
-        status: status as PoolStatus,
-        createdAt,
+        poolId: isArray ? result[0] : (result.poolId ?? result[0]),
+        name: isArray ? result[1] : (result.name ?? result[1]),
+        startDate: isArray ? result[2] : (result.startDate ?? result[2]),
+        endDate: isArray ? result[3] : (result.endDate ?? result[3]),
+        totalLoanAmount: isArray ? result[4] : (result.totalLoanAmount ?? result[4]),
+        totalShippingAmount: isArray ? result[5] : (result.totalShippingAmount ?? result[5]),
+        amountInvested: isArray ? result[6] : (result.amountInvested ?? result[6]),
+        amountDistributed: isArray ? result[7] : (result.amountDistributed ?? result[7]),
+        feePaid: isArray ? result[8] : (result.feePaid ?? result[8]),
+        status: (isArray ? result[9] : (result.status ?? result[9])) as PoolStatus,
+        invoiceIds: isArray ? [...result[10]] : (result.invoiceIds ?? result[10]),
+        createdAt: isArray ? result[11] : (result.createdAt ?? result[11]),
       };
     } catch (err: any) {
       console.error('Failed to get pool:', err);
@@ -646,30 +726,21 @@ export function useSEATrax() {
 
     try {
       const contract = getContractInstance();
-      const result = await readContract({
+      const result: any = await readContract({
         contract,
         method: 'function getInvestment(uint256,address) view returns (address,uint256,uint256,uint256,uint256,bool)',
         params: [poolId, investor],
       });
       
-      // Convert tuple to Investment object
-      // Struct order: investor, poolId, amount, percentage, timestamp, returnsClaimed
-      const [
-        investorAddress,
-        poolIdResult,
-        amount,
-        percentage,
-        timestamp,
-        returnsClaimed,
-      ] = result as readonly [string, bigint, bigint, bigint, bigint, boolean];
+      const isArray = Array.isArray(result);
       
       return {
-        investor: investorAddress,
-        poolId: poolIdResult,
-        amount,
-        percentage,
-        timestamp,
-        returnsClaimed,
+        investor: isArray ? result[0] : (result.investor ?? result[0]),
+        poolId: isArray ? result[1] : (result.poolId ?? result[1]),
+        amount: isArray ? result[2] : (result.amount ?? result[2]),
+        percentage: isArray ? result[3] : (result.percentage ?? result[3]),
+        timestamp: isArray ? result[4] : (result.timestamp ?? result[4]),
+        returnsClaimed: isArray ? result[5] : (result.returnsClaimed ?? result[5]),
       };
     } catch (err: any) {
       console.error('Failed to get investment:', err);

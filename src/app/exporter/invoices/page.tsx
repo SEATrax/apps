@@ -159,59 +159,7 @@ export default function InvoiceList() {
       const invoiceResults = await Promise.all(invoicePromises);
       const validInvoices = invoiceResults.filter(Boolean) as Invoice[];
       
-      // If no invoices from blockchain, show mock data for demo
-      if (validInvoices.length === 0) {
-        const mockInvoices: Invoice[] = [
-          {
-            id: 1,
-            tokenId: 1,
-            invoiceNumber: 'INV-2024-001',
-            importerCompany: 'Global Trading Ltd',
-            exporterCompany: 'Southeast Exports Co',
-            shippingAmount: 18000,
-            loanAmount: 15000,
-            amountInvested: 12750,
-            amountWithdrawn: 10500,
-            status: 'funded',
-            shippingDate: '2024-12-15',
-            createdAt: '2024-11-25',
-            fundedPercentage: 85,
-          },
-          {
-            id: 2,
-            tokenId: 2,
-            invoiceNumber: 'INV-2024-002',
-            importerCompany: 'Asia Import Co',
-            exporterCompany: 'Southeast Exports Co',
-            shippingAmount: 25000,
-            loanAmount: 22000,
-            amountInvested: 9900,
-            amountWithdrawn: 0,
-            status: 'in_pool',
-            shippingDate: '2024-12-20',
-            createdAt: '2024-11-24',
-            fundedPercentage: 45,
-          },
-          {
-            id: 3,
-            tokenId: 0,
-            invoiceNumber: 'INV-2024-003',
-            importerCompany: 'European Goods Inc',
-            exporterCompany: 'Southeast Exports Co',
-            shippingAmount: 20000,
-            loanAmount: 18000,
-            amountInvested: 0,
-            amountWithdrawn: 0,
-            status: 'pending',
-            shippingDate: '2024-12-25',
-            createdAt: '2024-11-23',
-            fundedPercentage: 0,
-          },
-        ];
-        setInvoices(mockInvoices);
-      } else {
-        setInvoices(validInvoices);
-      }
+      setInvoices(validInvoices);
     } catch (error) {
       console.error('Error loading invoices:', error);
       // Fallback to empty array on error

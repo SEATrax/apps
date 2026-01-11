@@ -22,10 +22,13 @@ import {
   ExternalLink, 
   AlertCircle, 
   CheckCircle,
-  Wallet
+  Wallet,
+  Copy,
+  Link2
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import ExporterHeader from '@/components/ExporterHeader';
 
 interface Invoice {
   id: number;
@@ -96,6 +99,8 @@ export default function InvoiceDetail() {
       
       // Get metadata from Supabase
       let metadata = null;
+      let paymentLink = `/pay/${invoiceId}`; // Default payment link always available
+      
       if (isSupabaseConfigured) {
         const { data } = await supabase
           .from('invoice_metadata')
@@ -103,6 +108,17 @@ export default function InvoiceDetail() {
           .eq('token_id', Number(tokenId))
           .single();
         metadata = data;
+        
+        // Try to get payment link from database (fallback to default)
+        const { data: paymentData } = await supabase
+          .from('payments')
+          .select('payment_link')
+          .eq('invoice_id', Number(tokenId))
+          .single();
+        
+        if (paymentData?.payment_link) {
+          paymentLink = paymentData.payment_link;
+        }
       }
       
       // Map status number to string
@@ -141,9 +157,9 @@ export default function InvoiceDetail() {
         shippingDate: new Date(Number(contractInvoice.shippingDate) * 1000).toISOString().split('T')[0],
         createdAt: new Date(Number(contractInvoice.createdAt) * 1000).toISOString(),
         fundedPercentage,
-        documents: metadata?.documents || [],
+        documents: Array.isArray(metadata?.documents) ? metadata.documents : [],
         withdrawalHistory: [], // TODO: Get from events
-        paymentLink: contractInvoice.status === INVOICE_STATUS.WITHDRAWN ? `/pay/${invoiceId}` : undefined,
+        paymentLink, // From Supabase payments table
       };
       
       setInvoice(invoiceData);
@@ -280,7 +296,10 @@ export default function InvoiceDetail() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Header */}
+      {/* Navigation Header */}
+      <ExporterHeader />
+      
+      {/* Page Header */}
       <div className="bg-slate-900 border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -437,20 +456,27 @@ export default function InvoiceDetail() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {invoice.documents.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-slate-800 rounded-md">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">{doc.name}</p>
-                          <p className="text-xs text-slate-400">{formatFileSize(doc.size)}</p>
+                  {invoice.documents && Array.isArray(invoice.documents) && invoice.documents.length > 0 ? (
+                    invoice.documents.map((doc, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-slate-800 rounded-md">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-4 w-4 text-slate-400" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">{doc.name}</p>
+                            <p className="text-xs text-slate-400">{formatFileSize(doc.size)}</p>
+                          </div>
                         </div>
+                        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
+                          <Download className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                        <Download className="h-4 w-4" />
-                      </Button>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <FileText className="mx-auto h-12 w-12 text-slate-600 mb-3" />
+                      <p className="text-slate-400 text-sm">No documents uploaded</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -533,17 +559,50 @@ export default function InvoiceDetail() {
               </Alert>
             )}
 
-            {invoice.paymentLink && (
-              <Alert className="bg-green-900/20 border-green-800">
-                <CheckCircle className="h-4 w-4 text-green-400" />
-                <AlertDescription className="text-green-300">
-                  Payment link is available for the importer. Share the link to receive payment.
-                </AlertDescription>
-              </Alert>
+            {/* Payment Link - Show for all statuses except pending/rejected */}
+            {invoice.status !== 'pending' && invoice.status !== 'rejected' && (
+              <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                  <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <Link2 className="h-5 w-5" />
+                    Payment Link
+                  </CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Share this link with your importer to receive payment
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Alert className="bg-green-900/20 border-green-800">
+                    <CheckCircle className="h-4 w-4 text-green-400" />
+                    <AlertDescription className="text-green-300">
+                      Payment link is ready! Share with your importer.
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <div className="p-3 bg-slate-800 rounded-lg">
+                    <p className="text-xs text-slate-400 mb-2">Payment URL</p>
+                    <p className="text-sm font-mono text-slate-100 break-all">
+                      {typeof window !== 'undefined' ? window.location.origin : ''}{paymentLink}
+                    </p>
+                  </div>
+                  
+                  <Button 
+                    onClick={() => {
+                      const fullUrl = `${window.location.origin}${paymentLink}`;
+                      navigator.clipboard.writeText(fullUrl);
+                      alert('Payment link copied to clipboard!');
+                    }}
+                    className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Payment Link
+                  </Button>
+                </CardContent>
+              </Card>
             )}
 
             {/* Withdrawal History */}
-            {invoice.withdrawalHistory.length > 0 && (
+            {invoice.withdrawalHistory && Array.isArray(invoice.withdrawalHistory) && invoice.withdrawalHistory.length > 0 && (
               <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
                   <CardTitle className="text-slate-100">Withdrawal History</CardTitle>
@@ -561,7 +620,7 @@ export default function InvoiceDetail() {
                           </p>
                         </div>
                         <Link 
-                          href={`https://blockscout.lisk.com/tx/${withdrawal.txHash}`}
+                          href={`https://sepolia-blockscout.lisk.com/tx/${withdrawal.txHash}`}
                           target="_blank"
                           className="text-xs text-cyan-400 hover:text-cyan-300"
                         >
