@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,31 +30,49 @@ import type { Invoice, InvoiceStatus } from '@/types';
 // Invoice status mapping for numbers
 const INVOICE_STATUS_MAP: Record<number, { label: string; color: string; bgColor: string }> = {
   0: { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
-  1: { label: 'Approved', color: 'text-green-400', bgColor: 'bg-green-600' },
-  2: { label: 'In Pool', color: 'text-blue-400', bgColor: 'bg-blue-600' },
-  3: { label: 'Funded', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
-  4: { label: 'Paid', color: 'text-green-400', bgColor: 'bg-green-600' },
-  5: { label: 'Cancelled', color: 'text-red-400', bgColor: 'bg-red-600' },
+  1: { label: 'Approved', color: 'text-blue-400', bgColor: 'bg-blue-600' },
+  2: { label: 'In Pool', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
+  3: { label: 'Funded', color: 'text-green-400', bgColor: 'bg-green-600' },
+  4: { label: 'Withdrawn', color: 'text-purple-400', bgColor: 'bg-purple-600' },
+  5: { label: 'Paid', color: 'text-emerald-400', bgColor: 'bg-emerald-600' },
+  6: { label: 'Completed', color: 'text-teal-400', bgColor: 'bg-teal-600' },
+  7: { label: 'Rejected', color: 'text-red-400', bgColor: 'bg-red-600' },
 };
 
 // Status mapping for string values from hook
 const STATUS_STRING_MAP: Record<string, { label: string; color: string; bgColor: string }> = {
-  'PENDING': { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
-  'FINALIZED': { label: 'Approved', color: 'text-green-400', bgColor: 'bg-green-600' },
-  'FUNDRAISING': { label: 'In Pool', color: 'text-blue-400', bgColor: 'bg-blue-600' },
-  'FUNDED': { label: 'Funded', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
-  'PAID': { label: 'Paid', color: 'text-green-400', bgColor: 'bg-green-600' },
-  'CANCELLED': { label: 'Cancelled', color: 'text-red-400', bgColor: 'bg-red-600' },
+  'pending': { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
+  'approved': { label: 'Approved', color: 'text-blue-400', bgColor: 'bg-blue-600' },
+  'in_pool': { label: 'In Pool', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
+  'funded': { label: 'Funded', color: 'text-green-400', bgColor: 'bg-green-600' },
+  'withdrawn': { label: 'Withdrawn', color: 'text-purple-400', bgColor: 'bg-purple-600' },
+  'paid': { label: 'Paid', color: 'text-emerald-400', bgColor: 'bg-emerald-600' },
+  'completed': { label: 'Completed', color: 'text-teal-400', bgColor: 'bg-teal-600' },
+  'rejected': { label: 'Rejected', color: 'text-red-400', bgColor: 'bg-red-600' },
 };
 
 // Helper function to get status info
 const getStatusInfo = (status: InvoiceStatus | number) => {
   return typeof status === 'string' ? 
-    STATUS_STRING_MAP[status] || STATUS_STRING_MAP['PENDING'] :
+    STATUS_STRING_MAP[status] || STATUS_STRING_MAP['pending'] :
     INVOICE_STATUS_MAP[Number(status)] || INVOICE_STATUS_MAP[0];
 };
 
-interface InvoiceWithMetadata extends Invoice {
+interface InvoiceWithMetadata {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
   metadata?: {
     invoice_number: string;
     importer_name: string;
@@ -66,8 +83,7 @@ interface InvoiceWithMetadata extends Invoice {
 
 export default function AdminInvoicesPage() {
   const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { getInvoice } = useInvoiceNFT();
+  const { checkUserRoles, getAllPendingInvoices, getInvoice, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [invoices, setInvoices] = useState<InvoiceWithMetadata[]>([]);
@@ -86,18 +102,18 @@ export default function AdminInvoicesPage() {
     }
 
     if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
+      checkUserRoles(address).then((roles) => {
         setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
+        if (!roles?.isAdmin) {
           router.push('/');
         }
       });
     }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
 
   // Fetch invoices when admin role is confirmed
   useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (userRoles?.isAdmin) {
       fetchInvoices();
     }
   }, [userRoles]);
@@ -106,13 +122,13 @@ export default function AdminInvoicesPage() {
   useEffect(() => {
     let filtered = invoices;
 
-    // Apply status filter  
+    // Apply status filter (invoice.status is a number from contract)
     if (filter === 'pending') {
-      filtered = filtered.filter(inv => inv.status === 'PENDING');
+      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.PENDING);
     } else if (filter === 'approved') {
-      filtered = filtered.filter(inv => inv.status === 'FINALIZED'); // Hook returns 'FINALIZED' for approved
+      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.APPROVED);
     } else if (filter === 'funded') {
-      filtered = filtered.filter(inv => inv.status === 'FUNDED');
+      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.FUNDED);
     }
 
     // Apply search filter
@@ -170,16 +186,16 @@ export default function AdminInvoicesPage() {
   };
 
   const getFilterStats = () => {
-    const pending = invoices.filter(inv => inv.status === 'PENDING').length;
-    const approved = invoices.filter(inv => inv.status === 'FINALIZED').length;
-    const funded = invoices.filter(inv => inv.status === 'FUNDED').length;
+    const pending = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.PENDING).length;
+    const approved = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.APPROVED).length;
+    const funded = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.FUNDED).length;
     return { pending, approved, funded, total: invoices.length };
   };
 
   const stats = getFilterStats();
 
   // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole) {
+  if (!isLoaded || !isConnected || isLoading || !userRoles?.isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950">
         <div className="text-center">
@@ -406,7 +422,7 @@ export default function AdminInvoicesPage() {
                               <p className="text-gray-400">Shipping Date</p>
                               <p className="text-white font-medium flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
-                                {formatDate(invoice.invoiceDate)}
+                                {formatDate(Number(invoice.shippingDate) * 1000)}
                               </p>
                             </div>
                           </div>
@@ -415,7 +431,7 @@ export default function AdminInvoicesPage() {
                             <div>
                               <p className="text-gray-400">Shipping Amount</p>
                               <p className="text-white font-medium">
-                                {formatCurrency(Number(invoice.invoiceValue) / 100)}
+                                {formatCurrency(Number(invoice.shippingAmount) / 100)}
                               </p>
                             </div>
                             <div>
@@ -427,7 +443,7 @@ export default function AdminInvoicesPage() {
                             <div>
                               <p className="text-gray-400">Amount Invested</p>
                               <p className="text-green-400 font-medium">
-                                {formatCurrency(Number(invoice.fundedAmount) / 100)}
+                                {formatCurrency(Number(invoice.amountInvested) / 1e18 * 3000)}
                               </p>
                             </div>
                           </div>

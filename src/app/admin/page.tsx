@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { usePlatformAnalytics } from '@/hooks/usePlatformAnalytics';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -29,8 +28,7 @@ import { formatCurrency } from '@/lib/utils';
 
 export default function AdminDashboard() {
   const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading: rolesLoading } = useAccessControl();
-  const { getTotalValueLocked, isLoading: analyticsLoading } = usePlatformAnalytics();
+  const { checkUserRoles, getAllOpenPools, getPool, isLoading: contractLoading } = useSEATrax();
   const router = useRouter();
   
   const [userRoles, setUserRoles] = useState<any>(null);
@@ -45,10 +43,10 @@ export default function AdminDashboard() {
       return;
     }
 
-    if (isLoaded && isConnected && !rolesLoading && address) {
-      getUserRoles(address).then((roles) => {
+    if (isLoaded && isConnected && !contractLoading && address) {
+      checkUserRoles(address).then((roles) => {
         setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
+        if (!roles?.isAdmin) {
           router.push('/');
         }
       }).catch((error) => {
@@ -56,12 +54,12 @@ export default function AdminDashboard() {
         console.error('Error checking roles:', error);
       });
     }
-  }, [isLoaded, isConnected, rolesLoading, address, getUserRoles, router]);
+  }, [isLoaded, isConnected, contractLoading, address, checkUserRoles, router]);
 
   // Load platform statistics
   useEffect(() => {
     const loadStats = async () => {
-      if (!isConnected || !userRoles?.hasAdminRole) return;
+      if (!isConnected || !userRoles?.isAdmin) return;
       
       try {
         setIsLoadingStats(true);
@@ -80,8 +78,21 @@ export default function AdminDashboard() {
           supabase.from('pool_metadata').select('*', { count: 'exact', head: true })
         ]);
 
-        // Get TVL from smart contract
-        const tvl = await getTotalValueLocked();
+        // Calculate TVL from all pools manually
+        const poolIds = await getAllOpenPools();
+        let tvl = 0n;
+        
+        // Get each pool's data and sum up amountInvested
+        for (const poolId of poolIds) {
+          try {
+            const pool = await getPool(poolId);
+            if (pool) {
+              tvl += pool.amountInvested;
+            }
+          } catch (error) {
+            console.error(`Failed to get pool ${poolId}:`, error);
+          }
+        }
         
         setPlatformStats({
           totalValueLocked: tvl || 0n,
@@ -100,10 +111,10 @@ export default function AdminDashboard() {
     };
 
     loadStats();
-  }, [isConnected, userRoles, getTotalValueLocked]);
+  }, [isConnected, userRoles, getAllOpenPools, getPool]);
 
   // Show loading screen while checking authentication
-  if (!isLoaded || !isConnected || rolesLoading) {
+  if (!isLoaded || !isConnected || contractLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950">
         <div className="text-center">
@@ -115,7 +126,7 @@ export default function AdminDashboard() {
   }
 
   // Redirect if not admin
-  if (!userRoles?.hasAdminRole) {
+  if (!userRoles?.isAdmin) {
     return null;
   }
 

@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +30,21 @@ import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Invoice } from '@/types';
 
-interface InvoiceWithMetadata extends Invoice {
+interface InvoiceWithMetadata {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
   metadata?: {
     invoice_number: string;
     importer_name: string;
@@ -43,9 +55,7 @@ interface InvoiceWithMetadata extends Invoice {
 
 export default function CreatePoolPage() {
   const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { createPool, finalizePool } = usePoolNFT();
-  const { getInvoice } = useInvoiceNFT();
+  const { checkUserRoles, createPool, getInvoice, getAllApprovedInvoices, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [currentStep, setCurrentStep] = useState(1);
@@ -73,18 +83,18 @@ export default function CreatePoolPage() {
     }
 
     if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
+      checkUserRoles(address).then((roles) => {
         setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
+        if (!roles?.isAdmin) {
           router.push('/');
         }
       });
     }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
 
   // Load finalized invoices when admin role is confirmed
   useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (userRoles?.isAdmin) {
       loadFinalizedInvoices();
     }
   }, [userRoles]);
@@ -93,7 +103,10 @@ export default function CreatePoolPage() {
     try {
       setLoadingInvoices(true);
       
-      // Get all invoice metadata from Supabase
+      // Get all approved invoices from smart contract
+      const approvedInvoiceIds = await getAllApprovedInvoices();
+      
+      // Get metadata from Supabase
       const { data: metadataList, error: metadataError } = await supabase
         .from('invoice_metadata')
         .select('*')
@@ -101,28 +114,28 @@ export default function CreatePoolPage() {
 
       if (metadataError) throw metadataError;
 
-      // Get invoice data from smart contract and filter for finalized ones
+      // Get full invoice data and combine with metadata
       const finalizedInvoices: InvoiceWithMetadata[] = [];
       
-      for (const metadata of metadataList || []) {
+      for (const invoiceId of approvedInvoiceIds) {
         try {
-          const invoiceData = await getInvoice(BigInt(metadata.token_id));
+          const invoiceData = await getInvoice(invoiceId);
+          const metadata = metadataList?.find(m => m.token_id === Number(invoiceId));
           
-          // Only include invoices with status 1 (Finalized/Approved) that are not already in pools
-          const isFinalized = (status: any) => status === 1 || status === 'FINALIZED' || status === 'APPROVED';
-          if (invoiceData && isFinalized(invoiceData.status)) {
+          // Only include if not already in a pool (poolId === 0)
+          if (invoiceData && Number(invoiceData.poolId) === 0) {
             finalizedInvoices.push({
               ...invoiceData,
               metadata: {
-                invoice_number: metadata.invoice_number,
-                importer_name: metadata.importer_name || 'Unknown',
-                goods_description: metadata.goods_description || '',
-                created_at: metadata.created_at,
+                invoice_number: metadata?.invoice_number || `Invoice #${invoiceId}`,
+                importer_name: metadata?.importer_name || 'Unknown',
+                goods_description: metadata?.goods_description || '',
+                created_at: metadata?.created_at || new Date().toISOString(),
               }
             });
           }
         } catch (error) {
-          console.error(`Failed to fetch invoice ${metadata.token_id}:`, error);
+          console.error(`Failed to fetch invoice ${invoiceId}:`, error);
         }
       }
 
@@ -152,7 +165,7 @@ export default function CreatePoolPage() {
     );
     
     const totalShippingAmount = selectedInvoiceData.reduce(
-      (sum, inv) => sum + Number(inv.invoiceValue), 0
+      (sum, inv) => sum + Number(inv.shippingAmount), 0
     );
 
     return { totalLoanAmount, totalShippingAmount, count: selectedInvoices.length };
@@ -204,40 +217,45 @@ export default function CreatePoolPage() {
       setCreating(true);
       setMessage(null);
 
-      // Convert dates to timestamps
+      // Convert dates to timestamps (in seconds)
       const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
 
-      // Create pool NFT
-      const poolId = await createPool(
+      // Create pool with invoices, dates, and name
+      // Signature: createPool(name, invoiceIds, startDate, endDate)
+      const result = await createPool(
         poolName,
-        BigInt(startTimestamp),
-        BigInt(endTimestamp),
-        selectedInvoices
+        selectedInvoices,
+        startTimestamp,
+        endTimestamp
       );
+      
+      if (!result.success || !result.poolId) {
+        throw new Error(result.error || 'Failed to create pool');
+      }
 
       // Save metadata to Supabase
       const { error: metadataError } = await supabase
         .from('pool_metadata')
         .insert({
-          pool_id: Number(poolId),
+          pool_id: Number(result.poolId),
           description: poolDescription,
           risk_category: riskCategory,
         });
 
-      if (metadataError) throw metadataError;
-
-      // Finalize pool to open for investments
-      await finalizePool(poolId);
+      if (metadataError) {
+        console.error('Metadata save error:', metadataError);
+        // Don't throw - pool was created successfully on-chain
+      }
 
       setMessage({ 
         type: 'success', 
-        text: `Pool created successfully! Pool ID: ${poolId}` 
+        text: `Pool created successfully! Pool ID: ${result.poolId}. Pool is now open for investments.` 
       });
 
       // Redirect to pool detail page after a short delay
       setTimeout(() => {
-        router.push(`/admin/pools/${poolId}`);
+        router.push(`/admin/pools/${result.poolId}`);
       }, 2000);
 
     } catch (error: any) {
@@ -253,7 +271,7 @@ export default function CreatePoolPage() {
   const totals = calculateTotals();
 
   // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole) {
+  if (!isLoaded || !isConnected || isLoading || !userRoles?.isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950">
         <div className="text-center">
@@ -474,7 +492,7 @@ export default function CreatePoolPage() {
                               </div>
                               <div>
                                 <p className="text-gray-400">Shipping Date</p>
-                                <p className="text-white">{formatDate(invoice.invoiceDate)}</p>
+                                <p className="text-white">{formatDate(Number(invoice.shippingDate) * 1000)}</p>
                               </div>
                             </div>
 

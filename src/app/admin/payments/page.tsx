@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
-import { usePaymentOracle } from '@/hooks/usePaymentOracle';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,9 +33,24 @@ import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate, formatDateString, formatAddress } from '@/lib/utils';
+import { INVOICE_STATUS } from '@/lib/contract';
 import type { Invoice } from '@/types';
 
-interface InvoiceWithMetadata extends Invoice {
+interface InvoiceWithMetadata {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
   metadata?: {
     invoice_number: string;
     importer_name: string;
@@ -63,9 +76,7 @@ type InvoiceStatus = 'all' | 'funded' | 'paid';
 
 export default function PaymentTrackingPage() {
   const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { getInvoice } = useInvoiceNFT();
-  const { markInvoicePaid } = usePaymentOracle();
+  const { checkUserRoles, getInvoice, markInvoicePaid, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [userRoles, setUserRoles] = useState<any>(null);
@@ -90,18 +101,18 @@ export default function PaymentTrackingPage() {
     }
 
     if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
+      checkUserRoles(address).then((roles) => {
         setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
+        if (!roles?.isAdmin) {
           router.push('/');
         }
       });
     }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
 
   // Load data when admin role is confirmed
   useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (userRoles?.isAdmin) {
       loadData();
     }
   }, [userRoles]);
@@ -139,8 +150,8 @@ export default function PaymentTrackingPage() {
         try {
           const invoiceData = await getInvoice(BigInt(metadata.token_id));
           
-          // Only include funded or paid invoices
-          if (invoiceData && (invoiceData.status === 'FUNDED' || invoiceData.status === 'PAID')) {
+          // Only include funded or paid invoices (status 3, 4, 5, 6)
+          if (invoiceData && Number(invoiceData.status) >= INVOICE_STATUS.FUNDED) {
             invoicesList.push({
               ...invoiceData,
               metadata: {
@@ -173,8 +184,8 @@ export default function PaymentTrackingPage() {
 
       const matchesStatus = 
         invoiceStatusFilter === 'all' ||
-        (invoiceStatusFilter === 'funded' && invoice.status === 'FUNDED') ||
-        (invoiceStatusFilter === 'paid' && invoice.status === 'PAID');
+        (invoiceStatusFilter === 'funded' && Number(invoice.status) === INVOICE_STATUS.FUNDED) ||
+        (invoiceStatusFilter === 'paid' && Number(invoice.status) === INVOICE_STATUS.PAID);
 
       return matchesSearch && matchesStatus;
     });
@@ -297,10 +308,10 @@ export default function PaymentTrackingPage() {
 
   const calculateTotals = () => {
     const totalInvoices = filteredInvoices.length;
-    const paidInvoices = filteredInvoices.filter(inv => inv.status === 'PAID').length;
+    const paidInvoices = filteredInvoices.filter(inv => Number(inv.status) === INVOICE_STATUS.PAID).length;
     const totalAmount = filteredInvoices.reduce((sum, inv) => sum + Number(inv.loanAmount), 0);
     const paidAmount = filteredInvoices
-      .filter(inv => inv.status === 'PAID')
+      .filter(inv => Number(inv.status) === INVOICE_STATUS.PAID)
       .reduce((sum, inv) => sum + Number(inv.loanAmount), 0);
 
     const pendingConfirmations = payments.filter(p => p.status === 'pending_confirmation').length;
@@ -406,7 +417,7 @@ export default function PaymentTrackingPage() {
     );
   }
 
-  if (!isConnected || !userRoles?.hasAdminRole) {
+  if (!isConnected || !userRoles?.isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800 w-full max-w-md">
@@ -606,8 +617,8 @@ export default function PaymentTrackingPage() {
                             <p className="text-slate-300 text-sm mt-1">{invoice.metadata?.importer_name}</p>
                           </div>
                           <div className="flex gap-2">
-                            <Badge className={invoice.status === 'PAID' ? 'bg-green-600' : 'bg-blue-600'}>
-                              {invoice.status === 'PAID' ? 'Paid' : 'Funded'}
+                            <Badge className={Number(invoice.status) === INVOICE_STATUS.PAID ? 'bg-green-600' : 'bg-blue-600'}>
+                              {Number(invoice.status) === INVOICE_STATUS.PAID ? 'Paid' : 'Funded'}
                             </Badge>
                             {payment && getPaymentStatusBadge(payment.status)}
                           </div>
@@ -620,11 +631,11 @@ export default function PaymentTrackingPage() {
                           </div>
                           <div>
                             <p className="text-slate-400 text-xs">Invoice Value</p>
-                            <p className="text-white">{formatCurrency(Number(invoice.invoiceValue))}</p>
+                            <p className="text-white">{formatCurrency(Number(invoice.shippingAmount) / 100)}</p>
                           </div>
                           <div>
                             <p className="text-slate-400 text-xs">Invoice Date</p>
-                            <p className="text-white">{formatDate(Number(invoice.invoiceDate))}</p>
+                            <p className="text-white">{formatDate(Number(invoice.shippingDate) * 1000)}</p>
                           </div>
                           <div>
                             <p className="text-slate-400 text-xs">Payment Link</p>
@@ -639,7 +650,7 @@ export default function PaymentTrackingPage() {
                           </div>
                         </div>
 
-                        {invoice.status !== 'PAID' && (
+                        {Number(invoice.status) !== INVOICE_STATUS.PAID && (
                           <div className="flex gap-3">
                             <Link href={paymentLink} target="_blank">
                               <Button variant="outline" size="sm" className="border-slate-700">

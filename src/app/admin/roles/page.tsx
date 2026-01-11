@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePanna } from '@/hooks/usePanna';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { useRoleCheck } from '@/hooks/useRoleCheck';
 import { Shield, UserPlus, Copy, Check } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +17,7 @@ import AdminHeader from '@/components/AdminHeader';
 export default function RoleManagementPage() {
   const router = useRouter();
   const { isConnected, address } = usePanna();
-  const { grantAdminRole, grantExporterRole, grantInvestorRole, isLoading } = useAccessControl();
+  const { grantAdminRole, isLoading } = useSEATrax();
   const { isAdmin, loading: rolesLoading } = useRoleCheck();
   const { isDevMode, devRole } = useDevMode();
   const { toast } = useToast();
@@ -104,17 +104,24 @@ export default function RoleManagementPage() {
     }
 
     try {
-      if (role === 'admin') {
-        await grantAdminRole(targetAddress);
-      } else if (role === 'exporter') {
-        await grantExporterRole(targetAddress);
-      } else {
-        await grantInvestorRole(targetAddress);
+      if (role !== 'admin') {
+        toast({
+          title: 'Notice',
+          description: 'Exporters and Investors self-register. Only admin roles can be granted here.',
+          variant: 'default',
+        });
+        return;
+      }
+      
+      const result = await grantAdminRole(targetAddress);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to grant admin role');
       }
 
       toast({
         title: 'Success',
-        description: `${role.charAt(0).toUpperCase() + role.slice(1)} role granted successfully!`,
+        description: 'Admin role granted successfully!',
       });
 
       setTargetAddress('');

@@ -21,13 +21,13 @@ import {
   Loader2
 } from 'lucide-react';
 import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { useRouter } from 'next/navigation';
 import type { ConsistencyIssue, ValidationResult } from '@/lib/consistency';
 
 export default function DataHealthPage() {
   const { address } = useWalletSession();
-  const { getUserRoles } = useAccessControl();
+  const { checkUserRoles } = useSEATrax();
   const router = useRouter();
 
   const [userRoles, setUserRoles] = useState<any>(null);
@@ -40,8 +40,8 @@ export default function DataHealthPage() {
   useEffect(() => {
     const checkRole = async () => {
       if (address) {
-        const roles = await getUserRoles(address);
-        if (!roles?.hasAdminRole) {
+        const roles = await checkUserRoles(address);
+        if (!roles?.isAdmin) {
           router.push('/');
           return;
         }
@@ -49,7 +49,7 @@ export default function DataHealthPage() {
       }
     };
     checkRole();
-  }, [address, getUserRoles, router]);
+  }, [address, checkUserRoles, router]);
 
   // Run consistency check
   const runCheck = async () => {

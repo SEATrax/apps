@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,7 @@ type Exporter = Database['public']['Tables']['exporters']['Row'];
 
 export default function ExporterVerificationPage() {
   const { isLoaded, isConnected, address } = useWalletSession();
-  const { grantExporterRole, getUserRoles, isLoading } = useAccessControl();
+  const { verifyExporter, checkUserRoles, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [exporters, setExporters] = useState<Exporter[]>([]);
@@ -46,18 +46,18 @@ export default function ExporterVerificationPage() {
     }
 
     if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
+      checkUserRoles(address).then((roles) => {
         setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
+        if (!roles?.isAdmin) {
           router.push('/');
         }
       });
     }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
 
   // Fetch exporters from Supabase
   useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (userRoles?.isAdmin) {
       fetchExporters();
     }
   }, [userRoles]);
@@ -107,8 +107,12 @@ export default function ExporterVerificationPage() {
       setApprovingId(exporter.id);
       setMessage(null);
 
-      // 1. Grant exporter role via smart contract
-      await grantExporterRole(exporter.wallet_address);
+      // 1. Verify exporter via smart contract
+      const result = await verifyExporter(exporter.wallet_address);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to verify exporter on-chain');
+      }
 
       // 2. Update verification status in database
       const { error } = await supabase
@@ -174,6 +178,14 @@ export default function ExporterVerificationPage() {
             Review and approve exporter registrations to grant platform access
           </p>
         </div>
+        
+        {/* Self-Registration Notice */}
+        <Alert className="mb-6 bg-blue-900/20 border-blue-800">
+          <AlertCircle className="h-4 w-4 text-blue-400" />
+          <AlertDescription className="text-blue-300">
+            <strong>Note:</strong> Exporters now self-register on-chain. Your role is to verify their credentials and approve them for creating invoices.
+          </AlertDescription>
+        </Alert>
 
         {/* Message Alert */}
         {message && (

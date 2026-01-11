@@ -205,102 +205,122 @@
 
 ### A. Dashboard
 
-- [ ] **`src/app/admin/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Remove: `usePlatformAnalytics`
-  - [ ] Update: `getUserRoles()` → `checkUserRoles()`
-  - [ ] Remove: `getTotalValueLocked()` call
-  - [ ] Calculate: TVL from pool data manually
+- [x] **`src/app/admin/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Remove: `usePlatformAnalytics`
+  - [x] Update: `getUserRoles()` → `checkUserRoles()`
+  - [x] Remove: `getTotalValueLocked()` call
+  - [x] Calculate: TVL from pool data manually
     ```typescript
-    const pools = await getAllOpenPools();
-    const tvl = pools.reduce((sum, pool) => sum + pool.amountInvested, 0);
+    const poolIds = await getAllOpenPools();
+    let tvl = 0n;
+    for (const poolId of poolIds) {
+      const pool = await getPool(poolId);
+      if (pool) tvl += pool.amountInvested;
+    }
     ```
-  - [ ] Test: Dashboard loads without analytics contract
+  - [x] Test: Dashboard loads without analytics contract
 
 ### B. Exporter Management
 
-- [ ] **`src/app/admin/exporters/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Remove: "Grant Exporter Role" button
-  - [ ] Add: "Verify Exporter" button
-  - [ ] Change: `grantExporterRole()` → `verifyExporter()`
-  - [ ] Add: Notice "Exporters self-register"
-  - [ ] Test: Can verify exporters
+- [x] **`src/app/admin/exporters/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Remove: "Grant Exporter Role" button
+  - [x] Add: "Verify Exporter" button
+  - [x] Change: `grantExporterRole()` → `verifyExporter()`
+  - [x] Add: Notice "Exporters self-register"
+  - [x] Test: Can verify exporters
 
 ### C. Invoice Management
 
-- [ ] **`src/app/admin/invoices/page.tsx`**
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Update: Fetch pending invoices
-  - [ ] Test: Invoice list shows pending items
+- [x] **`src/app/admin/invoices/page.tsx`** ✅
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Update: Status enum (8 statuses)
+  - [x] Update: Field names (invoiceValue → shippingAmount, fundedAmount → amountInvested)
+  - [x] Update: Fetch pending invoices
+  - [x] Test: Invoice list shows pending items
 
-- [ ] **`src/app/admin/invoices/[id]/page.tsx`**
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Add: `approveInvoice()` button
-  - [ ] Add: `rejectInvoice()` button
-  - [ ] Update: Approval flow (no finalize step)
-  - [ ] Test: Can approve/reject invoices
+- [x] **`src/app/admin/invoices/[id]/page.tsx`** ✅
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Add: `approveInvoice()` button
+  - [x] Add: `rejectInvoice()` button
+  - [x] Update: Approval flow (no finalize step)
+  - [x] Update: Status enum (8 statuses)
+  - [x] Update: Field names (shippingAmount, amountInvested)
+  - [x] Update: Role check (isAdmin)
+  - [x] Test: Can approve/reject invoices
 
 ### D. Pool Creation
 
-- [ ] **`src/app/admin/pools/new/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Replace: `usePoolNFT` → `useSEATrax`
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Add: Date range pickers
-    - [ ] `startDate` input (DatePicker)
-    - [ ] `endDate` input (DatePicker)
-    - [ ] Validation: endDate > startDate
-  - [ ] Update: `createPool()` call with new params
+- [x] **`src/app/admin/pools/new/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Replace: `usePoolNFT` → `useSEATrax`
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Add: Date range pickers (already present)
+    - [x] `startDate` input (datetime-local)
+    - [x] `endDate` input (datetime-local)
+    - [x] Validation: endDate > startDate
+  - [x] Update: `createPool()` call with new params
     ```typescript
     createPool(name, invoiceIds, startDate, endDate)
     ```
-  - [ ] Remove: `finalizePool()` call
-  - [ ] Add: Notice "Pool auto-finalizes at 100%"
-  - [ ] Test: Can create pool with dates
+  - [x] Remove: `finalizePool()` call (auto-opens)
+  - [x] Use: `getAllApprovedInvoices()` for simplified loading
+  - [x] Test: Can create pool with dates
 
 ### E. Pool Management
 
-- [ ] **`src/app/admin/pools/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Replace: `usePoolNFT` → `useSEATrax`
-  - [ ] Replace: `usePoolFunding` → `useSEATrax`
-  - [ ] Update: Fetch open pools only
-  - [ ] Test: Pool list displays
+- [x] **`src/app/admin/pools/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Replace: `usePoolNFT` → `useSEATrax`
+  - [x] Replace: `usePoolFunding` → `useSEATrax`
+  - [x] Update: Fetch open pools only
+  - [x] Update: Numeric status handling (0-3)
+  - [x] Create: PoolWithMetadata interface
+  - [x] Test: Pool list displays
 
-- [ ] **`src/app/admin/pools/[id]/page.tsx`**
-  - [ ] Replace all 5 hooks → `useSEATrax`
-  - [ ] Remove: "Distribute to Invoices" button
-  - [ ] Remove: Manual distribution UI
-  - [ ] Add: Info banner "Funds auto-distribute at 100%"
-  - [ ] Keep: "Distribute Profits" button (after all paid)
-  - [ ] Test: Pool detail shows correct info
+- [x] **`src/app/admin/pools/[id]/page.tsx`** ✅
+  - [x] Replace all 6 hooks → `useSEATrax`
+  - [x] Remove: "Distribute to Invoices" button
+  - [x] Remove: Manual distribution UI
+  - [x] Remove: `allocateFundsToInvoices()` function
+  - [x] Add: Info banner "Funds auto-distribute at 100%"
+  - [x] Keep: "Distribute Profits" button (after all paid)
+  - [x] Update: Field mappings (amountInvested, amountWithdrawn)
+  - [x] Test: Pool detail shows correct info
 
 ### F. Payment Management
 
-- [ ] **`src/app/admin/payments/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Replace: `useInvoiceNFT` → `useSEATrax`
-  - [ ] Replace: `usePaymentOracle` → `useSEATrax`
-  - [ ] Update: Mark paid flow
-  - [ ] Test: Can mark invoices as paid
+- [x] **`src/app/admin/payments/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Replace: `useInvoiceNFT` → `useSEATrax`
+  - [x] Replace: `usePaymentOracle` → `useSEATrax`
+  - [x] Import: INVOICE_STATUS constants
+  - [x] Update: Status filtering (numeric with Number() wrapper)
+  - [x] Update: Field mappings (shippingAmount, shippingDate)
+  - [x] Create: InvoiceWithMetadata interface
+  - [x] Update: Mark paid flow
+  - [x] Test: Can mark invoices as paid
 
 ### G. Role Management
 
-- [ ] **`src/app/admin/roles/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Remove: Grant Exporter/Investor buttons
-  - [ ] Keep: Grant Admin button (still works)
-  - [ ] Add: Instructions for user self-registration
-  - [ ] Test: Can grant admin role
+- [x] **`src/app/admin/roles/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Remove: `grantExporterRole()` and `grantInvestorRole()` functions
+  - [x] Keep: Grant Admin button (still works)
+  - [x] Add: Notice "Exporters and Investors self-register"
+  - [x] Update: Grant handler to reject non-admin roles
+  - [x] Test: Can grant admin role
 
 ### H. Health Check
 
-- [ ] **`src/app/admin/health/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Test: Health check works
+- [x] **`src/app/admin/health/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Update: `getUserRoles()` → `checkUserRoles()`
+  - [x] Update: `hasAdminRole` → `isAdmin`
+  - [x] Test: Health check works
 
 ---
 
@@ -541,7 +561,7 @@
 **Started**: January 11, 2026  
 **Phase 2 Complete**: January 11, 2026  
 **Phase 3 Complete**: January 11, 2026  
-**Phase 4 Complete**: _________  
+**Phase 4 Complete**: January 11, 2026 ✅  
 **Phase 5 Complete**: _________  
 **Phase 6 Complete**: _________  
 **Phase 7 Complete**: _________  
@@ -567,5 +587,5 @@
 ---
 
 **Last Updated**: January 11, 2026  
-**Current Phase**: Phase 4 - Admin Flow  
+**Current Phase**: Phase 5 - Investor Flow  
 **Blocked By**: None
