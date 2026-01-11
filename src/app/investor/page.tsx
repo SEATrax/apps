@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
-import { useInvestmentStats } from '@/hooks/useInvestmentStats';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,12 +14,17 @@ import { formatETH, formatUSD, formatPercentage, formatDateRelative, getStatusCo
 export default function InvestorDashboard() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
-  const { stats, getRecentInvestments, calculatePortfolioPerformance, loading: statsLoading } = useInvestmentStats();
+  const { getInvestorPools, getPool, getInvestment } = useSEATrax();
   const { profile, loading: profileLoading } = useInvestorProfile();
-
-  const isLoading = statsLoading || profileLoading;
-  const recentInvestments = getRecentInvestments(3);
-  const portfolioPerformance = calculatePortfolioPerformance();
+  
+  const [portfolioStats, setPortfolioStats] = useState({
+    totalInvested: 0,
+    totalValue: 0,
+    totalReturn: 0,
+    activeInvestments: 0
+  });
+  const [recentInvestments, setRecentInvestments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Get user name or fallback
   const getUserName = () => {
@@ -34,8 +39,58 @@ export default function InvestorDashboard() {
       return;
     }
   }, [activeAccount, router]);
+  
+  // Fetch portfolio stats
+  useEffect(() => {
+    const fetchPortfolioStats = async () => {
+      if (!activeAccount) return;
+      
+      try {
+        setLoading(true);
+        
+        // For now, use mock data until full integration
+        // TODO: Implement getInvestorPools() and calculate stats
+        setPortfolioStats({
+          totalInvested: 5200,
+          totalValue: 5400,
+          totalReturn: 200,
+          activeInvestments: 3
+        });
+        
+        setRecentInvestments([
+          {
+            id: 1,
+            poolName: 'Southeast Asia Pool #12',
+            amount: 2100,
+            status: 'Active',
+            fundingProgress: 85
+          },
+          {
+            id: 2,
+            poolName: 'Maritime Trade Pool #8',
+            amount: 1500,
+            status: 'Completed',
+            fundingProgress: 100
+          },
+          {
+            id: 3,
+            poolName: 'Electronics Pool #15',
+            amount: 1600,
+            status: 'Active',
+            fundingProgress: 45
+          }
+        ]);
+      } catch (error) {
+        console.error('Failed to fetch portfolio:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchPortfolioStats();
+  }, [activeAccount, getInvestorPools, getPool, getInvestment]);
 
-  if (isLoading) {
+  if (loading || profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -137,8 +192,8 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-cyan-400 font-bold">{formatETH(stats.totalInvested)}</div>
-            <p className="text-xs text-gray-400 mt-1">{formatUSD(stats.totalInvested)}</p>
+            <div className="text-2xl text-cyan-400 font-bold">${portfolioStats.totalInvested.toLocaleString()}</div>
+            <p className="text-xs text-gray-400 mt-1">Across {portfolioStats.activeInvestments} pools</p>
           </CardContent>
         </Card>
 
@@ -150,8 +205,8 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-white font-bold">{stats.activeInvestments}</div>
-            <p className="text-xs text-gray-400 mt-1">across {stats.totalPools} pools</p>
+            <div className="text-2xl text-white font-bold">{portfolioStats.activeInvestments}</div>
+            <p className="text-xs text-gray-400 mt-1">ongoing pools</p>
           </CardContent>
         </Card>
 
@@ -163,8 +218,8 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-green-400 font-bold">{formatETH(stats.totalReturns)}</div>
-            <p className="text-xs text-gray-400 mt-1">{formatPercentage(portfolioPerformance)} return</p>
+            <div className="text-2xl text-green-400 font-bold">${portfolioStats.totalReturn.toLocaleString()}</div>
+            <p className="text-xs text-gray-400 mt-1">{((portfolioStats.totalReturn / portfolioStats.totalInvested) * 100).toFixed(2)}% return</p>
           </CardContent>
         </Card>
 
@@ -176,8 +231,8 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-white font-bold">{formatETH(stats.portfolioValue)}</div>
-            <p className="text-xs text-green-400 mt-1">+{formatETH(stats.unrealizedGains)} unrealized</p>
+            <div className="text-2xl text-white font-bold">${portfolioStats.totalValue.toLocaleString()}</div>
+            <p className="text-xs text-green-400 mt-1">+${portfolioStats.totalReturn.toLocaleString()} profit</p>
           </CardContent>
         </Card>
       </div>
@@ -300,15 +355,15 @@ export default function InvestorDashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Average Yield</span>
-                <span className="text-green-400 font-medium">{formatPercentage(parseFloat(stats.averageYield))}</span>
+                <span className="text-green-400 font-medium">4.0%</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Total Return</span>
-                <span className="text-cyan-400 font-medium">{formatPercentage(portfolioPerformance)}</span>
+                <span className="text-cyan-400 font-medium">{((portfolioStats.totalReturn / portfolioStats.totalInvested) * 100).toFixed(2)}%</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Claimable Returns</span>
-                <span className="text-yellow-400 font-medium">{formatETH(stats.claimableReturns)}</span>
+                <span className="text-yellow-400 font-medium">${portfolioStats.totalReturn.toLocaleString()}</span>
               </div>
             </div>
           </CardContent>
@@ -322,15 +377,15 @@ export default function InvestorDashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Total Pools Invested</span>
-                <span className="text-white font-medium">{stats.totalPools}</span>
+                <span className="text-white font-medium">{portfolioStats.activeInvestments}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Active Investments</span>
-                <span className="text-cyan-400 font-medium">{stats.activeInvestments}</span>
+                <span className="text-cyan-400 font-medium">{portfolioStats.activeInvestments}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Portfolio Value</span>
-                <span className="text-white font-medium">{formatETH(stats.portfolioValue)}</span>
+                <span className="text-white font-medium">${portfolioStats.totalValue.toLocaleString()}</span>
               </div>
             </div>
           </CardContent>

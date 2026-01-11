@@ -3,9 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { usePoolFunding } from '@/hooks/usePoolFunding';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,9 +18,7 @@ export default function PoolDetailPage() {
   const router = useRouter();
   const params = useParams();
   const activeAccount = useActiveAccount();
-  const { getPool, getPoolsByStatus } = usePoolNFT();
-  const { investInPool, getPoolFundingPercentage } = usePoolFunding();
-  const { getInvoice } = useInvoiceNFT();
+  const { getPool, invest, getInvoice } = useSEATrax();
   
   const [pool, setPool] = useState<any>(null);
   const [poolInvoices, setPoolInvoices] = useState<any[]>([]);
@@ -40,90 +36,66 @@ export default function PoolDetailPage() {
       try {
         setLoading(true);
         
-        // For development, use mock data
-        // TODO: Implement real contract integration when types are fixed
-        setPool(mockPool);
-        setPoolInvoices(mockInvoices);
+        // Fetch pool data from contract
+        const poolData = await getPool(BigInt(poolId as string));
+        
+        if (poolData) {
+          // Calculate funding progress
+          const fundingProgress = Number(poolData.totalLoanAmount) > 0
+            ? Math.min(100, Math.round((Number(poolData.amountInvested) / Number(poolData.totalLoanAmount)) * 100))
+            : 0;
+          
+          // Convert Wei to USD for display (1 ETH = $3000 approx)
+          const totalLoanUSD = Number(poolData.totalLoanAmount) / 1e18 * 3000;
+          const amountInvestedUSD = Number(poolData.amountInvested) / 1e18 * 3000;
+          
+          setPool({
+            id: poolData.poolId,
+            name: poolData.name,
+            description: 'Diversified pool of export trade financing opportunities', // Would come from Supabase
+            totalLoanAmount: totalLoanUSD.toFixed(0),
+            amountInvested: amountInvestedUSD.toFixed(0),
+            startDate: new Date(Number(poolData.startDate) * 1000).toLocaleDateString(),
+            endDate: new Date(Number(poolData.endDate) * 1000).toLocaleDateString(),
+            invoiceCount: poolData.invoiceIds.length,
+            expectedYield: '4.0%',
+            riskCategory: 'Medium',
+            status: poolData.status === 0 ? 'Open' : poolData.status === 3 ? 'Funded' : 'Fundraising',
+            fundingProgress,
+            minimumInvestment: '1000', // $1000 USD minimum
+            maximumInvestment: '100000' // $100k USD maximum
+          });
+          
+          // Fetch invoice details
+          const invoices = [];
+          for (const invoiceId of poolData.invoiceIds) {
+            const invoiceData = await getInvoice(invoiceId);
+            if (invoiceData) {
+              invoices.push({
+                id: Number(invoiceId),
+                exporterCompany: invoiceData.exporterCompany,
+                importerCompany: invoiceData.importerCompany,
+                shippingAmount: (Number(invoiceData.shippingAmount) / 100).toFixed(0), // cents to USD
+                loanAmount: (Number(invoiceData.loanAmount) / 100).toFixed(0),
+                destination: 'Southeast Asia', // Would come from metadata
+                goods: 'Export Goods', // Would come from metadata
+                shippingDate: new Date(Number(invoiceData.shippingDate) * 1000).toLocaleDateString(),
+                status: 'Approved'
+              });
+            }
+          }
+          setPoolInvoices(invoices);
+        }
       } catch (error) {
         console.error('Failed to fetch pool data:', error);
-        // Fallback to mock data
-        setPool(mockPool);
-        setPoolInvoices(mockInvoices);
+        toast.error('Failed to load pool data');
       } finally {
         setLoading(false);
       }
     };
 
     fetchPoolData();
-  }, [poolId, activeAccount, getPool, getPoolFundingPercentage, getInvoice]);
-
-  // Helper functions
-  const getInvoiceStatus = (status: number) => {
-    const statuses = ['Pending', 'Finalized', 'Fundraising', 'Funded', 'Paid', 'Cancelled'];
-    return statuses[status] || 'Unknown';
-  };
-
-  const getPoolStatus = (status: number) => {
-    const statuses = ['Open', 'Fundraising', 'PartiallyFunded', 'Funded', 'Settling', 'Completed'];
-    return statuses[status] || 'Unknown';
-  };
-
-  // Mock data for fallback
-  const mockPool = {
-    id: 1,
-    name: 'Southeast Asia Export Pool #12',
-    description: 'Diversified pool of electronics and textile exports to ASEAN markets. This pool focuses on established exporters with strong track records in the electronics manufacturing and textile industries.',
-    totalLoanAmount: '25.5',
-    totalShippingAmount: '30.2',
-    amountInvested: '18.7',
-    startDate: '2024-01-01',
-    endDate: '2024-04-01',
-    invoiceCount: 8,
-    expectedYield: '4.2%',
-    riskCategory: 'Medium',
-    status: 'Fundraising',
-    fundingProgress: 73,
-    minimumInvestment: '0.1',
-    maximumInvestment: '10.0',
-    averageInvoiceValue: '3.2',
-    averageLoanTerm: '90 days'
-  };
-
-  const mockInvoices = [
-    {
-      id: 1,
-      exporterCompany: 'TechCorp Electronics',
-      importerCompany: 'Global Distribution Ltd',
-      shippingAmount: '4.2',
-      loanAmount: '3.4',
-      destination: 'Singapore',
-      goods: 'Consumer Electronics',
-      shippingDate: '2024-01-15',
-      status: 'Approved'
-    },
-    {
-      id: 2,
-      exporterCompany: 'Textile Innovations Inc',
-      importerCompany: 'Fashion Retailers Asia',
-      shippingAmount: '3.8',
-      loanAmount: '3.0',
-      destination: 'Thailand',
-      goods: 'Textile Products',
-      shippingDate: '2024-01-20',
-      status: 'Approved'
-    },
-    {
-      id: 3,
-      exporterCompany: 'Digital Components Co',
-      importerCompany: 'Tech Solutions Malaysia',
-      shippingAmount: '5.1',
-      loanAmount: '4.1',
-      destination: 'Malaysia',
-      goods: 'Electronic Components',
-      shippingDate: '2024-01-25',
-      status: 'Approved'
-    }
-  ];
+  }, [poolId, activeAccount, getPool, getInvoice]);
 
   useEffect(() => {
     if (!activeAccount) {
@@ -133,34 +105,41 @@ export default function PoolDetailPage() {
   }, [activeAccount, router]);
 
   const handleInvest = async () => {
+    if (!pool) return;
+    
     if (!investmentAmount || parseFloat(investmentAmount) < parseFloat(pool.minimumInvestment)) {
-      toast.error(`Minimum investment is ${pool.minimumInvestment} ETH`);
+      toast.error(`Minimum investment is $${Number(pool.minimumInvestment).toLocaleString()}`);
       return;
     }
 
     if (parseFloat(investmentAmount) > parseFloat(pool.maximumInvestment)) {
-      toast.error(`Maximum investment is ${pool.maximumInvestment} ETH`);
+      toast.error(`Maximum investment is $${Number(pool.maximumInvestment).toLocaleString()}`);
       return;
     }
 
     setIsInvesting(true);
     
     try {
-      // Convert amount to Wei for smart contract
-      const amountInWei = parseEther(investmentAmount);
+      // Convert USD to Wei (assuming 1 ETH = $3000)
+      const ethAmount = parseFloat(investmentAmount) / 3000;
+      const amountInWei = parseEther(ethAmount.toString());
       
-      // Call smart contract investment function
-      await investInPool(pool.id, amountInWei);
+      // Call invest function with value in transaction options
+      const result = await invest(BigInt(pool.id), amountInWei);
       
-      toast.success(`Successfully invested ${formatETH(investmentAmount)} in ${pool.name}`);
-      
-      // Refresh pool data
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    } catch (error) {
+      if (result.success) {
+        toast.success(`Successfully invested $${investmentAmount} in ${pool.name}`);
+        
+        // Refresh pool data
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        throw new Error(result.error || 'Investment failed');
+      }
+    } catch (error: any) {
       console.error('Investment failed:', error);
-      toast.error('Investment failed. Please try again.');
+      toast.error(error.message || 'Investment failed. Please try again.');
     } finally {
       setIsInvesting(false);
     }
@@ -225,8 +204,8 @@ export default function PoolDetailPage() {
             </div>
             <Progress value={pool.fundingProgress} className="h-3" />
             <div className="flex justify-between text-sm text-gray-400 mt-2">
-              <span>{pool.amountInvested} ETH raised</span>
-              <span>{pool.totalLoanAmount} ETH target</span>
+              <span>${Number(pool.amountInvested).toLocaleString()} raised</span>
+              <span>${Number(pool.totalLoanAmount).toLocaleString()} target</span>
             </div>
           </div>
 
@@ -237,12 +216,12 @@ export default function PoolDetailPage() {
               <div className="text-sm text-gray-400">Invoices</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl text-white font-bold">{pool.averageInvoiceValue} ETH</div>
+              <div className="text-2xl text-white font-bold">${Number(pool.totalLoanAmount / pool.invoiceCount).toLocaleString()}</div>
               <div className="text-sm text-gray-400">Avg. Invoice</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl text-white font-bold">{pool.averageLoanTerm}</div>
-              <div className="text-sm text-gray-400">Avg. Term</div>
+              <div className="text-2xl text-white font-bold">{pool.fundingProgress}%</div>
+              <div className="text-sm text-gray-400">Funded</div>
             </div>
             <div className="text-center">
               <div className={`text-2xl font-bold ${getRiskColor(pool.riskCategory)}`}>{pool.riskCategory}</div>
@@ -264,21 +243,21 @@ export default function PoolDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="amount" className="text-gray-300">Investment Amount (ETH)</Label>
+                <Label htmlFor="amount" className="text-gray-300">Investment Amount (USD)</Label>
                 <Input
                   id="amount"
                   type="number"
-                  step="0.1"
+                  step="100"
                   min={pool.minimumInvestment}
                   max={pool.maximumInvestment}
                   value={investmentAmount}
                   onChange={(e) => setInvestmentAmount(e.target.value)}
-                  placeholder={`Min: ${pool.minimumInvestment} ETH`}
+                  placeholder={`Min: $${Number(pool.minimumInvestment).toLocaleString()}`}
                   className="bg-slate-800/50 border-slate-700 text-white"
                 />
                 <div className="flex justify-between text-xs text-gray-400 mt-1">
-                  <span>Min: {pool.minimumInvestment} ETH</span>
-                  <span>Max: {pool.maximumInvestment} ETH</span>
+                  <span>Min: ${Number(pool.minimumInvestment).toLocaleString()}</span>
+                  <span>Max: ${Number(pool.maximumInvestment).toLocaleString()}</span>
                 </div>
               </div>
 
@@ -286,18 +265,18 @@ export default function PoolDetailPage() {
                 <div className="bg-slate-800/50 p-4 rounded-lg space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Investment:</span>
-                    <span className="text-white">{investmentAmount} ETH</span>
+                    <span className="text-white">${Number(investmentAmount).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Expected Return:</span>
                     <span className="text-cyan-400">
-                      {(parseFloat(investmentAmount) * 1.042).toFixed(3)} ETH
+                      ${(parseFloat(investmentAmount) * 1.04).toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Profit:</span>
+                    <span className="text-gray-400">Profit (4%):</span>
                     <span className="text-green-400">
-                      +{(parseFloat(investmentAmount) * 0.042).toFixed(3)} ETH
+                      +${(parseFloat(investmentAmount) * 0.04).toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -350,16 +329,16 @@ export default function PoolDetailPage() {
                 </div>
               </div>
               <div>
-                <div className="text-gray-400">Total Shipping Value</div>
-                <div className="text-white font-medium">{pool.totalShippingAmount} ETH</div>
-              </div>
-              <div>
                 <div className="text-gray-400">Target Loan Amount</div>
-                <div className="text-white font-medium">{pool.totalLoanAmount} ETH</div>
+                <div className="text-white font-medium">${Number(pool.totalLoanAmount).toLocaleString()}</div>
               </div>
               <div>
                 <div className="text-gray-400">Current Investment</div>
-                <div className="text-cyan-400 font-medium">{pool.amountInvested} ETH</div>
+                <div className="text-cyan-400 font-medium">${Number(pool.amountInvested).toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">Number of Invoices</div>
+                <div className="text-white font-medium">{pool.invoiceCount} invoices</div>
               </div>
             </CardContent>
           </Card>
@@ -371,7 +350,7 @@ export default function PoolDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {mockInvoices.map((invoice) => (
+                {poolInvoices.map((invoice) => (
                   <div key={invoice.id} className="bg-slate-800/50 rounded-lg p-4 space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
@@ -392,11 +371,11 @@ export default function PoolDetailPage() {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       <div>
                         <div className="text-gray-400">Shipping Value</div>
-                        <div className="text-white font-medium">{invoice.shippingAmount} ETH</div>
+                        <div className="text-white font-medium">${Number(invoice.shippingAmount).toLocaleString()}</div>
                       </div>
                       <div>
                         <div className="text-gray-400">Loan Amount</div>
-                        <div className="text-cyan-400 font-medium">{invoice.loanAmount} ETH</div>
+                        <div className="text-cyan-400 font-medium">${Number(invoice.loanAmount).toLocaleString()}</div>
                       </div>
                       <div>
                         <div className="text-gray-400">Goods</div>

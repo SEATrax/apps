@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Wallet, CreditCard, Building2 } from 'lucide-react';
 import { useActiveAccount } from 'panna-sdk';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { toast } from 'sonner';
 
 interface InvestorOnboardingProps {
@@ -27,7 +27,7 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
 
   const activeAccount = useActiveAccount();
   const { createProfile } = useInvestorProfile();
-  const { grantInvestorRole } = useAccessControl();
+  const { registerInvestor } = useSEATrax();
   const [walletConnected, setWalletConnected] = useState(!!activeAccount);
 
   const countries = ['Indonesia', 'Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Singapore', 'United States', 'United Kingdom'];
@@ -60,14 +60,13 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
         phone: formData.phone,
       });
 
-      // 2. Attempt auto-grant investor role (lower risk profile)
-      try {
-        await grantInvestorRole(activeAccount.address);
+      // 2. Self-register as investor on-chain
+      const result = await registerInvestor();
+      
+      if (result.success) {
         toast.success('Registration completed! You can now invest in pools.');
-      } catch (roleError) {
-        // Auto-grant failed, but profile created successfully
-        console.log('Auto-grant failed, requires admin approval:', roleError);
-        toast.success('Profile created! Admin will review and approve your investor role.');
+      } else {
+        throw new Error(result.error || 'Failed to register as investor');
       }
       
       setTimeout(() => {

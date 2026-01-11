@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +13,7 @@ import { toast } from 'sonner';
 export default function ReturnsPage() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
+  const { claimReturns } = useSEATrax();
   const [claimingReturns, setClaimingReturns] = useState<number | null>(null);
 
   // Mock data - ready for smart contract integration
@@ -80,17 +82,25 @@ export default function ReturnsPage() {
     }
   }, [activeAccount, router]);
 
-  const handleClaimReturn = async (returnId: number) => {
-    setClaimingReturns(returnId);
+  const handleClaimReturn = async (returnData: any) => {
+    setClaimingReturns(returnData.id);
     
     try {
-      // TODO: Implement real claim via PoolFundingManager.claimInvestorReturns
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Mock delay
+      // Call smart contract claimReturns function
+      const result = await claimReturns(BigInt(returnData.poolId));
       
-      toast.success('Returns claimed successfully! Funds transferred to your wallet.');
-      // In real implementation, refresh data here
-    } catch (error) {
-      toast.error('Failed to claim returns. Please try again.');
+      if (result.success) {
+        toast.success('Returns claimed successfully! Funds transferred to your wallet.');
+        // In real implementation, refresh data here
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        throw new Error(result.error || 'Claim failed');
+      }
+    } catch (error: any) {
+      console.error('Claim failed:', error);
+      toast.error(error.message || 'Failed to claim returns. Please try again.');
     } finally {
       setClaimingReturns(null);
     }
@@ -102,12 +112,22 @@ export default function ReturnsPage() {
     setClaimingReturns(0); // Use 0 for "claim all"
     
     try {
-      // TODO: Implement batch claim functionality
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Mock delay
+      // Claim returns for each pool
+      for (const returnData of claimableReturns) {
+        const result = await claimReturns(BigInt(returnData.poolId));
+        if (!result.success) {
+          throw new Error(result.error || `Failed to claim pool ${returnData.poolId}`);
+        }
+      }
       
       toast.success(`All returns claimed! ${totalStats.totalClaimable} ETH transferred to your wallet.`);
-    } catch (error) {
-      toast.error('Failed to claim all returns. Please try again.');
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (error: any) {
+      console.error('Claim all failed:', error);
+      toast.error(error.message || 'Failed to claim all returns. Please try again.');
     } finally {
       setClaimingReturns(null);
     }
