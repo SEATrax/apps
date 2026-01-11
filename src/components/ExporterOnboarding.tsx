@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Upload, Check, HelpCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, Check, HelpCircle, Sparkles } from 'lucide-react';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { useActiveAccount } from 'panna-sdk';
 import { toast } from 'sonner';
+import { generateExporterOnboardingData } from '@/lib/auto-fill-data';
 
 interface ExporterOnboardingProps {
   onComplete: () => void;
@@ -107,18 +108,54 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
     return false;
   };
 
+  const handleAutoFill = () => {
+    const randomData = generateExporterOnboardingData();
+    setFormData({
+      ...formData,
+      companyName: randomData.companyName,
+      country: randomData.country,
+      taxId: randomData.taxId,
+      businessType: randomData.businessType,
+      email: randomData.email,
+      phone: randomData.phone,
+      picName: randomData.picName,
+      address: randomData.address,
+      exportLicense: randomData.exportLicense,
+    });
+    
+    // Auto-check required documents to bypass validation
+    setUploadedDocs({
+      license: true,
+      registration: true,
+      bankVerification: true,
+      idCard: true,
+      selfie: true,
+    });
+    
+    toast.success('🎲 Form auto-filled with test data. Review and submit!');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-8">
       <div className="max-w-3xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <button 
-            onClick={handleBack}
-            className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 mb-4 hover-color hover-scale-sm"
-          >
-            <ArrowLeft className="w-5 h-5 hover-bounce" />
-            Back
-          </button>
+          <div className="flex items-center justify-between mb-4">
+            <button 
+              onClick={handleBack}
+              className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 hover-color hover-scale-sm"
+            >
+              <ArrowLeft className="w-5 h-5 hover-bounce" />
+              Back
+            </button>
+            <button
+              onClick={handleAutoFill}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 rounded-lg hover-lift transition-all"
+            >
+              <Sparkles className="w-4 h-4" />
+              Auto-fill Test Data
+            </button>
+          </div>
           <h1 className="text-3xl text-white mb-2">Exporter Registration</h1>
           <p className="text-slate-400">Complete your profile to start receiving funding</p>
         </div>

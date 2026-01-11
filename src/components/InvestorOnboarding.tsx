@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Wallet, CreditCard, Building2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Wallet, CreditCard, Building2, Sparkles } from 'lucide-react';
 import { useActiveAccount } from 'panna-sdk';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { toast } from 'sonner';
+import { generateInvestorOnboardingData } from '@/lib/auto-fill-data';
 
 interface InvestorOnboardingProps {
   onComplete: () => void;
@@ -98,9 +99,45 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
     return false;
   };
 
+  const handleAutoFill = () => {
+    const randomData = generateInvestorOnboardingData();
+    setFormData({
+      ...formData,
+      name: randomData.name,
+      address: randomData.address,
+      country: randomData.country,
+      email: randomData.email,
+      phone: randomData.phone,
+      investmentProfile: randomData.investmentProfile,
+      expectedAmount: randomData.expectedAmount,
+      riskTolerance: randomData.riskTolerance,
+      investmentExperience: '',
+    });
+    
+    toast.success('🎲 Form auto-filled with test data. Review and submit!');
+  };
+
   return (
     <div className="min-h-screen py-8">
       <div className="max-w-3xl mx-auto px-4">
+        {/* Auto-fill Button */}
+        <div className="mb-6 flex justify-between items-center">
+          <button 
+            onClick={handleBack}
+            className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 hover-color hover-scale-sm"
+          >
+            <ArrowLeft className="w-5 h-5 hover-bounce" />
+            Back
+          </button>
+          <button
+            onClick={handleAutoFill}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 rounded-lg hover-lift transition-all"
+          >
+            <Sparkles className="w-4 h-4" />
+            Auto-fill Test Data
+          </button>
+        </div>
+        
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">

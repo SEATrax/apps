@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Upload, Calendar as CalendarIcon, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Upload, Calendar as CalendarIcon, AlertCircle, CheckCircle, Loader2, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -33,6 +33,60 @@ interface InvoiceFormData {
   shippingDate: Date | undefined;
   documents: File[];
 }
+
+// Sample data for auto-fill
+const sampleImporters = [
+  { name: 'Global Trade Solutions Inc', email: 'procurement@globaltradesolutions.com', address: '789 Market St, San Francisco, CA 94103', country: 'United States' },
+  { name: 'European Import Hub GmbH', email: 'orders@euimports.de', address: 'Friedrichstraße 123, 10117 Berlin', country: 'Germany' },
+  { name: 'Asia Pacific Trading Pte Ltd', email: 'trading@apacific.sg', address: '45 Marina Boulevard, Singapore 018987', country: 'Singapore' },
+  { name: 'Canadian Distribution Co Ltd', email: 'logistics@candistro.ca', address: '1500 Rue McGill, Montreal, QC H3A 3H6', country: 'Canada' },
+  { name: 'UK Premium Imports Ltd', email: 'imports@ukpremium.co.uk', address: '123 Oxford Street, London W1D 2HG', country: 'United Kingdom' },
+  { name: 'Australian Trade Partners Pty', email: 'partners@aussiepartners.au', address: '456 Collins Street, Melbourne VIC 3000', country: 'Australia' },
+  { name: 'Japanese Import Corporation', email: 'info@jpimportcorp.jp', address: '2-8-1 Nishi-Shinjuku, Tokyo 163-0820', country: 'Japan' },
+  { name: 'Nordic Trade Solutions AS', email: 'contact@nordictrade.no', address: 'Storgata 15, 0155 Oslo', country: 'Norway' }
+];
+
+const sampleProducts = [
+  { desc: 'Premium Coffee Beans - Single Origin Arabica, 1200kg', basePrice: 95000 },
+  { desc: 'Handcrafted Batik Textiles - Traditional Indonesian Patterns, 800 pieces', basePrice: 120000 },
+  { desc: 'Electronic Components - Semiconductors and Microprocessors, 500 units', basePrice: 280000 },
+  { desc: 'Indonesian Spices Mix - Nutmeg, Cloves, Cinnamon, 600kg premium grade', basePrice: 75000 },
+  { desc: 'Rattan Furniture Set - Eco-friendly outdoor dining collection, 45 pieces', basePrice: 165000 },
+  { desc: 'Traditional Wood Carvings - Handmade decorative art pieces, 120 items', basePrice: 88000 },
+  { desc: 'Organic Coconut Products - Oil, flour, and dried coconut, 2000kg', basePrice: 55000 },
+  { desc: 'Smartphone Accessories - Cases, chargers, and screen protectors, 3000 units', basePrice: 145000 },
+  { desc: 'Premium Sarongs and Scarves - Silk blend traditional wear, 600 pieces', basePrice: 92000 },
+  { desc: 'Medical Grade Latex Gloves - ISO certified, 50,000 pieces', basePrice: 210000 },
+  { desc: 'Bamboo Kitchenware Set - Sustainable utensils and containers, 800 sets', basePrice: 67000 },
+  { desc: 'Traditional Jewelry Collection - Silver with precious stones, 200 pieces', basePrice: 195000 }
+];
+
+const generateRandomInvoiceData = (exporterCompany: string) => {
+  const importer = sampleImporters[Math.floor(Math.random() * sampleImporters.length)];
+  const product = sampleProducts[Math.floor(Math.random() * sampleProducts.length)];
+  const varianceMultiplier = 0.8 + (Math.random() * 0.4); // 80-120% of base price
+  const shippingAmount = Math.round(product.basePrice * varianceMultiplier);
+  const loanAmount = Math.floor(shippingAmount * 0.8); // Always use floor to ensure it's within limit
+  
+  // Generate future shipping date (5-30 days from now)
+  const futureDate = new Date();
+  futureDate.setDate(futureDate.getDate() + 5 + Math.floor(Math.random() * 25));
+  
+  // Generate invoice number
+  const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+  
+  return {
+    invoiceNumber,
+    importerCompany: importer.name,
+    importerEmail: importer.email,
+    importerAddress: importer.address,
+    importerCountry: importer.country,
+    goodsDescription: product.desc,
+    shippingAmount: shippingAmount.toString(),
+    loanAmount: loanAmount.toString(),
+    shippingDate: futureDate
+  };
+};
 
 export default function CreateInvoice() {
   const activeAccount = useActiveAccount();
@@ -143,6 +197,17 @@ export default function CreateInvoice() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleAutoFill = () => {
+    const randomData = generateRandomInvoiceData(formData.exporterCompany);
+    setFormData(prev => ({
+      ...prev,
+      ...randomData
+    }));
+    
+    // Clear any errors
+    setErrors({});
   };
 
   const uploadDocuments = async (): Promise<string[]> => {
@@ -434,19 +499,31 @@ export default function CreateInvoice() {
         {/* Header */}
         <div className="bg-slate-900 border-b border-slate-800">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center h-16">
-              <Link href="/exporter/invoices" className="mr-4">
-                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Invoices
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-xl font-semibold text-slate-100">Create New Invoice</h1>
-                <p className="text-sm text-slate-400">
-                  Submit your shipping invoice for funding consideration
-                </p>
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/exporter/invoices" className="mr-4">
+                  <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Invoices
+                  </Button>
+                </Link>
+                <div>
+                  <h1 className="text-xl font-semibold text-slate-100">Create New Invoice</h1>
+                  <p className="text-sm text-slate-400">
+                    Submit your shipping invoice for funding consideration
+                  </p>
+                </div>
               </div>
+              <Button
+                type="button"
+                onClick={handleAutoFill}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/30 border-purple-500/50 text-purple-300"
+              >
+                <Sparkles className="w-4 h-4" />
+                Auto-fill Test Data
+              </Button>
             </div>
         </div>
       </div>
