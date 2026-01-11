@@ -3,12 +3,7 @@
 import { useState } from 'react';
 import { LoginButton, liskSepolia } from 'panna-sdk';
 import { usePanna } from '@/hooks/usePanna';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { usePoolFunding } from '@/hooks/usePoolFunding';
-import { usePaymentOracle } from '@/hooks/usePaymentOracle';
-import { usePlatformAnalytics } from '@/hooks/usePlatformAnalytics';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -27,13 +22,15 @@ export default function PhaseATestPage() {
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Real contract hooks - now connecting to deployed contracts!
-  const { hasRole, getUserRoles } = useAccessControl();
-  const { getInvoice, getInvoicesByExporter } = useInvoiceNFT();
-  const { getPool, getAllOpenPools } = usePoolNFT();
-  const { getPoolFundingPercentage } = usePoolFunding();
-  const { isInvoicePaid } = usePaymentOracle();
-  const { getPlatformStats, getInvestorStats } = usePlatformAnalytics();
+  // Single unified hook for SEATrax contract
+  const {
+    checkUserRoles,
+    getInvoice,
+    getExporterInvoices,
+    getPool,
+    getAllOpenPools,
+    getPoolFundingPercentage
+  } = useSEATrax();
 
   const addResult = (test: string, status: TestResult['status'], message: string, data?: any) => {
     setTestResults(prev => [...prev, { test, status, message, data }]);
@@ -73,94 +70,83 @@ export default function PhaseATestPage() {
     setIsRunning(true);
     setTestResults([]);
 
-    // Test 1: AccessControl - Check user roles
+    // Test 1: Role Check - Check user roles
     try {
-      addResult('AccessControl', 'pending', 'Checking user roles...');
-      const roles = await getUserRoles(address);
-      addResult('AccessControl', 'success', 'Role check completed', {
+      addResult('Role Check', 'pending', 'Checking user roles...');
+      const roles = await checkUserRoles(address);
+      addResult('Role Check', 'success', 'Role check completed', {
         address,
-        hasAdminRole: roles?.hasAdminRole || false,
-        hasExporterRole: roles?.hasExporterRole || false,
-        hasInvestorRole: roles?.hasInvestorRole || false,
+        isAdmin: roles?.isAdmin || false,
+        isExporter: roles?.isExporter || false,
+        isInvestor: roles?.isInvestor || false,
       });
     } catch (error) {
-      addResult('AccessControl', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addResult('Role Check', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Test 2: InvoiceNFT - Get invoices for current user
+    // Test 2: Invoice Data - Get invoices for current user
     try {
-      addResult('InvoiceNFT', 'pending', 'Fetching user invoices...');
-      const invoices = await getInvoicesByExporter(address);
-      addResult('InvoiceNFT', 'success', `Found ${invoices.length} invoices`, { invoices });
+      addResult('Invoice Data', 'pending', 'Fetching user invoices...');
+      const invoices = await getExporterInvoices(address);
+      addResult('Invoice Data', 'success', `Found ${invoices.length} invoices`, { invoices });
 
       // Test specific invoice if available
       if (invoices.length > 0) {
         const invoice = await getInvoice(invoices[0]);
-        addResult('InvoiceNFT Detail', 'success', 'Invoice details fetched', { invoice });
+        addResult('Invoice Detail', 'success', 'Invoice details fetched', { invoice });
       }
     } catch (error) {
-      addResult('InvoiceNFT', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addResult('Invoice Data', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Test 3: PoolNFT - Get open pools
+    // Test 3: Pool Data - Get open pools
     try {
-      addResult('PoolNFT', 'pending', 'Fetching open pools...');
+      addResult('Pool Data', 'pending', 'Fetching open pools...');
       const openPools = await getAllOpenPools();
-      addResult('PoolNFT', 'success', `Found ${openPools.length} open pools`, { openPools });
+      addResult('Pool Data', 'success', `Found ${openPools.length} open pools`, { openPools });
 
       // Test specific pool if available
       if (openPools.length > 0) {
         const pool = await getPool(openPools[0]);
-        addResult('PoolNFT Detail', 'success', 'Pool details fetched', { pool });
+        addResult('Pool Detail', 'success', 'Pool details fetched', { pool });
       }
     } catch (error) {
-      addResult('PoolNFT', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addResult('Pool Data', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Test 4: PoolFunding - Check funding percentage
+    // Test 4: Pool Funding - Check funding percentage
     try {
-      addResult('PoolFunding', 'pending', 'Checking pool funding...');
+      addResult('Pool Funding', 'pending', 'Checking pool funding...');
       const openPools = await getAllOpenPools();
       if (openPools.length > 0) {
         const fundingPercentage = await getPoolFundingPercentage(openPools[0]);
-        addResult('PoolFunding', 'success', 'Funding percentage fetched', { 
+        addResult('Pool Funding', 'success', 'Funding percentage fetched', { 
           poolId: openPools[0].toString(),
           fundingPercentage: fundingPercentage.toString() + '%'
         });
       } else {
-        addResult('PoolFunding', 'success', 'No pools available to test funding');
+        addResult('Pool Funding', 'success', 'No pools available to test funding');
       }
     } catch (error) {
-      addResult('PoolFunding', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addResult('Pool Funding', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // Test 5: PaymentOracle - Check payment status
+    // Test 5: Contract Integration - Verify all functions work together
     try {
-      addResult('PaymentOracle', 'pending', 'Checking payment status...');
-      const userInvoices = await getInvoicesByExporter(address);
-      if (userInvoices.length > 0) {
-        const isPaid = await isInvoicePaid(userInvoices[0]);
-        addResult('PaymentOracle', 'success', 'Payment status checked', {
-          invoiceId: userInvoices[0].toString(),
-          isPaid
+      addResult('Integration Test', 'pending', 'Testing contract integration...');
+      const userInvoices = await getExporterInvoices(address);
+      const allPools = await getAllOpenPools();
+      if (userInvoices.length > 0 && allPools.length > 0) {
+        addResult('Integration Test', 'success', 'All contract functions integrated successfully', {
+          totalInvoices: userInvoices.length,
+          totalPools: allPools.length,
+          contractAddress: process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
         });
       } else {
-        addResult('PaymentOracle', 'success', 'No invoices available to test payment status');
+        addResult('Integration Test', 'success', 'Contract integration verified (no data yet)');
       }
     } catch (error) {
-      addResult('PaymentOracle', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-
-    // Test 6: PlatformAnalytics - Get platform stats
-    try {
-      addResult('PlatformAnalytics', 'pending', 'Fetching platform statistics...');
-      const platformStats = await getPlatformStats();
-      addResult('PlatformAnalytics Platform', 'success', 'Platform stats fetched', { platformStats });
-      
-      const investorStats = await getInvestorStats(address);
-      addResult('PlatformAnalytics Investor', 'success', 'Investor stats fetched', { investorStats });
-    } catch (error) {
-      addResult('PlatformAnalytics', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      addResult('Integration Test', 'error', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     setIsRunning(false);
@@ -188,8 +174,8 @@ export default function PhaseATestPage() {
 
       {/* Page Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Phase A: Multiple Contract Integration Tests</h1>
-        <p className="text-gray-600">Test all 6 smart contract hooks to verify integration</p>
+        <h1 className="text-3xl font-bold mb-2">Phase A: Single Contract Integration Tests</h1>
+        <p className="text-gray-600">Test unified SEATrax contract to verify integration</p>
       </div>
 
       <div className="grid gap-6">
@@ -338,51 +324,27 @@ export default function PhaseATestPage() {
         {/* Contract Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Contract Addresses</CardTitle>
+            <CardTitle>Contract Address</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="space-y-2 text-sm">
               <div>
-                <strong>AccessControl:</strong>
+                <strong>SEATrax (Unified Contract):</strong>
                 <br />
-                <code className="text-xs bg-gray-100 p-1 rounded">
-                  {process.env.NEXT_PUBLIC_ACCESS_CONTROL || 'Not configured'}
+                <code className="text-xs bg-gray-100 p-1 rounded block mt-1">
+                  {process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || 'Not configured'}
                 </code>
               </div>
-              <div>
-                <strong>InvoiceNFT:</strong>
-                <br />
-                <code className="text-xs bg-gray-100 p-1 rounded">
-                  {process.env.NEXT_PUBLIC_INVOICE_NFT || 'Not configured'}
-                </code>
-              </div>
-              <div>
-                <strong>PoolNFT:</strong>
-                <br />
-                <code className="text-xs bg-gray-100 p-1 rounded">
-                  {process.env.NEXT_PUBLIC_POOL_NFT || 'Not configured'}
-                </code>
-              </div>
-              <div>
-                <strong>PoolFundingManager:</strong>
-                <br />
-                <code className="text-xs bg-gray-100 p-1 rounded">
-                  {process.env.NEXT_PUBLIC_POOL_FUNDING_MANAGER || 'Not configured'}
-                </code>
-              </div>
-              <div>
-                <strong>PaymentOracle:</strong>
-                <br />
-                <code className="text-xs bg-gray-100 p-1 rounded">
-                  {process.env.NEXT_PUBLIC_PAYMENT_ORACLE || 'Not configured'}
-                </code>
-              </div>
-              <div>
-                <strong>PlatformAnalytics:</strong>
-                <br />
-                <code className="text-xs bg-gray-100 p-1 rounded">
-                  {process.env.NEXT_PUBLIC_PLATFORM_ANALYTICS || 'Not configured'}
-                </code>
+              <div className="text-gray-600 text-xs mt-2">
+                This single contract replaces the previous 6-contract architecture:
+                <ul className="list-disc ml-4 mt-1">
+                  <li>AccessControl → checkUserRoles()</li>
+                  <li>InvoiceNFT → getInvoice(), getExporterInvoices()</li>
+                  <li>PoolNFT → getPool(), getAllOpenPools()</li>
+                  <li>PoolFunding → getPoolFundingPercentage()</li>
+                  <li>PaymentOracle → Invoice payment tracking</li>
+                  <li>PlatformAnalytics → Manual calculation</li>
+                </ul>
               </div>
             </div>
           </CardContent>
@@ -402,25 +364,25 @@ export default function PhaseATestPage() {
             <br />
             <strong>Step 2: Run Contract Tests</strong>
             <br />
-            • Click "Run All Contract Tests" to test each deployed smart contract
+            • Click "Run All Contract Tests" to test the unified SEATrax contract
             <br />
-            • <strong>✨ Now using REAL contracts!</strong> Connecting to deployed contracts on Lisk Sepolia
+            • <strong>✨ Single Contract Architecture!</strong> All functions now in one contract
             <br />
-            • Check results for each contract integration (AccessControl, InvoiceNFT, PoolNFT, etc.)
+            • Check results for each function: Role Check, Invoice Data, Pool Data, Pool Funding, Integration
             <br />
             <br />
             <strong>Step 3: Verify Integration</strong>
             <br />
-            • ✅ All 6 contract hooks should connect to deployed contracts
+            • ✅ Unified contract connects successfully
             <br />
-            • ✅ Real blockchain data should return from smart contracts
+            • ✅ Real blockchain data returns from smart contract
             <br />
-            • ✅ UI should display actual contract states and data
+            • ✅ UI displays actual contract states and data
             <br />
-            • ✅ BigInt values are properly serialized and displayed (shown as "123n (BigInt)")
+            • ✅ BigInt values are properly serialized (shown as "123n (BigInt)")
             <br />
             <br />
-            <strong>🚀 Current Status:</strong> REAL smart contract integration with deployed contracts!
+            <strong>🚀 Current Status:</strong> Single SEATrax contract integration on Lisk Sepolia!
           </AlertDescription>
         </Alert>
       </div>

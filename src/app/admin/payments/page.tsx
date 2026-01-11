@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
-import { usePaymentOracle } from '@/hooks/usePaymentOracle';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,11 +31,27 @@ import {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate, formatDateString, formatAddress } from '@/lib/utils';
+import { INVOICE_STATUS } from '@/lib/contract';
 import type { Invoice } from '@/types';
 
-interface InvoiceWithMetadata extends Invoice {
+interface InvoiceWithMetadata {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
   metadata?: {
     invoice_number: string;
     importer_name: string;
@@ -62,10 +76,8 @@ type PaymentStatus = 'all' | 'link_generated' | 'pending_confirmation' | 'paid' 
 type InvoiceStatus = 'all' | 'funded' | 'paid';
 
 export default function PaymentTrackingPage() {
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { getInvoice } = useInvoiceNFT();
-  const { markInvoicePaid } = usePaymentOracle();
+  const { isConnected, address, connect, switchToLiskSepolia, isCorrectNetwork, isMetaMaskInstalled, error: walletError } = useMetaMaskAdmin();
+  const { checkUserRoles, getInvoice, markInvoicePaid, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [userRoles, setUserRoles] = useState<any>(null);
@@ -76,32 +88,46 @@ export default function PaymentTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<InvoiceStatus>('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<PaymentStatus>('all');
 
-  // Check admin role and redirect if not admin
-  useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-      return;
-    }
+  const handleConnectWallet = async () => {
+    await connect();
+  };
 
-    if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
+  // Check admin role
+  useEffect(() => {
+    const verifyAdminRole = async () => {
+      if (!isMetaMaskInstalled || !isCorrectNetwork || !isConnected || !address) {
+        setCheckingRole(false);
+        return;
+      }
+
+      try {
+        const roles = await checkUserRoles(address);
         setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
-          router.push('/');
+        if (!roles?.isAdmin) {
+          setAccessDenied(true);
         }
-      });
-    }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+      } catch (error) {
+        console.error('Error checking roles:', error);
+        setAccessDenied(true);
+      } finally {
+        setCheckingRole(false);
+      }
+    };
+
+    verifyAdminRole();
+  }, [isMetaMaskInstalled, isCorrectNetwork, isConnected, address, checkUserRoles]);
 
   // Load data when admin role is confirmed
   useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (userRoles?.isAdmin) {
       loadData();
     }
   }, [userRoles]);
@@ -139,8 +165,8 @@ export default function PaymentTrackingPage() {
         try {
           const invoiceData = await getInvoice(BigInt(metadata.token_id));
           
-          // Only include funded or paid invoices
-          if (invoiceData && (invoiceData.status === 'FUNDED' || invoiceData.status === 'PAID')) {
+          // Only include funded or paid invoices (status 3, 4, 5, 6)
+          if (invoiceData && Number(invoiceData.status) >= INVOICE_STATUS.FUNDED) {
             invoicesList.push({
               ...invoiceData,
               metadata: {
@@ -173,8 +199,8 @@ export default function PaymentTrackingPage() {
 
       const matchesStatus = 
         invoiceStatusFilter === 'all' ||
-        (invoiceStatusFilter === 'funded' && invoice.status === 'FUNDED') ||
-        (invoiceStatusFilter === 'paid' && invoice.status === 'PAID');
+        (invoiceStatusFilter === 'funded' && Number(invoice.status) === INVOICE_STATUS.FUNDED) ||
+        (invoiceStatusFilter === 'paid' && Number(invoice.status) === INVOICE_STATUS.PAID);
 
       return matchesSearch && matchesStatus;
     });
@@ -297,10 +323,10 @@ export default function PaymentTrackingPage() {
 
   const calculateTotals = () => {
     const totalInvoices = filteredInvoices.length;
-    const paidInvoices = filteredInvoices.filter(inv => inv.status === 'PAID').length;
+    const paidInvoices = filteredInvoices.filter(inv => Number(inv.status) === INVOICE_STATUS.PAID).length;
     const totalAmount = filteredInvoices.reduce((sum, inv) => sum + Number(inv.loanAmount), 0);
     const paidAmount = filteredInvoices
-      .filter(inv => inv.status === 'PAID')
+      .filter(inv => Number(inv.status) === INVOICE_STATUS.PAID)
       .reduce((sum, inv) => sum + Number(inv.loanAmount), 0);
 
     const pendingConfirmations = payments.filter(p => p.status === 'pending_confirmation').length;
@@ -397,34 +423,23 @@ export default function PaymentTrackingPage() {
     );
   };
 
-  // Show loading or access check
-  if (!isLoaded || isLoading) {
+  // Show loading while data is being fetched
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-cyan-600 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isConnected || !userRoles?.hasAdminRole) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-        <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800 w-full max-w-md">
-          <CardContent className="p-8 text-center">
-            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h2 className="text-white font-semibold mb-2">Access Denied</h2>
-            <p className="text-slate-400">Admin privileges required to access this page.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <AdminAuthGuard>
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-cyan-600 animate-spin" />
+        </div>
+      </AdminAuthGuard>
     );
   }
 
   const { totalInvoices, paidInvoices, totalAmount, paidAmount, pendingConfirmations } = calculateTotals();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
@@ -606,8 +621,8 @@ export default function PaymentTrackingPage() {
                             <p className="text-slate-300 text-sm mt-1">{invoice.metadata?.importer_name}</p>
                           </div>
                           <div className="flex gap-2">
-                            <Badge className={invoice.status === 'PAID' ? 'bg-green-600' : 'bg-blue-600'}>
-                              {invoice.status === 'PAID' ? 'Paid' : 'Funded'}
+                            <Badge className={Number(invoice.status) === INVOICE_STATUS.PAID ? 'bg-green-600' : 'bg-blue-600'}>
+                              {Number(invoice.status) === INVOICE_STATUS.PAID ? 'Paid' : 'Funded'}
                             </Badge>
                             {payment && getPaymentStatusBadge(payment.status)}
                           </div>
@@ -620,11 +635,11 @@ export default function PaymentTrackingPage() {
                           </div>
                           <div>
                             <p className="text-slate-400 text-xs">Invoice Value</p>
-                            <p className="text-white">{formatCurrency(Number(invoice.invoiceValue))}</p>
+                            <p className="text-white">{formatCurrency(Number(invoice.shippingAmount) / 100)}</p>
                           </div>
                           <div>
                             <p className="text-slate-400 text-xs">Invoice Date</p>
-                            <p className="text-white">{formatDate(Number(invoice.invoiceDate))}</p>
+                            <p className="text-white">{formatDate(Number(invoice.shippingDate) * 1000)}</p>
                           </div>
                           <div>
                             <p className="text-slate-400 text-xs">Payment Link</p>
@@ -639,7 +654,7 @@ export default function PaymentTrackingPage() {
                           </div>
                         </div>
 
-                        {invoice.status !== 'PAID' && (
+                        {Number(invoice.status) !== INVOICE_STATUS.PAID && (
                           <div className="flex gap-3">
                             <Link href={paymentLink} target="_blank">
                               <Button variant="outline" size="sm" className="border-slate-700">
@@ -757,5 +772,6 @@ export default function PaymentTrackingPage() {
         </Tabs>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

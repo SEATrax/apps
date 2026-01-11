@@ -29,31 +29,29 @@ graph TD
     A[Exporter Creates Invoice] --> B[System Validates Data]
     B --> C[Mint Invoice NFT]
     C --> D[Invoice Status: Pending]
-    D --> E[Exporter Finalizes Invoice]
-    E --> F[Invoice Status: Finalized]
+    D --> E[Admin Approves Invoice]
+    E --> F[Invoice Status: Approved]
 ```
 
-**Smart Contracts Involved**: `InvoiceNFT`, `AccessControl`
+**Smart Contract**: `SEATrax`
 
 **Methods Called**:
-1. `InvoiceNFT.mintInvoice()` - Create new invoice
-2. `InvoiceNFT.finalizeInvoice()` - Make invoice available for pooling
+1. `SEATrax.createInvoice()` - Create new invoice with email and IPFS hash
+2. `SEATrax.approveInvoice()` - Admin approval (replaces finalize)
 
 ### Phase 2: Pool Creation & Management
 ```mermaid
 graph TD
-    A[Admin Creates Pool] --> B[Add Finalized Invoices]
-    B --> C[Finalize Pool]
-    C --> D[Pool Status: Fundraising]
+    A[Admin Creates Pool] --> B[Add Approved Invoices]
+    B --> C[Set Start/End Dates]
+    C --> D[Pool Status: Open]
     D --> E[Ready for Investment]
 ```
 
-**Smart Contracts Involved**: `PoolNFT`, `AccessControl`
+**Smart Contract**: `SEATrax`
 
 **Methods Called**:
-1. `PoolNFT.createPool()` - Create investment pool with invoices
-2. `PoolNFT.addInvoicesToPool()` - Add additional invoices (optional)
-3. `PoolNFT.finalizePool()` - Open pool for investment
+1. `SEATrax.createPool()` - Create pool with invoices and date range (auto-opens)
 
 ### Phase 3: Investment & Funding
 ```mermaid
@@ -61,87 +59,76 @@ graph TD
     A[Investors Browse Pools] --> B[Choose Pool to Invest]
     B --> C[Make Investment]
     C --> D[Track Pool Funding Progress]
-    D --> E{70% Threshold Reached?}
-    E -->|Yes| F[Admin Allocates Funds]
+    D --> E{100% Funded?}
+    E -->|Yes| F[Auto-Distribution Triggered]
     E -->|No| G[Continue Fundraising]
     F --> H[Pool Status: Funded]
-    H --> I[Funds Distributed to Invoices]
+    H --> I[Funds Sent to Invoices]
 ```
 
-**Smart Contracts Involved**: `PoolFundingManager`, `InvoiceNFT`, `PoolNFT`
+**Smart Contract**: `SEATrax`
 
 **Methods Called**:
-1. `PoolFundingManager.investInPool()` - Make investment
-2. `PoolFundingManager.allocateFundsToInvoices()` - Distribute funds to invoices
-3. `PoolNFT.markPoolFunded()` - Update pool status
+1. `SEATrax.invest()` - Make investment (uses msg.value, auto-distributes at 100%)
+2. `SEATrax.getPoolFundingPercentage()` - Check funding progress
 
 ### Phase 4: Fund Withdrawal
 ```mermaid
 graph TD
-    A[Invoices Funded] --> B[Exporters Can Withdraw]
-    B --> C[ExporterWithdraws Available Funds]
+    A[Invoices Funded] --> B[Exporter Can Withdraw]
+    B --> C[Withdraw All Funds]
     C --> D[Funds Transferred to Exporter]
-    D --> E[Track Withdrawal History]
+    D --> E[Invoice Status: Withdrawn]
 ```
 
-**Smart Contracts Involved**: `InvoiceNFT`
+**Smart Contract**: `SEATrax`
 
 **Methods Called**:
-1. `InvoiceNFT.withdrawFunds()` - Withdraw available funding
-2. `InvoiceNFT.getAvailableWithdrawal()` - Check available amount
+1. `SEATrax.withdrawFunds()` - Withdraw all available funding (all-or-nothing)
+2. `SEATrax.canWithdraw()` - Check withdrawal eligibility
 
 ### Phase 5: Payment & Settlement
 ```mermaid
 graph TD
-    A[Importer Makes Payment] --> B[Oracle Confirms Payment]
-    B --> C[Multiple Oracle Verification]
-    C --> D{Payment Confirmed?}
-    D -->|Yes| E[Invoice Status: Paid]
-    D -->|No| F[Payment Dispute Process]
-    E --> G{All Pool Invoices Paid?}
-    G -->|Yes| H[Pool Status: Settling]
-    G -->|No| I[Wait for Other Payments]
-    H --> J[Distribute Profits]
-    J --> K[Pool Status: Completed]
+    A[Importer Makes Payment] --> B[Admin Confirms Payment]
+    B --> C[Invoice Status: Paid]
+    C --> D{All Pool Invoices Paid?}
+    D -->|Yes| E[Pool Status: Completed]
+    D -->|No| F[Wait for Other Payments]
+    E --> G[Distribute Profits]
+    G --> H[Investors Claim Returns]
 ```
 
-**Smart Contracts Involved**: `PaymentOracle`, `InvoiceNFT`, `PoolNFT`, `PoolFundingManager`
+**Smart Contract**: `SEATrax`
 
 **Methods Called**:
-1. `PaymentOracle.submitPaymentConfirmation()` - Oracle confirms payment
-2. `InvoiceNFT.markInvoicePaid()` - Update invoice status
-3. `PoolNFT.markPoolSettling()` - Start settlement process
-4. `PoolFundingManager.distributeProfits()` - Calculate and distribute profits
-5. `PoolFundingManager.claimInvestorReturns()` - Investors claim returns
+1. `SEATrax.markInvoicePaid()` - Admin confirms payment
+2. `SEATrax.distributeProfits()` - Calculate and distribute profits
+3. `SEATrax.claimReturns()` - Investors claim returns
 
 ### Phase 6: Analytics & Reporting
 ```mermaid
 graph TD
-    A[Platform Activity] --> B[Update Analytics]
-    B --> C[Calculate Platform Metrics]
-    C --> D[Update Investor Portfolios]
-    D --> E[Update Pool Performance]
-    E --> F[Update Exporter Metrics]
-    F --> G[Generate Reports]
+    A[Platform Activity] --> B[Track Metrics]
+    B --> C[Manual Stats Calculation]
+    C --> D[Update UI]
 ```
 
-**Smart Contracts Involved**: `PlatformAnalytics`
+**Smart Contract**: `SEATrax`
 
-**Methods Called**:
-1. `PlatformAnalytics.updatePlatformMetrics()` - Update platform statistics
-2. `PlatformAnalytics.updateInvestorPortfolio()` - Update investor data
-3. `PlatformAnalytics.updatePoolPerformance()` - Update pool metrics
+**Note**: Analytics integrated within contract, calculated on-demand via frontend
 
 ## Smart Contract Architecture
 
-### Contract Relationships
+### Unified Contract System
 ```
-AccessControl (Core)
-    ├── InvoiceNFT (Depends on AccessControl)
-    ├── PoolNFT (Depends on AccessControl + InvoiceNFT)
-    ├── PoolFundingManager (Depends on AccessControl + InvoiceNFT + PoolNFT)
-    ├── PaymentOracle (Depends on all above)
-    └── PlatformAnalytics (Depends on all above)
+SEATrax.sol (All-in-One Contract)
+    ├── Role Management (Admin, Exporter, Investor)
+    ├── Invoice NFT (ERC-721 tokenization)
+    ├── Pool NFT (ERC-721 tokenization)
+    ├── Investment & Distribution
+    ├── Payment Tracking
+    └── Platform Analytics (integrated)
 ```
 
 ### Key Constants
@@ -150,59 +137,76 @@ AccessControl (Core)
 - **Platform Fee**: 1% (100 basis points)
 - **Investor Yield**: 4% (400 basis points)
 - **Minimum Funding Threshold**: 70% (7000 basis points)
-- **Oracle Confirmation Required**: 2 confirmations
+- **Auto-Distribution**: 100% funding triggers automatic distribution
 
 ## Frontend Integration Methods
 
 ### 1. Access Control Management
 
-#### Grant Roles
+#### Register Users (Self-Service)
 ```javascript
-// Grant exporter role to a user
-const grantExporterRole = async (userAddress) => {
-    const tx = await accessControlContract.grantExporterRole(userAddress);
+// Exporter self-registration
+const registerExporter = async (companyName, taxId, country, license) => {
+    const tx = await seatraxContract.registerExporter(companyName, taxId, country, license);
     await tx.wait();
     return tx.hash;
 };
 
-// Grant investor role to a user  
-const grantInvestorRole = async (userAddress) => {
-    const tx = await accessControlContract.grantInvestorRole(userAddress);
+// Investor self-registration
+const registerInvestor = async (name, address) => {
+    const tx = await seatraxContract.registerInvestor(name, address);
+    await tx.wait();
+    return tx.hash;
+};
+
+// Admin verifies exporter (after registration)
+const verifyExporter = async (exporterAddress) => {
+    const tx = await seatraxContract.verifyExporter(exporterAddress);
     await tx.wait();
     return tx.hash;
 };
 ```
 
-**Function**: `grantExporterRole(address account)`
-- **Description**: Grants exporter role to an address, allowing them to create invoices
-- **Access**: Admin only
+**Function**: `registerExporter(string company, string taxId, string country, string license)`
+- **Description**: Self-service exporter registration
+- **Access**: Public (any wallet)
 - **Parameters**: 
-  - `account` (address): Address to grant exporter role
+  - `company` (string): Company name
+  - `taxId` (string): Tax ID
+  - `country` (string): Country
+  - `license` (string): Export license number
 
-**Function**: `grantInvestorRole(address account)`
-- **Description**: Grants investor role to an address, allowing them to invest in pools
+**Function**: `registerInvestor(string name, string investorAddress)`
+- **Description**: Self-service investor registration
+- **Access**: Public (any wallet)
+- **Parameters**:
+  - `name` (string): Investor name
+  - `investorAddress` (string): Investor address
+
+**Function**: `verifyExporter(address exporter)`
+- **Description**: Admin verification of exporter
 - **Access**: Admin only
 - **Parameters**:
-  - `account` (address): Address to grant investor role
+  - `exporter` (address): Exporter wallet to verify
 
 #### Check User Roles
 ```javascript
 // Check if user has specific roles
 const checkUserRoles = async (userAddress) => {
-    const [isAdmin, isExporter, isInvestor] = await accessControlContract.getUserRoles(userAddress);
+    const { isAdmin, isExporter, isInvestor } = await seatraxContract.checkUserRoles(userAddress);
     return { isAdmin, isExporter, isInvestor };
 };
 ```
 
-**Function**: `getUserRoles(address account)`
+**Function**: `checkUserRoles(address account)`
 - **Description**: Returns all roles for a specific address
 - **Access**: Public view
 - **Parameters**:
   - `account` (address): Address to check roles for
 - **Returns**: 
-  - `hasAdminRole` (bool): Whether address has admin role
-  - `hasExporterRole` (bool): Whether address has exporter role  
-  - `hasInvestorRole` (bool): Whether address has investor role
+  - `isAdmin` (bool): Whether address has admin role
+  - `isExporter` (bool): Whether address has exporter role  
+  - `isInvestor` (bool): Whether address has investor role
 
 ### 2. Invoice Management
 
@@ -212,18 +216,22 @@ const checkUserRoles = async (userAddress) => {
 const createInvoice = async (invoiceData) => {
     const {
         exporterCompany,
-        importerCompany, 
+        importerCompany,
+        importerEmail,
         shippingAmount,
         loanAmount,
-        shippingDate
+        shippingDate,
+        ipfsHash
     } = invoiceData;
     
-    const tx = await invoiceNFTContract.mintInvoice(
+    const tx = await seatraxContract.createInvoice(
         exporterCompany,
         importerCompany,
+        importerEmail,
         ethers.parseEther(shippingAmount.toString()),
         ethers.parseEther(loanAmount.toString()),
-        Math.floor(shippingDate.getTime() / 1000)
+        Math.floor(shippingDate.getTime() / 1000),
+        ipfsHash
     );
     
     const receipt = await tx.wait();
@@ -233,49 +241,52 @@ const createInvoice = async (invoiceData) => {
 };
 ```
 
-**Function**: `mintInvoice(string exporterCompany, string importerCompany, uint256 shippingAmount, uint256 loanAmount, uint256 shippingDate)`
+**Function**: `createInvoice(string exporterCompany, string importerCompany, string importerEmail, uint256 shippingAmount, uint256 loanAmount, uint256 shippingDate, string ipfsHash)`
 - **Description**: Creates and mints a new invoice NFT
 - **Access**: Exporters only
 - **Parameters**:
   - `exporterCompany` (string): Name of exporter company
   - `importerCompany` (string): Name of importer company
+  - `importerEmail` (string): Importer email for payment notifications
   - `shippingAmount` (uint256): Total shipping/invoice amount in wei
   - `loanAmount` (uint256): Requested loan amount in wei (≤ shipping amount)
   - `shippingDate` (uint256): Unix timestamp of shipping date
+  - `ipfsHash` (string): IPFS hash of supporting documents
 - **Returns**: `invoiceId` (uint256): The minted invoice NFT ID
 
-#### Finalize Invoice
+#### Approve Invoice
 ```javascript
-// Finalize invoice to make it available for pooling
-const finalizeInvoice = async (invoiceId) => {
-    const tx = await invoiceNFTContract.finalizeInvoice(invoiceId);
+// Admin approves invoice for pool inclusion
+const approveInvoice = async (invoiceId) => {
+    const tx = await seatraxContract.approveInvoice(invoiceId);
     await tx.wait();
     return tx.hash;
 };
 ```
 
-**Function**: `finalizeInvoice(uint256 invoiceId)`
-- **Description**: Finalizes an invoice to make it ready for pool inclusion
-- **Access**: Invoice owner (exporter) only
+**Function**: `approveInvoice(uint256 invoiceId)`
+- **Description**: Admin approves invoice to make it ready for pool inclusion
+- **Access**: Admin only
 - **Parameters**:
-  - `invoiceId` (uint256): ID of the invoice to finalize
+  - `invoiceId` (uint256): ID of the invoice to approve
 
 #### Get Invoice Details
 ```javascript
 // Fetch complete invoice information
 const getInvoice = async (invoiceId) => {
-    const invoice = await invoiceNFTContract.getInvoice(invoiceId);
+    const invoice = await seatraxContract.getInvoice(invoiceId);
     return {
         exporterWallet: invoice.exporterWallet,
-        status: invoice.status, // 0=Pending, 1=Finalized, 2=Fundraising, 3=Funded, 4=Paid, 5=Cancelled
+        status: invoice.status, // 0=Pending, 1=Approved, 2=InPool, 3=Funded, 4=Withdrawn, 5=Paid, 6=Completed, 7=Rejected
         shippingAmount: ethers.formatEther(invoice.shippingAmount),
         loanAmount: ethers.formatEther(invoice.loanAmount),
         amountInvested: ethers.formatEther(invoice.amountInvested),
         amountWithdrawn: ethers.formatEther(invoice.amountWithdrawn),
         shippingDate: new Date(invoice.shippingDate * 1000),
-        createdAt: new Date(invoice.createdAt * 1000),
         exporterCompany: invoice.exporterCompany,
-        importerCompany: invoice.importerCompany
+        importerCompany: invoice.importerCompany,
+        importerEmail: invoice.importerEmail,
+        ipfsHash: invoice.ipfsHash
     };
 };
 ```
@@ -291,7 +302,7 @@ const getInvoice = async (invoiceId) => {
 ```javascript
 // Get all invoices for a specific exporter
 const getExporterInvoices = async (exporterAddress) => {
-    const invoiceIds = await invoiceNFTContract.getInvoicesByExporter(exporterAddress);
+    const invoiceIds = await seatraxContract.getExporterInvoices(exporterAddress);
     
     const invoices = await Promise.all(
         invoiceIds.map(async (id) => {
@@ -304,7 +315,7 @@ const getExporterInvoices = async (exporterAddress) => {
 };
 ```
 
-**Function**: `getInvoicesByExporter(address exporter)`
+**Function**: `getExporterInvoices(address exporter)`
 - **Description**: Returns array of invoice IDs owned by a specific exporter
 - **Access**: Public view
 - **Parameters**:
@@ -313,29 +324,32 @@ const getExporterInvoices = async (exporterAddress) => {
 
 #### Withdraw Funds
 ```javascript
-// Withdraw available funds from an invoice
-const withdrawFunds = async (invoiceId, amount = 0) => {
-    // amount = 0 means withdraw all available
-    const tx = await invoiceNFTContract.withdrawFunds(invoiceId, ethers.parseEther(amount.toString()));
+// Withdraw all available funds from an invoice
+const withdrawFunds = async (invoiceId) => {
+    const tx = await seatraxContract.withdrawFunds(invoiceId);
     await tx.wait();
     return tx.hash;
 };
 ```
 
-**Function**: `withdrawFunds(uint256 invoiceId, uint256 amount)`
-- **Description**: Withdraws available funds from a funded invoice
+**Function**: `withdrawFunds(uint256 invoiceId)`
+- **Description**: Withdraws all available funds from a funded invoice (all-or-nothing)
 - **Access**: Invoice owner (exporter) only
 - **Parameters**:
   - `invoiceId` (uint256): ID of the invoice
-  - `amount` (uint256): Amount to withdraw in wei (0 = withdraw all available)
 
 ### 3. Pool Management
 
 #### Create Pool
 ```javascript
 // Create a new investment pool
-const createPool = async (poolName, invoiceIds) => {
-    const tx = await poolNFTContract.createPool(poolName, invoiceIds);
+const createPool = async (poolName, invoiceIds, startDate, endDate) => {
+    const tx = await seatraxContract.createPool(
+        poolName,
+        invoiceIds,
+        Math.floor(startDate.getTime() / 1000),
+        Math.floor(endDate.getTime() / 1000)
+    );
     const receipt = await tx.wait();
     const poolId = receipt.logs[0].args[0]; // Get pool ID from event
     
@@ -343,46 +357,32 @@ const createPool = async (poolName, invoiceIds) => {
 };
 ```
 
-**Function**: `createPool(string name, uint256[] invoiceIds)`
-- **Description**: Creates a new investment pool with selected invoices
+**Function**: `createPool(string name, uint256[] invoiceIds, uint256 startDate, uint256 endDate)`
+- **Description**: Creates a new investment pool with selected invoices (auto-opens)
 - **Access**: Admin only
 - **Parameters**:
   - `name` (string): Pool name/description
-  - `invoiceIds` (uint256[]): Array of finalized invoice IDs (max 50)
+  - `invoiceIds` (uint256[]): Array of approved invoice IDs
+  - `startDate` (uint256): Pool opening timestamp
+  - `endDate` (uint256): Pool closing timestamp
 - **Returns**: `poolId` (uint256): The created pool NFT ID
-
-#### Finalize Pool for Fundraising
-```javascript
-// Open pool for investor funding
-const finalizePoolForFunding = async (poolId) => {
-    const tx = await poolNFTContract.finalizePool(poolId);
-    await tx.wait();
-    return tx.hash;
-};
-```
-
-**Function**: `finalizePool(uint256 poolId)`
-- **Description**: Finalizes pool to start accepting investor funding
-- **Access**: Admin only
-- **Parameters**:
-  - `poolId` (uint256): ID of the pool to finalize
 
 #### Get Pool Details
 ```javascript
 // Fetch complete pool information
 const getPool = async (poolId) => {
-    const pool = await poolNFTContract.getPool(poolId);
+    const pool = await seatraxContract.getPool(poolId);
     return {
-        creator: pool.creator,
-        status: pool.status, // 0=Open, 1=Fundraising, 2=Funded, 3=Settling, 4=Completed
-        invoiceCount: pool.invoiceCount,
+        poolId: pool.poolId,
+        name: pool.name,
+        status: pool.status, // 0=Open, 1=Funded, 2=Completed, 3=Cancelled
         totalLoanAmount: ethers.formatEther(pool.totalLoanAmount),
         totalShippingAmount: ethers.formatEther(pool.totalShippingAmount),
-        totalInvested: ethers.formatEther(pool.totalInvested),
-        totalDistributed: ethers.formatEther(pool.totalDistributed),
-        createdAt: new Date(pool.createdAt * 1000),
-        fundedAt: pool.fundedAt > 0 ? new Date(pool.fundedAt * 1000) : null,
-        name: pool.name,
+        amountInvested: ethers.formatEther(pool.amountInvested),
+        amountDistributed: ethers.formatEther(pool.amountDistributed),
+        feePaid: ethers.formatEther(pool.feePaid),
+        startDate: new Date(pool.startDate * 1000),
+        endDate: new Date(pool.endDate * 1000),
         invoiceIds: pool.invoiceIds
     };
 };
@@ -395,12 +395,11 @@ const getPool = async (poolId) => {
   - `poolId` (uint256): ID of the pool
 - **Returns**: Complete `Pool` struct with all fields
 
-#### Get Pools by Status
+#### Get All Open Pools
 ```javascript
-// Get all pools with specific status
-const getPoolsByStatus = async (status) => {
-    // status: 0=Open, 1=Fundraising, 2=Funded, 3=Settling, 4=Completed
-    const poolIds = await poolNFTContract.getPoolsByStatus(status);
+// Get all open pools
+const getAllOpenPools = async () => {
+    const poolIds = await seatraxContract.getAllOpenPools();
     
     const pools = await Promise.all(
         poolIds.map(async (id) => {
@@ -413,74 +412,57 @@ const getPoolsByStatus = async (status) => {
 };
 ```
 
-**Function**: `getPoolsByStatus(PoolStatus status)`
-- **Description**: Returns array of pool IDs with the specified status
+**Function**: `getAllOpenPools()`
+- **Description**: Returns array of all open pool IDs
 - **Access**: Public view
-- **Parameters**:
-  - `status` (uint8): Pool status (0-4)
-- **Returns**: `poolIds` (uint256[]): Array of pool IDs
+- **Returns**: `poolIds` (uint256[]): Array of open pool IDs
 
 ### 4. Investment & Funding
 
 #### Invest in Pool
 ```javascript
-// Make an investment in a fundraising pool
-const investInPool = async (poolId, amount) => {
-    const tx = await poolFundingManagerContract.investInPool(
-        poolId, 
-        ethers.parseEther(amount.toString())
-    );
+// Make an investment in an open pool
+const investInPool = async (poolId, amountInEth) => {
+    const amountInWei = ethers.parseEther(amountInEth.toString());
+    const tx = await seatraxContract.invest(poolId, amountInWei, {
+        value: amountInWei // msg.value
+    });
     await tx.wait();
     return tx.hash;
 };
 ```
 
-**Function**: `investInPool(uint256 poolId, uint256 amount)`
-- **Description**: Allows investors to invest in a fundraising pool
+**Function**: `invest(uint256 poolId, uint256 amountInWei) payable`
+- **Description**: Allows investors to invest in an open pool (auto-distributes at 100%)
 - **Access**: Investors only
 - **Parameters**:
   - `poolId` (uint256): ID of the pool to invest in
-  - `amount` (uint256): Investment amount in wei (min: 1,000 tokens, max: 1,000,000 tokens per pool)
-
-#### Allocate Funds to Invoices
-```javascript
-// Admin allocates pool funds to invoices (70% threshold reached)
-const allocateFundsToInvoices = async (poolId) => {
-    const tx = await poolFundingManagerContract.allocateFundsToInvoices(poolId);
-    await tx.wait();
-    return tx.hash;
-};
-```
-
-**Function**: `allocateFundsToInvoices(uint256 poolId)`
-- **Description**: Allocates invested pool funds proportionally to invoices
-- **Access**: Admin only
-- **Parameters**:
-  - `poolId` (uint256): ID of the pool with sufficient funding (≥70%)
+  - `amountInWei` (uint256): Investment amount in wei
+- **Note**: Transaction must include msg.value equal to amountInWei
 
 #### Get Investment Info
 ```javascript
 // Get investor's investment details for a specific pool
-const getInvestorPoolInfo = async (investorAddress, poolId) => {
-    const info = await poolFundingManagerContract.getInvestorPoolInfo(investorAddress, poolId);
+const getInvestment = async (poolId, investorAddress) => {
+    const { amount, percentage, timestamp } = await seatraxContract.getInvestment(poolId, investorAddress);
     return {
-        investment: ethers.formatEther(info.investment),
-        canClaim: info.canClaim,
-        estimatedReturn: ethers.formatEther(info.estimatedReturn)
+        amount: ethers.formatEther(amount),
+        percentage: percentage.toString(), // basis points (10000 = 100%)
+        timestamp: new Date(timestamp * 1000)
     };
 };
 ```
 
-**Function**: `getInvestorPoolInfo(address investor, uint256 poolId)`
+**Function**: `getInvestment(uint256 poolId, address investor)`
 - **Description**: Returns investment details for a specific investor in a pool
 - **Access**: Public view
 - **Parameters**:
-  - `investor` (address): Address of the investor
   - `poolId` (uint256): ID of the pool
+  - `investor` (address): Address of the investor
 - **Returns**:
-  - `investment` (uint256): Amount invested
-  - `canClaim` (bool): Whether returns can be claimed
-  - `estimatedReturn` (uint256): Estimated total return (principal + rewards)
+  - `amount` (uint256): Amount invested in wei
+  - `percentage` (uint256): Investment percentage (basis points)
+  - `timestamp` (uint256): Investment timestamp
 
 #### Get Pool Funding Statistics
 ```javascript

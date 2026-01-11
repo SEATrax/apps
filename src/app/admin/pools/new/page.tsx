@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
+import { useSEATrax } from '@/hooks/useSEATrax';
+import { useAdminContract } from '@/hooks/useAdminContract';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,11 +28,26 @@ import {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Invoice } from '@/types';
 
-interface InvoiceWithMetadata extends Invoice {
+interface InvoiceWithMetadata {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
   metadata?: {
     invoice_number: string;
     importer_name: string;
@@ -42,14 +57,12 @@ interface InvoiceWithMetadata extends Invoice {
 }
 
 export default function CreatePoolPage() {
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { createPool, finalizePool } = usePoolNFT();
-  const { getInvoice } = useInvoiceNFT();
+  const { isConnected, address } = useMetaMaskAdmin();
+  const { getInvoice, getAllApprovedInvoices } = useSEATrax();
+  const { createPool, isLoading: contractLoading } = useAdminContract();
   const router = useRouter();
   
   const [currentStep, setCurrentStep] = useState(1);
-  const [userRoles, setUserRoles] = useState<any>(null);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -65,35 +78,45 @@ export default function CreatePoolPage() {
   const [selectedInvoices, setSelectedInvoices] = useState<bigint[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
 
-  // Check admin role and redirect if not admin
-  useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-      return;
-    }
+  // Autofill function for testing
+  const handleAutofill = () => {
+    const now = new Date();
+    const startDateTime = new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour from now
+    const endDateTime = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+    
+    setPoolName(`SEA Export Pool ${now.getMonth() + 1}/${now.getFullYear()}`);
+    setPoolDescription(`Investment pool for Southeast Asian export financing. This pool includes verified shipping invoices from multiple exporters across the region, offering diversified exposure to international trade finance.`);
+    setStartDate(startDateTime.toISOString().slice(0, 16));
+    setEndDate(endDateTime.toISOString().slice(0, 16));
+    setRiskCategory('medium');
+    
+    setMessage({ type: 'success', text: 'Pool details auto-filled! Review and proceed to next step.' });
+    setTimeout(() => setMessage(null), 3000);
+  };
 
-    if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
-          router.push('/');
-        }
-      });
-    }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+  // Autofill Step 2: Select all available invoices
+  const handleSelectAllInvoices = () => {
+    const allInvoiceIds = availableInvoices.map(inv => BigInt(inv.tokenId));
+    setSelectedInvoices(allInvoiceIds);
+    setMessage({ type: 'success', text: `Selected all ${allInvoiceIds.length} available invoices!` });
+    setTimeout(() => setMessage(null), 3000);
+  };
 
-  // Load finalized invoices when admin role is confirmed
+  // Load finalized invoices when connected
   useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (isConnected && address) {
       loadFinalizedInvoices();
     }
-  }, [userRoles]);
+  }, [isConnected, address]);
 
   const loadFinalizedInvoices = async () => {
     try {
       setLoadingInvoices(true);
       
-      // Get all invoice metadata from Supabase
+      // Get all approved invoices from smart contract
+      const approvedInvoiceIds = await getAllApprovedInvoices();
+      
+      // Get metadata from Supabase
       const { data: metadataList, error: metadataError } = await supabase
         .from('invoice_metadata')
         .select('*')
@@ -101,28 +124,28 @@ export default function CreatePoolPage() {
 
       if (metadataError) throw metadataError;
 
-      // Get invoice data from smart contract and filter for finalized ones
+      // Get full invoice data and combine with metadata
       const finalizedInvoices: InvoiceWithMetadata[] = [];
       
-      for (const metadata of metadataList || []) {
+      for (const invoiceId of approvedInvoiceIds) {
         try {
-          const invoiceData = await getInvoice(BigInt(metadata.token_id));
+          const invoiceData = await getInvoice(invoiceId);
+          const metadata = metadataList?.find(m => m.token_id === Number(invoiceId));
           
-          // Only include invoices with status 1 (Finalized/Approved) that are not already in pools
-          const isFinalized = (status: any) => status === 1 || status === 'FINALIZED' || status === 'APPROVED';
-          if (invoiceData && isFinalized(invoiceData.status)) {
+          // Only include if not already in a pool (poolId === 0)
+          if (invoiceData && Number(invoiceData.poolId) === 0) {
             finalizedInvoices.push({
               ...invoiceData,
               metadata: {
-                invoice_number: metadata.invoice_number,
-                importer_name: metadata.importer_name || 'Unknown',
-                goods_description: metadata.goods_description || '',
-                created_at: metadata.created_at,
+                invoice_number: metadata?.invoice_number || `Invoice #${invoiceId}`,
+                importer_name: metadata?.importer_name || 'Unknown',
+                goods_description: metadata?.goods_description || '',
+                created_at: metadata?.created_at || new Date().toISOString(),
               }
             });
           }
         } catch (error) {
-          console.error(`Failed to fetch invoice ${metadata.token_id}:`, error);
+          console.error(`Failed to fetch invoice ${invoiceId}:`, error);
         }
       }
 
@@ -152,7 +175,7 @@ export default function CreatePoolPage() {
     );
     
     const totalShippingAmount = selectedInvoiceData.reduce(
-      (sum, inv) => sum + Number(inv.invoiceValue), 0
+      (sum, inv) => sum + Number(inv.shippingAmount), 0
     );
 
     return { totalLoanAmount, totalShippingAmount, count: selectedInvoices.length };
@@ -204,40 +227,57 @@ export default function CreatePoolPage() {
       setCreating(true);
       setMessage(null);
 
-      // Convert dates to timestamps
+      // Convert dates to timestamps (in seconds)
       const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
 
-      // Create pool NFT
-      const poolId = await createPool(
+      // Create pool with invoices, dates, and name
+      // Signature: createPool(name, invoiceIds, startDate, endDate)
+      const result = await createPool(
         poolName,
+        selectedInvoices,
         BigInt(startTimestamp),
-        BigInt(endTimestamp),
-        selectedInvoices
+        BigInt(endTimestamp)
       );
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create pool');
+      }
 
-      // Save metadata to Supabase
-      const { error: metadataError } = await supabase
-        .from('pool_metadata')
-        .insert({
-          pool_id: Number(poolId),
-          description: poolDescription,
-          risk_category: riskCategory,
+      // Save pool metadata to Supabase
+      if (result.poolId) {
+        const { error: dbError } = await supabase
+          .from('pool_metadata')
+          .insert({
+            pool_id: result.poolId.toString(),
+            name: poolName,
+            description: poolDescription,
+            risk_category: riskCategory,
+            admin_wallet: address,
+          });
+
+        if (dbError) {
+          console.warn('Pool created on-chain but failed to save metadata:', dbError);
+          setMessage({ 
+            type: 'success', 
+            text: `Pool created successfully! Transaction: ${result.txHash}. Metadata save failed, you can edit it later.`
+          });
+        } else {
+          setMessage({ 
+            type: 'success', 
+            text: `Pool #${result.poolId} created successfully with metadata! Transaction: ${result.txHash}`
+          });
+        }
+      } else {
+        setMessage({ 
+          type: 'success', 
+          text: `Pool created successfully! Transaction: ${result.txHash}. Check pools list to find your new pool.`
         });
+      }
 
-      if (metadataError) throw metadataError;
-
-      // Finalize pool to open for investments
-      await finalizePool(poolId);
-
-      setMessage({ 
-        type: 'success', 
-        text: `Pool created successfully! Pool ID: ${poolId}` 
-      });
-
-      // Redirect to pool detail page after a short delay
+      // Redirect to pools list
       setTimeout(() => {
-        router.push(`/admin/pools/${poolId}`);
+        router.push('/admin/pools');
       }, 2000);
 
     } catch (error: any) {
@@ -252,21 +292,10 @@ export default function CreatePoolPage() {
 
   const totals = calculateTotals();
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading...</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -327,10 +356,24 @@ export default function CreatePoolPage() {
         {currentStep === 1 && (
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-white">Pool Details</CardTitle>
-              <CardDescription className="text-gray-400">
-                Configure the basic information for your investment pool
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-white">Pool Details</CardTitle>
+                  <CardDescription className="text-gray-400">
+                    Configure the basic information for your investment pool
+                  </CardDescription>
+                </div>
+                <Button 
+                  type="button"
+                  onClick={handleAutofill}
+                  variant="outline"
+                  size="sm"
+                  className="border-cyan-600 text-cyan-400 hover:bg-cyan-600/10"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Auto-fill
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
@@ -412,10 +455,39 @@ export default function CreatePoolPage() {
           <div className="space-y-6">
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-white">Select Invoices</CardTitle>
-                <CardDescription className="text-gray-400">
-                  Choose approved invoices to include in this investment pool
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-white">Select Invoices</CardTitle>
+                    <CardDescription className="text-gray-400">
+                      Choose approved invoices to include in this investment pool
+                    </CardDescription>
+                  </div>
+                  {availableInvoices.length > 0 && (
+                    <div className="flex gap-2">
+                      <Button 
+                        type="button"
+                        onClick={handleSelectAllInvoices}
+                        variant="outline"
+                        size="sm"
+                        className="border-cyan-600 text-cyan-400 hover:bg-cyan-600/10"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Select All
+                      </Button>
+                      {selectedInvoices.length > 0 && (
+                        <Button 
+                          type="button"
+                          onClick={() => setSelectedInvoices([])}
+                          variant="outline"
+                          size="sm"
+                          className="border-red-600 text-red-400 hover:bg-red-600/10"
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {loadingInvoices ? (
@@ -474,7 +546,7 @@ export default function CreatePoolPage() {
                               </div>
                               <div>
                                 <p className="text-gray-400">Shipping Date</p>
-                                <p className="text-white">{formatDate(invoice.invoiceDate)}</p>
+                                <p className="text-white">{formatDate(Number(invoice.shippingDate) * 1000)}</p>
                               </div>
                             </div>
 
@@ -667,5 +739,6 @@ export default function CreatePoolPage() {
         )}
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

@@ -3,9 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
-import { useInvestmentStats } from '@/hooks/useInvestmentStats';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { usePlatformAnalytics } from '@/hooks/usePlatformAnalytics';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

@@ -2,12 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { usePoolFunding } from '@/hooks/usePoolFunding';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
-import { usePaymentOracle } from '@/hooks/usePaymentOracle';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,9 +28,25 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate, formatAddress } from '@/lib/utils';
 import type { Pool, Invoice } from '@/types';
+
+interface PoolData {
+  poolId: bigint;
+  name: string;
+  startDate: bigint;
+  endDate: bigint;
+  invoiceIds: bigint[];
+  totalLoanAmount: bigint;
+  totalShippingAmount: bigint;
+  amountInvested: bigint;
+  amountDistributed: bigint;
+  feePaid: bigint;
+  status: number;
+  createdAt: bigint;
+}
 
 interface PoolMetadata {
   id: number;
@@ -44,7 +56,21 @@ interface PoolMetadata {
   created_at: string;
 }
 
-interface InvoiceWithMetadata extends Invoice {
+interface InvoiceWithMetadata {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
   metadata?: {
     invoice_number: string;
     importer_name: string;
@@ -64,20 +90,22 @@ export default function PoolDetailPage() {
   const router = useRouter();
   const poolId = params.id as string;
   
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { getPool, finalizePool } = usePoolNFT();
+  const { isConnected, address, connect, switchToLiskSepolia, isCorrectNetwork, isMetaMaskInstalled, error: walletError } = useMetaMaskAdmin();
   const { 
-    getPoolFundingPercentage, 
-    allocateFundsToInvoices, 
+    checkUserRoles,
+    getPool,
+    getPoolFundingPercentage,
     distributeProfits,
-    getInvestorReturns 
-  } = usePoolFunding();
-  const { getInvoice } = useInvoiceNFT();
-  const { markInvoicePaid } = usePaymentOracle();
+    getInvoice,
+    markInvoicePaid,
+    getPoolInvestors,
+    isLoading 
+  } = useSEATrax();
   
   const [userRoles, setUserRoles] = useState<any>(null);
-  const [pool, setPool] = useState<Pool | null>(null);
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [pool, setPool] = useState<PoolData | null>(null);
   const [poolMetadata, setPoolMetadata] = useState<PoolMetadata | null>(null);
   const [invoices, setInvoices] = useState<InvoiceWithMetadata[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
@@ -86,26 +114,34 @@ export default function PoolDetailPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Check admin role and redirect if not admin
+  const handleConnectWallet = async () => { await connect(); };
+
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
+    if (!isConnected || !address) {
+      setCheckingRole(false);
+      setAccessDenied(true);
       return;
     }
-
-    if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
-          router.push('/');
-        }
-      });
+    if (!isCorrectNetwork) {
+      setCheckingRole(false);
+      return;
     }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+    setCheckingRole(true);
+    checkUserRoles(address).then((roles) => {
+      setUserRoles(roles);
+      setCheckingRole(false);
+      if (!roles?.isAdmin) {
+        setAccessDenied(true);
+      }
+    }).catch(() => {
+      setCheckingRole(false);
+      setAccessDenied(true);
+    });
+  }, [isConnected, isCorrectNetwork, address, checkUserRoles]);
 
   // Load pool data when admin role is confirmed
   useEffect(() => {
-    if (userRoles?.hasAdminRole && poolId) {
+    if (userRoles?.isAdmin && poolId) {
       loadPoolData();
     }
   }, [userRoles, poolId]);
@@ -174,26 +210,7 @@ export default function PoolDetailPage() {
     }
   };
 
-  const handleAllocateFunds = async () => {
-    if (!pool) return;
-
-    try {
-      setActionLoading('allocate');
-      setMessage(null);
-
-      await allocateFundsToInvoices(BigInt(poolId));
-      
-      setMessage({ type: 'success', text: 'Funds allocated to invoices successfully!' });
-      
-      // Reload pool data
-      await loadPoolData();
-
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to allocate funds' });
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  // REMOVED: handleAllocateFunds - funds auto-distribute at 100%
 
   const handleDistributeProfits = async () => {
     if (!pool) return;
@@ -202,7 +219,11 @@ export default function PoolDetailPage() {
       setActionLoading('distribute');
       setMessage(null);
 
-      await distributeProfits(BigInt(poolId));
+      const result = await distributeProfits(BigInt(poolId));
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to distribute profits');
+      }
       
       setMessage({ type: 'success', text: 'Profits distributed successfully!' });
       
@@ -329,14 +350,7 @@ export default function PoolDetailPage() {
     return (typeof status === 'string' && status === 'FUNDED') || status === 3;
   };
 
-  const canAllocateFunds = () => {
-    if (!pool) return false;
-    const status = pool.status as any;
-    const isPreFunded = typeof status === 'string' ? 
-      (status === 'Open' || status === 'Fundraising' || status === 'PartiallyFunded') : 
-      status < 3;
-    return fundingPercentage >= 70 && isPreFunded;
-  };
+  // REMOVED: canAllocateFunds - funds auto-distribute at 100%
 
   const canDistributeProfits = () => {
     if (!pool) return false;
@@ -353,37 +367,42 @@ export default function PoolDetailPage() {
     return allInvoicesPaid && isFunded;
   };
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole || loading) {
+  // Show loading while pool data is being fetched
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading pool details...</div>
+      <AdminAuthGuard>
+        <div className="flex items-center justify-center min-h-screen bg-slate-950">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+            <div className="text-gray-400">Loading pool details...</div>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
   if (!pool) {
     return (
-      <div className="min-h-screen bg-slate-950">
-        <AdminHeader />
-        <div className="container mx-auto px-4 py-8">
-          <Alert className="border-red-500 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              Pool not found or failed to load.
-            </AlertDescription>
-          </Alert>
+      <AdminAuthGuard>
+        <div className="min-h-screen bg-slate-950">
+          <AdminHeader />
+          <div className="container mx-auto px-4 py-8">
+            <Alert className="border-red-500 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                Pool not found or failed to load.
+              </AlertDescription>
+            </Alert>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -476,7 +495,7 @@ export default function PoolDetailPage() {
               <div className="space-y-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">
-                    {formatCurrency(Number(pool.totalInvested) / 100)} raised
+                    {formatCurrency(Number(pool.amountInvested) / 1e18 * 3000)} raised
                   </span>
                   <span className="text-gray-400">
                     {formatCurrency(Number(pool.totalLoanAmount) / 100)} target
@@ -484,9 +503,14 @@ export default function PoolDetailPage() {
                 </div>
                 <Progress value={fundingPercentage} className="h-3" />
                 <div className="text-center">
-                  {fundingPercentage >= 70 && (
+                  {fundingPercentage >= 100 && (
                     <Badge className="bg-green-600 text-white">
-                      70% threshold reached - Ready for fund allocation
+                      100% funded - Funds auto-distributed to exporters
+                    </Badge>
+                  )}
+                  {fundingPercentage >= 70 && fundingPercentage < 100 && (
+                    <Badge className="bg-cyan-600 text-white">
+                      {fundingPercentage.toFixed(0)}% funded - Exporters can withdraw
                     </Badge>
                   )}
                 </div>
@@ -514,29 +538,18 @@ export default function PoolDetailPage() {
           <CardHeader>
             <CardTitle className="text-white">Pool Management Actions</CardTitle>
             <CardDescription className="text-gray-400">
-              Manage fund allocation and profit distribution
+              Distribute profits when all invoices are paid (auto-distribution happens at 100% funding)
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <Alert className="mb-4 bg-cyan-900/20 border-cyan-800">
+              <AlertCircle className="h-4 w-4 text-cyan-400" />
+              <AlertDescription className="text-cyan-300">
+                📢 Funds automatically distribute to exporters when pool reaches 100% funding. No manual allocation needed.
+              </AlertDescription>
+            </Alert>
+            
             <div className="flex flex-wrap gap-4">
-              <Button
-                onClick={handleAllocateFunds}
-                disabled={!canAllocateFunds() || actionLoading === 'allocate'}
-                className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600"
-              >
-                {actionLoading === 'allocate' ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Allocating...
-                  </>
-                ) : (
-                  <>
-                    <Banknote className="h-4 w-4 mr-2" />
-                    Allocate Funds to Invoices
-                  </>
-                )}
-              </Button>
-
               <Button
                 onClick={handleDistributeProfits}
                 disabled={!canDistributeProfits() || actionLoading === 'distribute'}
@@ -624,7 +637,7 @@ export default function PoolDetailPage() {
                           </div>
                           <div>
                             <p className="text-gray-400 text-sm">Shipping Date</p>
-                            <p className="text-white">{formatDate(invoice.invoiceDate)}</p>
+                            <p className="text-white">{formatDate(Number(invoice.shippingDate) * 1000)}</p>
                           </div>
                         </div>
 
@@ -632,19 +645,19 @@ export default function PoolDetailPage() {
                           <div>
                             <p className="text-gray-400 text-sm">Amount Invested</p>
                             <p className="text-green-400 font-medium">
-                              {formatCurrency(Number(invoice.fundedAmount) / 100)}
+                              {formatCurrency(Number(invoice.amountInvested) / 1e18 * 3000)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-400 text-sm">Amount Withdrawn</p>
                             <p className="text-yellow-400 font-medium">
-                              {formatCurrency(Number(invoice.withdrawnAmount) / 100)}
+                              {formatCurrency(Number(invoice.amountWithdrawn) / 1e18 * 3000)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-400 text-sm">Available for Withdrawal</p>
                             <p className="text-purple-400 font-medium">
-                              {formatCurrency((Number(invoice.fundedAmount) - Number(invoice.withdrawnAmount)) / 100)}
+                              {formatCurrency((Number(invoice.amountInvested) - Number(invoice.amountWithdrawn)) / 1e18 * 3000)}
                             </p>
                           </div>
                         </div>
@@ -780,5 +793,6 @@ export default function PoolDetailPage() {
         </Tabs>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

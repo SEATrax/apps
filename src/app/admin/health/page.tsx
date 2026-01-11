@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { 
   Shield, 
   CheckCircle, 
@@ -20,14 +21,14 @@ import {
   Info,
   Loader2
 } from 'lucide-react';
-import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { useRouter } from 'next/navigation';
 import type { ConsistencyIssue, ValidationResult } from '@/lib/consistency';
 
 export default function DataHealthPage() {
-  const { address } = useWalletSession();
-  const { getUserRoles } = useAccessControl();
+  const { isConnected, address, connect, switchToLiskSepolia, isCorrectNetwork, isMetaMaskInstalled, error: walletError } = useMetaMaskAdmin();
+  const { checkUserRoles } = useSEATrax();
   const router = useRouter();
 
   const [userRoles, setUserRoles] = useState<any>(null);
@@ -35,21 +36,37 @@ export default function DataHealthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isHealing, setIsHealing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string>('');
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  const handleConnectWallet = async () => {
+    await connect();
+  };
 
   // Check admin role
   useEffect(() => {
-    const checkRole = async () => {
-      if (address) {
-        const roles = await getUserRoles(address);
-        if (!roles?.hasAdminRole) {
-          router.push('/');
-          return;
-        }
+    const verifyAdminRole = async () => {
+      if (!isMetaMaskInstalled || !isCorrectNetwork || !isConnected || !address) {
+        setCheckingRole(false);
+        return;
+      }
+
+      try {
+        const roles = await checkUserRoles(address);
         setUserRoles(roles);
+        if (!roles?.isAdmin) {
+          setAccessDenied(true);
+        }
+      } catch (error) {
+        console.error('Error checking roles:', error);
+        setAccessDenied(true);
+      } finally {
+        setCheckingRole(false);
       }
     };
-    checkRole();
-  }, [address, getUserRoles, router]);
+
+    verifyAdminRole();
+  }, [isMetaMaskInstalled, isCorrectNetwork, isConnected, address, checkUserRoles]);
 
   // Run consistency check
   const runCheck = async () => {
@@ -148,7 +165,7 @@ export default function DataHealthPage() {
   };
 
   return (
-    <>
+    <AdminAuthGuard>
       <AdminHeader />
       <div className="min-h-screen bg-slate-950">
         <div className="bg-slate-900 border-b border-slate-800">
@@ -327,6 +344,6 @@ export default function DataHealthPage() {
           )}
         </div>
       </div>
-    </>
+    </AdminAuthGuard>
   );
 }

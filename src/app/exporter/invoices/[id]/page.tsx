@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { usePanna } from '@/hooks/usePanna';
+import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,10 +22,13 @@ import {
   ExternalLink, 
   AlertCircle, 
   CheckCircle,
-  Wallet
+  Wallet,
+  Copy,
+  Link2
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import ExporterHeader from '@/components/ExporterHeader';
 
 interface Invoice {
   id: number;
@@ -39,7 +44,7 @@ interface Invoice {
   amountInvested: number;
   amountWithdrawn: number;
   availableToWithdraw: number;
-  status: 'pending' | 'finalized' | 'fundraising' | 'funded' | 'paid' | 'cancelled';
+  status: 'pending' | 'approved' | 'in_pool' | 'funded' | 'withdrawn' | 'paid' | 'completed' | 'rejected';
   shippingDate: string;
   createdAt: string;
   fundedPercentage: number;
@@ -58,13 +63,14 @@ interface Invoice {
 
 export default function InvoiceDetail() {
   const { address, isConnected } = usePanna();
+  const { getInvoice, withdrawFunds, canWithdraw, isLoading: contractLoading } = useSEATrax();
   const params = useParams();
   const invoiceId = params.id as string;
   
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [availableToWithdraw, setAvailableToWithdraw] = useState<number>(0);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -77,47 +83,86 @@ export default function InvoiceDetail() {
     try {
       setIsLoading(true);
       
-      // TODO: Replace with actual smart contract calls
-      // const invoiceData = await invoiceNFT.getInvoice(tokenId);
-      // const availableAmount = await invoiceNFT.getAvailableWithdrawal(tokenId);
+      const tokenId = BigInt(invoiceId);
       
-      // Mock data for now
-      const mockInvoice: Invoice = {
-        id: parseInt(invoiceId),
-        tokenId: 1,
-        invoiceNumber: 'INV-2024-001',
-        exporterCompany: 'Southeast Exports Co',
-        importerCompany: 'Global Trading Ltd',
-        importerAddress: '123 Business Street, Commercial District, Singapore 123456',
-        importerCountry: 'Singapore',
-        goodsDescription: 'Electronic components and accessories for manufacturing',
-        shippingAmount: 18000,
-        loanAmount: 15000,
-        amountInvested: 12750,
-        amountWithdrawn: 5000,
-        availableToWithdraw: 5500, // Can withdraw when ≥70% funded
-        status: 'funded',
-        shippingDate: '2024-12-15',
-        createdAt: '2024-11-25',
-        fundedPercentage: 85,
-        documents: [
-          { name: 'Commercial Invoice.pdf', hash: 'QmExampleHash1', size: 245760 },
-          { name: 'Bill of Lading.pdf', hash: 'QmExampleHash2', size: 189440 },
-          { name: 'Packing List.pdf', hash: 'QmExampleHash3', size: 156672 },
-        ],
-        withdrawalHistory: [
-          {
-            amount: 5000,
-            date: '2024-11-26T10:30:00Z',
-            txHash: '0x1234567890abcdef...',
-          }
-        ],
-        paymentLink: invoice?.status === 'funded' && invoice.amountWithdrawn >= invoice.amountInvested ? 
-          `/pay/${invoiceId}` : undefined,
+      // Get invoice data from smart contract
+      const contractInvoice = await getInvoice(tokenId);
+      
+      if (!contractInvoice) {
+        setError('Invoice not found');
+        return;
+      }
+      
+      // Check available withdrawal amount
+      const { canWithdraw: canWithdrawFunds, amount: withdrawableAmount } = await canWithdraw(tokenId);
+      setAvailableToWithdraw(Number(withdrawableAmount) / 1e18); // Convert from Wei to ETH
+      
+      // Get metadata from Supabase
+      let metadata = null;
+      let paymentLink = `/pay/${invoiceId}`; // Default payment link always available
+      
+      if (isSupabaseConfigured) {
+        const { data } = await supabase
+          .from('invoice_metadata')
+          .select('*')
+          .eq('token_id', Number(tokenId))
+          .single();
+        metadata = data;
+        
+        // Try to get payment link from database (fallback to default)
+        const { data: paymentData } = await supabase
+          .from('payments')
+          .select('payment_link')
+          .eq('invoice_id', Number(tokenId))
+          .single();
+        
+        if (paymentData?.payment_link) {
+          paymentLink = paymentData.payment_link;
+        }
+      }
+      
+      // Map status number to string
+      const statusMap: Record<number, Invoice['status']> = {
+        [INVOICE_STATUS.PENDING]: 'pending',
+        [INVOICE_STATUS.APPROVED]: 'approved',
+        [INVOICE_STATUS.IN_POOL]: 'in_pool',
+        [INVOICE_STATUS.FUNDED]: 'funded',
+        [INVOICE_STATUS.WITHDRAWN]: 'withdrawn',
+        [INVOICE_STATUS.PAID]: 'paid',
+        [INVOICE_STATUS.COMPLETED]: 'completed',
+        [INVOICE_STATUS.REJECTED]: 'rejected',
       };
       
-      setInvoice(mockInvoice);
-      setWithdrawAmount(mockInvoice.availableToWithdraw.toString());
+      const shippingAmount = Number(contractInvoice.shippingAmount) / 100; // USD cents to dollars
+      const loanAmount = Number(contractInvoice.loanAmount) / 100;
+      const amountInvested = Number(contractInvoice.amountInvested) / 1e18 * 3000; // Wei to USD (mock rate)
+      const amountWithdrawn = Number(contractInvoice.amountWithdrawn) / 1e18 * 3000;
+      const fundedPercentage = loanAmount > 0 ? Math.round((amountInvested / loanAmount) * 100) : 0;
+      
+      const invoiceData: Invoice = {
+        id: Number(tokenId),
+        tokenId: Number(tokenId),
+        invoiceNumber: metadata?.invoice_number || `INV-${tokenId}`,
+        exporterCompany: contractInvoice.exporterCompany,
+        importerCompany: contractInvoice.importerCompany,
+        importerAddress: metadata?.importer_address || 'N/A',
+        importerCountry: metadata?.importer_country || 'N/A',
+        goodsDescription: metadata?.goods_description || 'N/A',
+        shippingAmount,
+        loanAmount,
+        amountInvested,
+        amountWithdrawn,
+        availableToWithdraw: Number(withdrawableAmount) / 1e18 * 3000, // Wei to USD
+        status: statusMap[Number(contractInvoice.status)] || 'pending',
+        shippingDate: new Date(Number(contractInvoice.shippingDate) * 1000).toISOString().split('T')[0],
+        createdAt: new Date(Number(contractInvoice.createdAt) * 1000).toISOString(),
+        fundedPercentage,
+        documents: Array.isArray(metadata?.documents) ? metadata.documents : [],
+        withdrawalHistory: [], // TODO: Get from events
+        paymentLink, // From Supabase payments table
+      };
+      
+      setInvoice(invoiceData);
     } catch (error) {
       console.error('Error loading invoice:', error);
       setError('Failed to load invoice data');
@@ -127,31 +172,25 @@ export default function InvoiceDetail() {
   };
 
   const handleWithdraw = async () => {
-    if (!invoice || !withdrawAmount) return;
-
-    const amount = parseFloat(withdrawAmount);
-    if (amount <= 0 || amount > invoice.availableToWithdraw) {
-      setError('Invalid withdrawal amount');
-      return;
-    }
+    if (!invoice || availableToWithdraw <= 0) return;
 
     setIsWithdrawing(true);
     setError('');
 
     try {
-      // TODO: Implement smart contract withdrawal
-      // const tx = await invoiceNFT.withdrawFunds(invoice.tokenId, ethers.utils.parseEther(amount.toString()));
-      // await tx.wait();
-
-      // Simulate transaction delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      // Refresh invoice data
-      await loadInvoiceData();
-      setWithdrawAmount('');
-    } catch (error) {
+      const tokenId = BigInt(invoiceId);
+      const result = await withdrawFunds(tokenId);
+      
+      if (result.success) {
+        // Refresh invoice data
+        await loadInvoiceData();
+        setError('');
+      } else {
+        setError(result.error || 'Failed to withdraw funds');
+      }
+    } catch (error: any) {
       console.error('Error withdrawing funds:', error);
-      setError('Failed to withdraw funds. Please try again.');
+      setError(error.message || 'Failed to withdraw funds. Please try again.');
     } finally {
       setIsWithdrawing(false);
     }
@@ -160,11 +199,13 @@ export default function InvoiceDetail() {
   const getStatusBadge = (status: Invoice['status']) => {
     const config = {
       pending: { variant: 'secondary' as const, label: 'Pending Review', color: 'bg-yellow-600' },
-      finalized: { variant: 'outline' as const, label: 'Approved', color: 'bg-blue-600' },
-      fundraising: { variant: 'default' as const, label: 'Fundraising', color: 'bg-cyan-600' },
+      approved: { variant: 'outline' as const, label: 'Approved', color: 'bg-blue-600' },
+      in_pool: { variant: 'default' as const, label: 'In Pool', color: 'bg-cyan-600' },
       funded: { variant: 'default' as const, label: 'Funded', color: 'bg-green-600' },
+      withdrawn: { variant: 'default' as const, label: 'Withdrawn', color: 'bg-purple-600' },
       paid: { variant: 'default' as const, label: 'Paid', color: 'bg-emerald-600' },
-      cancelled: { variant: 'destructive' as const, label: 'Cancelled', color: 'bg-red-600' },
+      completed: { variant: 'default' as const, label: 'Completed', color: 'bg-teal-600' },
+      rejected: { variant: 'destructive' as const, label: 'Rejected', color: 'bg-red-600' },
     };
 
     const { variant, label, color } = config[status];
@@ -255,7 +296,10 @@ export default function InvoiceDetail() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Header */}
+      {/* Navigation Header */}
+      <ExporterHeader />
+      
+      {/* Page Header */}
       <div className="bg-slate-900 border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -412,20 +456,27 @@ export default function InvoiceDetail() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {invoice.documents.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-slate-800 rounded-md">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">{doc.name}</p>
-                          <p className="text-xs text-slate-400">{formatFileSize(doc.size)}</p>
+                  {invoice.documents && Array.isArray(invoice.documents) && invoice.documents.length > 0 ? (
+                    invoice.documents.map((doc, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-slate-800 rounded-md">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-4 w-4 text-slate-400" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">{doc.name}</p>
+                            <p className="text-xs text-slate-400">{formatFileSize(doc.size)}</p>
+                          </div>
                         </div>
+                        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
+                          <Download className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                        <Download className="h-4 w-4" />
-                      </Button>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <FileText className="mx-auto h-12 w-12 text-slate-600 mb-3" />
+                      <p className="text-slate-400 text-sm">No documents uploaded</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -434,7 +485,7 @@ export default function InvoiceDetail() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Withdrawal Section */}
-            {invoice.status === 'funded' && invoice.availableToWithdraw > 0 && (
+            {(invoice.status === 'funded' || invoice.status === 'withdrawn') && availableToWithdraw > 0 && (
               <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
                   <CardTitle className="text-slate-100 flex items-center gap-2">
@@ -442,21 +493,18 @@ export default function InvoiceDetail() {
                     Withdraw Funds
                   </CardTitle>
                   <CardDescription className="text-slate-400">
-                    Available to withdraw: {formatCurrency(invoice.availableToWithdraw)}
+                    Withdraw all available funds to your wallet
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="withdrawAmount" className="text-slate-300">Withdrawal Amount (USD)</Label>
-                    <Input
-                      id="withdrawAmount"
-                      type="number"
-                      step="0.01"
-                      max={invoice.availableToWithdraw}
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="bg-slate-800 border-slate-700 text-slate-100"
-                    />
+                  <div className="p-4 bg-slate-800 rounded-lg">
+                    <p className="text-xs text-slate-400 mb-1">Available to Withdraw</p>
+                    <p className="text-2xl font-bold text-green-400">
+                      {formatCurrency(availableToWithdraw)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      All funded amount will be withdrawn
+                    </p>
                   </div>
                   
                   {error && (
@@ -470,11 +518,15 @@ export default function InvoiceDetail() {
 
                   <Button 
                     onClick={handleWithdraw}
-                    disabled={isWithdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                    disabled={isWithdrawing || availableToWithdraw <= 0}
                     className="w-full bg-green-600 hover:bg-green-700 text-white"
                   >
-                    {isWithdrawing ? 'Processing...' : 'Withdraw Funds'}
+                    {isWithdrawing ? 'Processing Withdrawal...' : 'Withdraw All Available Funds'}
                   </Button>
+                  
+                  <p className="text-xs text-slate-500 text-center">
+                    Note: This will withdraw all available funds at once
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -489,26 +541,68 @@ export default function InvoiceDetail() {
               </Alert>
             )}
 
-            {invoice.status === 'fundraising' && invoice.fundedPercentage < 70 && (
+            {invoice.status === 'in_pool' && invoice.fundedPercentage < 70 && (
               <Alert className="bg-blue-900/20 border-blue-800">
                 <AlertCircle className="h-4 w-4 text-blue-400" />
                 <AlertDescription className="text-blue-300">
-                  Your invoice is currently fundraising. You can withdraw funds once it reaches 70% funding.
+                  Your invoice is in a funding pool. You can withdraw funds once it reaches 70% funding.
                 </AlertDescription>
               </Alert>
             )}
-
-            {invoice.paymentLink && (
+            
+            {invoice.status === 'funded' && availableToWithdraw > 0 && (
               <Alert className="bg-green-900/20 border-green-800">
                 <CheckCircle className="h-4 w-4 text-green-400" />
                 <AlertDescription className="text-green-300">
-                  Payment link is available for the importer. Share the link to receive payment.
+                  Your invoice is funded! You can now withdraw all available funds.
                 </AlertDescription>
               </Alert>
             )}
 
+            {/* Payment Link - Show for all statuses except pending/rejected */}
+            {invoice.status !== 'pending' && invoice.status !== 'rejected' && (
+              <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                  <CardTitle className="text-slate-100 flex items-center gap-2">
+                    <Link2 className="h-5 w-5" />
+                    Payment Link
+                  </CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Share this link with your importer to receive payment
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Alert className="bg-green-900/20 border-green-800">
+                    <CheckCircle className="h-4 w-4 text-green-400" />
+                    <AlertDescription className="text-green-300">
+                      Payment link is ready! Share with your importer.
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <div className="p-3 bg-slate-800 rounded-lg">
+                    <p className="text-xs text-slate-400 mb-2">Payment URL</p>
+                    <p className="text-sm font-mono text-slate-100 break-all">
+                      {typeof window !== 'undefined' ? window.location.origin : ''}{paymentLink}
+                    </p>
+                  </div>
+                  
+                  <Button 
+                    onClick={() => {
+                      const fullUrl = `${window.location.origin}${paymentLink}`;
+                      navigator.clipboard.writeText(fullUrl);
+                      alert('Payment link copied to clipboard!');
+                    }}
+                    className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Payment Link
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Withdrawal History */}
-            {invoice.withdrawalHistory.length > 0 && (
+            {invoice.withdrawalHistory && Array.isArray(invoice.withdrawalHistory) && invoice.withdrawalHistory.length > 0 && (
               <Card className="bg-slate-900 border-slate-800">
                 <CardHeader>
                   <CardTitle className="text-slate-100">Withdrawal History</CardTitle>
@@ -526,7 +620,7 @@ export default function InvoiceDetail() {
                           </p>
                         </div>
                         <Link 
-                          href={`https://blockscout.lisk.com/tx/${withdrawal.txHash}`}
+                          href={`https://sepolia-blockscout.lisk.com/tx/${withdrawal.txHash}`}
                           target="_blank"
                           className="text-xs text-cyan-400 hover:text-cyan-300"
                         >
