@@ -54,9 +54,9 @@ src/
 │   └── common/
 ├── hooks/
 │   ├── usePanna.ts               # Wallet connection
-│   └── useContract.ts            # Smart contract interactions
+│   └── useSEATrax.ts             # ALL contract interactions (Thirdweb SDK)
 ├── lib/
-│   ├── contract.ts               # Contract ABI
+│   ├── contract.ts               # Contract ABI + types
 │   ├── currency.ts               # USD ↔ ETH conversion
 │   ├── supabase.ts               # Database client
 │   ├── pinata.ts                 # IPFS upload
@@ -97,7 +97,6 @@ OPEN (accepting investments) → FUNDED (100% invested) → COMPLETED (profits d
 - **100% Auto-distribute**: When pool hits 100%, funds auto-sent to exporters
 - **Profit Distribution**: 4% to investors, 1% platform fee, rest to exporters
 - **Investment Tracking**: Record investor address, amount, percentage, timestamp on-chain
-
 ---
 
 ## Smart Contract Architecture
@@ -261,6 +260,51 @@ function distributeProfits(uint256 poolId) external; // After all invoices paid
 ---
 
 ## Key Implementation Details
+
+### ⚠️ CRITICAL: Always Use Thirdweb SDK
+
+**NEVER use ethers.js directly with Panna SDK!**
+
+Panna SDK uses account abstraction. Using `ethers.BrowserProvider(window.ethereum)` will access the wrong account and cause gas payment failures.
+
+#### ❌ WRONG (ethers.js):
+```typescript
+const provider = new ethers.BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+const contract = new ethers.Contract(address, abi, signer);
+await contract.methodName(); // ❌ Fails with "insufficient funds"
+```
+
+#### ✅ CORRECT (Thirdweb SDK via Panna):
+```typescript
+import { liskSepolia } from 'panna-sdk'
+import { getContract, prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb'
+
+const contract = getContract({
+  client,
+  chain: liskSepolia,
+  address: CONTRACT_ADDRESS,
+});
+
+// Write operations
+const tx = prepareContractCall({
+  contract,
+  method: 'function methodName(uint256,string)',
+  params: [param1, param2],
+  value: ethAmount, // For payable functions
+});
+const result = await sendTransaction({ account, transaction: tx });
+await waitForReceipt(result);
+
+// Read operations
+const data = await readContract({
+  contract,
+  method: 'function methodName(uint256) view returns (string,uint256)',
+  params: [param1],
+});
+```
+
+**See**: `.github/THIRDWEB_MIGRATION.md` for complete migration guide.
 
 ### Currency Conversion
 

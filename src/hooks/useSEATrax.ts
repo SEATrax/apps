@@ -4,6 +4,8 @@
  * Unified hook for interacting with the SEATrax smart contract.
  * Consolidates functionality from 6 specialized hooks into one.
  * 
+ * Uses Thirdweb SDK (via Panna) for transaction handling.
+ * 
  * Replaces:
  * - useAccessControl
  * - useInvoiceNFT
@@ -15,16 +17,11 @@
 
 import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
-import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment } from '@/lib/contract';
-import { ethers } from 'ethers';
-import { appConfig } from '@/config';
-
-// Extend Window interface for ethereum
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
+import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment, type PoolStatus } from '@/lib/contract';
+import { liskSepolia } from 'panna-sdk';
+import { prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb';
+import { getContract } from 'thirdweb';
+import { toWei } from 'thirdweb/utils';
 
 export function useSEATrax() {
   const { address, account, client } = usePanna();
@@ -33,22 +30,17 @@ export function useSEATrax() {
 
   // ============== CONTRACT INSTANCE ==============
   
-  const getContract = useCallback(async () => {
-    if (!account) {
-      throw new Error('Wallet not connected');
+  const getContractInstance = useCallback(() => {
+    if (!client) {
+      throw new Error('Client not initialized');
     }
     
-    // Get provider from account
-    const provider = new ethers.BrowserProvider(window.ethereum as any);
-    const signer = await provider.getSigner();
-    
-    return new ethers.Contract(CONTRACT_ADDRESS, SEATRAX_ABI, signer);
-  }, [account]);
-
-  const getReadOnlyContract = useCallback(() => {
-    const provider = new ethers.JsonRpcProvider(appConfig.chain.rpcUrl);
-    return new ethers.Contract(CONTRACT_ADDRESS, SEATRAX_ABI, provider);
-  }, []);
+    return getContract({
+      client,
+      chain: liskSepolia,
+      address: CONTRACT_ADDRESS,
+    });
+  }, [client]);
 
   // ============== REGISTRATION FUNCTIONS (Self-Service) ==============
 
@@ -57,46 +49,76 @@ export function useSEATrax() {
    * Replaces: useAccessControl.grantExporterRole (admin-granted)
    */
   const registerExporter = useCallback(async () => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+    
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.registerExporter();
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function registerExporter()',
+        params: [],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.reason || err.message || 'Failed to register as exporter';
       setError(errorMsg);
+      console.error('Registration error:', err);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Register current user as investor (self-registration)
    * Replaces: useAccessControl.grantInvestorRole (admin-granted)
    */
   const registerInvestor = useCallback(async () => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+    
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.registerInvestor();
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function registerInvestor()',
+        params: [],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.reason || err.message || 'Failed to register as investor';
       setError(errorMsg);
+      console.error('Registration error:', err);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   // ============== INVOICE FUNCTIONS (Exporter) ==============
 
@@ -114,49 +136,41 @@ export function useSEATrax() {
     loanAmount: bigint,
     ipfsHash: string
   ) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+    
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.createInvoice(
-        exporterCompany,
-        importerCompany,
-        importerEmail,
-        shippingDate,
-        shippingAmount,
-        loanAmount,
-        ipfsHash
-      );
-      const receipt = await tx.wait();
-      
-      // Find InvoiceCreated event
-      const event = receipt.logs.find((log: any) => {
-        try {
-          const parsed = contract.interface.parseLog(log);
-          return parsed && parsed.name === 'InvoiceCreated';
-        } catch {
-          return false;
-        }
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function createInvoice(string exporterCompany, string importerCompany, string importerEmail, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, string ipfsHash) returns (uint256)',
+        params: [exporterCompany, importerCompany, importerEmail, BigInt(shippingDate), shippingAmount, loanAmount, ipfsHash],
       });
       
-      let invoiceId = null;
-      if (event) {
-        const parsed = contract.interface.parseLog(event);
-        if (parsed) {
-          invoiceId = parsed.args.invoiceId;
-        }
-      }
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
       
-      return { success: true, txHash: tx.hash, invoiceId };
+      const receipt = await waitForReceipt(result);
+      
+      // TODO: Parse event to get invoiceId
+      const invoiceId = null;
+      
+      return { success: true, txHash: result.transactionHash, invoiceId };
     } catch (err: any) {
       const errorMsg = err.reason || err.message || 'Failed to create invoice';
       setError(errorMsg);
+      console.error('Create invoice error:', err);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Withdraw funds from invoice (ALL available funds)
@@ -164,68 +178,101 @@ export function useSEATrax() {
    * Breaking Change: No amount parameter - withdraws ALL available
    */
   const withdrawFunds = useCallback(async (invoiceId: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+    
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.withdrawFunds(invoiceId);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function withdrawFunds(uint256 invoiceId)',
+        params: [invoiceId],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.reason || err.message || 'Failed to withdraw funds';
       setError(errorMsg);
+      console.error('Withdraw error:', err);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Get invoice details by ID
    * Replaces: useInvoiceNFT.getInvoice
    */
   const getInvoice = useCallback(async (invoiceId: bigint): Promise<Invoice | null> => {
+    if (!client) return null;
+    
     try {
-      const contract = getReadOnlyContract();
-      const invoice = await contract.getInvoice(invoiceId);
-      return invoice as Invoice;
+      const contract = getContractInstance();
+      const invoice = await readContract({
+        contract,
+        method: 'function getInvoice(uint256 invoiceId) view returns (string exporterCompany, address exporterWallet, string importerCompany, string importerEmail, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, uint256 amountInvested, uint256 amountWithdrawn, string ipfsHash, uint8 status)',
+        params: [invoiceId],
+      });
+      return invoice as any as Invoice;
     } catch (err: any) {
       console.error('Failed to get invoice:', err);
       return null;
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Get all invoices for an exporter
    * Replaces: useInvoiceNFT.getInvoicesByExporter (name change only)
    */
   const getExporterInvoices = useCallback(async (exporter: string): Promise<bigint[]> => {
+    if (!client) return [];
+    
     try {
-      const contract = getReadOnlyContract();
-      const invoiceIds = await contract.getExporterInvoices(exporter);
-      return invoiceIds;
+      const contract = getContractInstance();
+      const invoiceIds = await readContract({
+        contract,
+        method: 'function getExporterInvoices(address exporter) view returns (uint256[])',
+        params: [exporter],
+      });
+      return invoiceIds as bigint[];
     } catch (err: any) {
       console.error('Failed to get exporter invoices:', err);
       return [];
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Check if invoice can be withdrawn and get withdrawable amount
    * Replaces: useInvoiceNFT.getAvailableWithdrawal (name change only)
    */
   const canWithdraw = useCallback(async (invoiceId: bigint): Promise<{ canWithdraw: boolean; amount: bigint }> => {
+    if (!client) return { canWithdraw: false, amount: 0n };
+    
     try {
-      const contract = getReadOnlyContract();
-      const [can, amount] = await contract.canWithdraw(invoiceId);
-      return { canWithdraw: can, amount };
+      const contract = getContractInstance();
+      const result = await readContract({
+        contract,
+        method: 'function canWithdraw(uint256 invoiceId) view returns (bool, uint256)',
+        params: [invoiceId],
+      });
+      return { canWithdraw: result[0] as boolean, amount: result[1] as bigint };
     } catch (err: any) {
       console.error('Failed to check withdrawal:', err);
       return { canWithdraw: false, amount: 0n };
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   // ============== POOL FUNCTIONS (Admin) ==============
 
@@ -240,56 +287,95 @@ export function useSEATrax() {
     startDate: number,
     endDate: number
   ) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.createPool(name, invoiceIds, startDate, endDate);
-      const receipt = await tx.wait();
-      
-      // Find PoolCreated event
-      const event = receipt.logs.find((log: any) => {
-        try {
-          const parsed = contract.interface.parseLog(log);
-          return parsed && parsed.name === 'PoolCreated';
-        } catch {
-          return false;
-        }
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function createPool(string,uint256[],uint256,uint256)',
+        params: [name, invoiceIds, BigInt(startDate), BigInt(endDate)],
       });
       
-      let poolId = null;
-      if (event) {
-        const parsed = contract.interface.parseLog(event);
-        if (parsed) {
-          poolId = parsed.args.poolId;
-        }
-      }
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
       
-      return { success: true, txHash: tx.hash, poolId };
+      const receipt = await waitForReceipt(result);
+      
+      // Extract poolId from event logs if needed
+      let poolId = null;
+      // Note: Event extraction would need additional logic with Thirdweb
+      // For now, UI can fetch latest pool or use getAllOpenPools
+      
+      return { success: true, txHash: result.transactionHash, poolId };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to create pool';
+      const errorMsg = err.message || 'Failed to create pool';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Get pool details by ID
    * Replaces: usePoolNFT.getPool
    */
   const getPool = useCallback(async (poolId: bigint): Promise<Pool | null> => {
+    if (!client) return null;
+
     try {
-      const contract = getReadOnlyContract();
-      const pool = await contract.getPool(poolId);
-      return pool as Pool;
+      const contract = getContractInstance();
+      const result = await readContract({
+        contract,
+        method: 'function getPool(uint256) view returns (uint256,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint256[],uint256)',
+        params: [poolId],
+      });
+      
+      // Convert tuple to Pool object
+      // Struct order: poolId, name, startDate, endDate, totalLoanAmount, totalShippingAmount,
+      //               amountInvested, amountDistributed, feePaid, status, invoiceIds, createdAt
+      const [
+        poolIdResult,
+        name,
+        startDate,
+        endDate,
+        totalLoanAmount,
+        totalShippingAmount,
+        amountInvested,
+        amountDistributed,
+        feePaid,
+        status,
+        invoiceIds,
+        createdAt,
+      ] = result as readonly [bigint, string, bigint, bigint, bigint, bigint, bigint, bigint, bigint, number, readonly bigint[], bigint];
+      
+      return {
+        poolId: poolIdResult,
+        name,
+        startDate,
+        endDate,
+        invoiceIds: [...invoiceIds],
+        totalLoanAmount,
+        totalShippingAmount,
+        amountInvested,
+        amountDistributed,
+        feePaid,
+        status: status as PoolStatus,
+        createdAt,
+      };
     } catch (err: any) {
       console.error('Failed to get pool:', err);
       return null;
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Get all open pools
@@ -297,72 +383,102 @@ export function useSEATrax() {
    * Breaking Change: Only returns OPEN pools, not arbitrary status
    */
   const getAllOpenPools = useCallback(async (): Promise<bigint[]> => {
+    if (!client) return [];
+
     try {
-      const contract = getReadOnlyContract();
-      const poolIds = await contract.getAllOpenPools();
-      return poolIds;
+      const contract = getContractInstance();
+      const poolIds = await readContract({
+        contract,
+        method: 'function getAllOpenPools() view returns (uint256[])',
+        params: [],
+      });
+      return poolIds as bigint[];
     } catch (err: any) {
       console.error('Failed to get open pools:', err);
       return [];
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Get all pending invoices (awaiting approval)
    */
   const getAllPendingInvoices = useCallback(async (): Promise<bigint[]> => {
+    if (!client) return [];
+
     try {
-      const contract = getReadOnlyContract();
-      const invoiceIds = await contract.getAllPendingInvoices();
-      return invoiceIds;
+      const contract = getContractInstance();
+      const invoiceIds = await readContract({
+        contract,
+        method: 'function getAllPendingInvoices() view returns (uint256[])',
+        params: [],
+      });
+      return invoiceIds as bigint[];
     } catch (err: any) {
       console.error('Failed to get pending invoices:', err);
       return [];
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Get all approved invoices (ready for pool)
    */
   const getAllApprovedInvoices = useCallback(async (): Promise<bigint[]> => {
+    if (!client) return [];
+
     try {
-      const contract = getReadOnlyContract();
-      const invoiceIds = await contract.getAllApprovedInvoices();
-      return invoiceIds;
+      const contract = getContractInstance();
+      const invoiceIds = await readContract({
+        contract,
+        method: 'function getAllApprovedInvoices() view returns (uint256[])',
+        params: [],
+      });
+      return invoiceIds as bigint[];
     } catch (err: any) {
       console.error('Failed to get approved invoices:', err);
       return [];
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Get pool funding percentage
    * Replaces: usePoolFunding.getPoolFundingPercentage
    */
   const getPoolFundingPercentage = useCallback(async (poolId: bigint): Promise<number> => {
+    if (!client) return 0;
+
     try {
-      const contract = getReadOnlyContract();
-      const percentage = await contract.getPoolFundingPercentage(poolId);
+      const contract = getContractInstance();
+      const percentage = await readContract({
+        contract,
+        method: 'function getPoolFundingPercentage(uint256) view returns (uint256)',
+        params: [poolId],
+      });
       return Number(percentage);
     } catch (err: any) {
       console.error('Failed to get pool funding percentage:', err);
       return 0;
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Get all investors in a pool
    */
   const getPoolInvestors = useCallback(async (poolId: bigint): Promise<string[]> => {
+    if (!client) return [];
+
     try {
-      const contract = getReadOnlyContract();
-      const investors = await contract.getPoolInvestors(poolId);
-      return investors;
+      const contract = getContractInstance();
+      const investors = await readContract({
+        contract,
+        method: 'function getPoolInvestors(uint256) view returns (address[])',
+        params: [poolId],
+      });
+      return investors as string[];
     } catch (err: any) {
       console.error('Failed to get pool investors:', err);
       return [];
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   // ============== INVESTMENT FUNCTIONS (Investor) ==============
 
@@ -372,75 +488,135 @@ export function useSEATrax() {
    * Breaking Change: Amount passed via transaction value, not parameter
    */
   const invest = useCallback(async (poolId: bigint, amount: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.invest(poolId, { value: amount });
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function invest(uint256)',
+        params: [poolId],
+        value: amount, // ETH amount to send
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to invest';
+      const errorMsg = err.message || 'Failed to invest';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Claim returns from a completed pool
    * Replaces: usePoolFunding.claimInvestorReturns (name change only)
    */
   const claimReturns = useCallback(async (poolId: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.claimReturns(poolId);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function claimReturns(uint256)',
+        params: [poolId],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to claim returns';
+      const errorMsg = err.message || 'Failed to claim returns';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Get investment details for a pool and investor
    * Replaces: usePoolFunding.getInvestorPoolInfo
    */
   const getInvestment = useCallback(async (poolId: bigint, investor: string): Promise<Investment | null> => {
+    if (!client) return null;
+
     try {
-      const contract = getReadOnlyContract();
-      const investment = await contract.getInvestment(poolId, investor);
-      return investment as Investment;
+      const contract = getContractInstance();
+      const result = await readContract({
+        contract,
+        method: 'function getInvestment(uint256,address) view returns (address,uint256,uint256,uint256,uint256,bool)',
+        params: [poolId, investor],
+      });
+      
+      // Convert tuple to Investment object
+      // Struct order: investor, poolId, amount, percentage, timestamp, returnsClaimed
+      const [
+        investorAddress,
+        poolIdResult,
+        amount,
+        percentage,
+        timestamp,
+        returnsClaimed,
+      ] = result as readonly [string, bigint, bigint, bigint, bigint, boolean];
+      
+      return {
+        investor: investorAddress,
+        poolId: poolIdResult,
+        amount,
+        percentage,
+        timestamp,
+        returnsClaimed,
+      };
     } catch (err: any) {
       console.error('Failed to get investment:', err);
       return null;
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   /**
    * Get all pools an investor has invested in
    */
   const getInvestorPools = useCallback(async (investor: string): Promise<bigint[]> => {
+    if (!client) return [];
+
     try {
-      const contract = getReadOnlyContract();
-      const poolIds = await contract.getInvestorPools(investor);
-      return poolIds;
+      const contract = getContractInstance();
+      const poolIds = await readContract({
+        contract,
+        method: 'function getInvestorPools(address) view returns (uint256[])',
+        params: [investor],
+      });
+      return poolIds as bigint[];
     } catch (err: any) {
       console.error('Failed to get investor pools:', err);
       return [];
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   // ============== ADMIN FUNCTIONS ==============
 
@@ -449,23 +625,37 @@ export function useSEATrax() {
    * Replaces: useAccessControl.grantExporterRole functionality
    */
   const verifyExporter = useCallback(async (exporter: string) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.verifyExporter(exporter);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function verifyExporter(address)',
+        params: [exporter],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to verify exporter';
+      const errorMsg = err.message || 'Failed to verify exporter';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Approve an invoice (admin only)
@@ -473,45 +663,73 @@ export function useSEATrax() {
    * Breaking Change: Admin approves directly, no separate finalize step
    */
   const approveInvoice = useCallback(async (invoiceId: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.approveInvoice(invoiceId);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function approveInvoice(uint256)',
+        params: [invoiceId],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to approve invoice';
+      const errorMsg = err.message || 'Failed to approve invoice';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Reject an invoice (admin only)
    */
   const rejectInvoice = useCallback(async (invoiceId: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.rejectInvoice(invoiceId);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function rejectInvoice(uint256)',
+        params: [invoiceId],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to reject invoice';
+      const errorMsg = err.message || 'Failed to reject invoice';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Mark invoice as paid (admin only)
@@ -519,23 +737,37 @@ export function useSEATrax() {
    * Breaking Change: No payment timestamp tracking
    */
   const markInvoicePaid = useCallback(async (invoiceId: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.markInvoicePaid(invoiceId);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function markInvoicePaid(uint256)',
+        params: [invoiceId],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to mark invoice paid';
+      const errorMsg = err.message || 'Failed to mark invoice paid';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Distribute profits to investors (admin only)
@@ -543,69 +775,111 @@ export function useSEATrax() {
    * Note: Called after all invoices in pool are PAID
    */
   const distributeProfits = useCallback(async (poolId: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.distributeProfits(poolId);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function distributeProfits(uint256)',
+        params: [poolId],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to distribute profits';
+      const errorMsg = err.message || 'Failed to distribute profits';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Manually distribute funds to a specific invoice (admin only)
    * Note: Normally happens automatically at 100% funding
    */
   const distributeToInvoice = useCallback(async (poolId: bigint, invoiceId: bigint, amount: bigint) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.distributeToInvoice(poolId, invoiceId, amount);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function distributeToInvoice(uint256,uint256,uint256)',
+        params: [poolId, invoiceId, amount],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to distribute to invoice';
+      const errorMsg = err.message || 'Failed to distribute to invoice';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   /**
    * Grant admin role to an address (admin only)
    * Uses OpenZeppelin AccessControl
    */
-  const grantAdminRole = useCallback(async (account: string) => {
+  const grantAdminRole = useCallback(async (targetAddress: string) => {
+    if (!account || !client) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       
-      const contract = await getContract();
-      const tx = await contract.grantRole(ROLES.ADMIN, account);
-      await tx.wait();
+      const contract = getContractInstance();
+      const tx = prepareContractCall({
+        contract,
+        method: 'function grantRole(bytes32,address)',
+        params: [ROLES.ADMIN, targetAddress],
+      });
       
-      return { success: true, txHash: tx.hash };
+      const result = await sendTransaction({
+        account,
+        transaction: tx,
+      });
+      
+      await waitForReceipt(result);
+      
+      return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
-      const errorMsg = err.reason || err.message || 'Failed to grant admin role';
+      const errorMsg = err.message || 'Failed to grant admin role';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
       setIsLoading(false);
     }
-  }, [getContract]);
+  }, [account, client, getContractInstance]);
 
   // ============== ROLE CHECKING ==============
 
@@ -614,21 +888,41 @@ export function useSEATrax() {
    * Replaces: useAccessControl.getUserRoles
    * Breaking Change: Checks 3 separate sources instead of one function
    */
-  const checkUserRoles = useCallback(async (account: string) => {
+  const checkUserRoles = useCallback(async (accountAddress: string) => {
+    if (!client) {
+      return {
+        isAdmin: false,
+        isExporter: false,
+        isInvestor: false,
+      };
+    }
+
     try {
-      const contract = getReadOnlyContract();
+      const contract = getContractInstance();
       
       // Check all three role types
       const [isAdmin, isExporter, isInvestor] = await Promise.all([
-        contract.hasRole(ROLES.ADMIN, account),
-        contract.registeredExporters(account),
-        contract.registeredInvestors(account),
+        readContract({
+          contract,
+          method: 'function hasRole(bytes32,address) view returns (bool)',
+          params: [ROLES.ADMIN, accountAddress],
+        }),
+        readContract({
+          contract,
+          method: 'function registeredExporters(address) view returns (bool)',
+          params: [accountAddress],
+        }),
+        readContract({
+          contract,
+          method: 'function registeredInvestors(address) view returns (bool)',
+          params: [accountAddress],
+        }),
       ]);
       
       return {
-        isAdmin,
-        isExporter,
-        isInvestor,
+        isAdmin: isAdmin as boolean,
+        isExporter: isExporter as boolean,
+        isInvestor: isInvestor as boolean,
       };
     } catch (err: any) {
       console.error('Failed to check user roles:', err);
@@ -638,7 +932,7 @@ export function useSEATrax() {
         isInvestor: false,
       };
     }
-  }, [getReadOnlyContract]);
+  }, [client, getContractInstance]);
 
   // ============== RETURN ALL FUNCTIONS ==============
 

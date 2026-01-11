@@ -230,32 +230,44 @@ export default function CreatePoolPage() {
         endTimestamp
       );
       
-      if (!result.success || !result.poolId) {
+      if (!result.success) {
         throw new Error(result.error || 'Failed to create pool');
       }
 
-      // Save metadata to Supabase
-      const { error: metadataError } = await supabase
-        .from('pool_metadata')
-        .insert({
-          pool_id: Number(result.poolId),
-          description: poolDescription,
-          risk_category: riskCategory,
-        });
+      // Note: poolId might be null (event extraction not implemented)
+      // We'll refetch pools to get the latest ID if needed
+      const poolId = result.poolId;
 
-      if (metadataError) {
-        console.error('Metadata save error:', metadataError);
-        // Don't throw - pool was created successfully on-chain
+      // Save metadata to Supabase (if we have poolId)
+      if (poolId) {
+        const { error: metadataError } = await supabase
+          .from('pool_metadata')
+          .insert({
+            pool_id: Number(poolId),
+            description: poolDescription,
+            risk_category: riskCategory,
+          });
+
+        if (metadataError) {
+          console.error('Metadata save error:', metadataError);
+          // Don't throw - pool was created successfully on-chain
+        }
       }
 
       setMessage({ 
         type: 'success', 
-        text: `Pool created successfully! Pool ID: ${result.poolId}. Pool is now open for investments.` 
+        text: poolId 
+          ? `Pool created successfully! Pool ID: ${poolId}. Pool is now open for investments.`
+          : `Pool created successfully! Transaction: ${result.txHash}. Check pools list to find your new pool.`
       });
 
-      // Redirect to pool detail page after a short delay
+      // Redirect to pools list or detail page
       setTimeout(() => {
-        router.push(`/admin/pools/${result.poolId}`);
+        if (poolId) {
+          router.push(`/admin/pools/${poolId}`);
+        } else {
+          router.push('/admin/pools');
+        }
       }, 2000);
 
     } catch (error: any) {
