@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { usePoolFunding } from '@/hooks/usePoolFunding';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,30 +12,34 @@ import { Search, Filter, TrendingUp, Clock, Target, Eye, ArrowRight } from 'luci
 import { formatETH, formatUSD, getStatusColor, formatDateRelative, formatEther } from '@/lib/utils';
 
 interface PoolData {
-  id: number;
+  id: bigint;
   name: string;
-  description: string;
-  totalLoanAmount: string;
-  totalShippingAmount: string;
-  amountInvested: string;
-  startDate: string;
-  endDate: string;
-  invoiceCount: number;
-  expectedYield: string;
-  riskCategory: string;
-  status: string;
+  totalLoanAmount: bigint;
+  totalShippingAmount: bigint;
+  amountInvested: bigint;
+  amountDistributed: bigint;
+  feePaid: bigint;
+  startDate: bigint;
+  endDate: bigint;
+  invoiceIds: bigint[];
+  status: number; // 0=OPEN, 1=FUNDRAISING, 2=PARTIALLYFUNDED, 3=FUNDED
+}
+
+interface PoolWithMetadata extends PoolData {
+  description?: string;
+  riskCategory?: string;
+  expectedYield?: string;
   fundingProgress: number;
 }
 
 export default function PoolsPage() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
-  const { getPoolsByStatus, getPool } = usePoolNFT();
-  const { getPoolFundingPercentage } = usePoolFunding();
+  const { getAllOpenPools, getPool, getPoolFundingPercentage } = useSEATrax();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
-  const [pools, setPools] = useState<PoolData[]>([]);
+  const [pools, setPools] = useState<PoolWithMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,79 +59,63 @@ export default function PoolsPage() {
         setLoading(true);
         setError(null);
 
-        // For now, use mock data since getPoolsByStatus expects enum values
-        // TODO: Update when contract hooks are properly typed
-        setPools(mockPools);
+        // Get all open pool IDs
+        const poolIds = await getAllOpenPools();
+        
+        // Fetch full pool data for each ID
+        const poolsData: PoolWithMetadata[] = [];
+        
+        for (const poolId of poolIds) {
+          const poolData = await getPool(poolId);
+          if (poolData) {
+            // Calculate funding progress
+            const fundingProgress = Number(poolData.totalLoanAmount) > 0
+              ? Math.min(100, Math.round((Number(poolData.amountInvested) / Number(poolData.totalLoanAmount)) * 100))
+              : 0;
+            
+            poolsData.push({
+              id: poolData.poolId, // Map poolId to id for the interface
+              ...poolData,
+              fundingProgress,
+              // Metadata fields (would come from Supabase in real implementation)
+              description: 'Diversified pool of export trade financing opportunities',
+              riskCategory: 'Medium',
+              expectedYield: '4.0%'
+            });
+          }
+        }
+        
+        setPools(poolsData);
         
       } catch (err) {
         console.error('Failed to fetch pools:', err);
         setError('Failed to load pools');
-        // Fallback to mock data
-        setPools(mockPools);
       } finally {
         setLoading(false);
       }
     };
 
     fetchPools();
-  }, [activeAccount]);
+  }, [activeAccount, getAllOpenPools, getPool]);
 
-  // Mock data for fallback
-  const mockPools: PoolData[] = [
-    {
-      id: 1,
-      name: 'Southeast Asia Export Pool #12',
-      description: 'Diversified pool of electronics and textile exports to ASEAN markets',
-      totalLoanAmount: '25.5',
-      totalShippingAmount: '30.2',
-      amountInvested: '18.7',
-      startDate: '2024-01-01',
-      endDate: '2024-04-01',
-      invoiceCount: 8,
-      expectedYield: '4.2%',
-      riskCategory: 'Medium',
-      status: 'Fundraising',
-      fundingProgress: 73
-    },
-    {
-      id: 2,
-      name: 'Maritime Trade Pool #8',
-      description: 'Specialized pool for maritime equipment and shipping supplies',
-      totalLoanAmount: '18.3',
-      totalShippingAmount: '22.1',
-      amountInvested: '18.3',
-      startDate: '2024-01-15',
-      endDate: '2024-03-15',
-      invoiceCount: 5,
-      expectedYield: '4.1%',
-      riskCategory: 'Low',
-      status: 'Funded',
-      fundingProgress: 100
-    },
-    {
-      id: 3,
-      name: 'Electronics Export Pool #15',
-      description: 'High-tech electronics and components for international markets',
-      totalLoanAmount: '42.8',
-      totalShippingAmount: '51.4',
-      amountInvested: '12.8',
-      startDate: '2024-01-20',
-      endDate: '2024-05-20',
-      invoiceCount: 12,
-      expectedYield: '4.3%',
-      riskCategory: 'High',
-      status: 'Open',
-      fundingProgress: 30
+  const getPoolStatus = (status: number): string => {
+    switch (status) {
+      case 0: return 'Open';
+      case 1: return 'Fundraising';
+      case 2: return 'Partially Funded';
+      case 3: return 'Funded';
+      default: return 'Unknown';
     }
-  ];
+  };
 
   const filteredPools = pools.filter(pool => {
+    const poolStatus = getPoolStatus(pool.status);
     const matchesSearch = pool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         pool.description.toLowerCase().includes(searchTerm.toLowerCase());
+                         (pool.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
     const matchesFilter = selectedFilter === 'all' || 
-                         (selectedFilter === 'open' && pool.status === 'Open') ||
-                         (selectedFilter === 'fundraising' && pool.status === 'Fundraising') ||
-                         (selectedFilter === 'funded' && pool.status === 'Funded');
+                         (selectedFilter === 'open' && pool.status === 0) ||
+                         (selectedFilter === 'fundraising' && (pool.status === 1 || pool.status === 2)) ||
+                         (selectedFilter === 'funded' && pool.status === 3);
     return matchesSearch && matchesFilter;
   });
 
@@ -139,11 +126,12 @@ export default function PoolsPage() {
     }
   }, [activeAccount, router]);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: number) => {
     switch (status) {
-      case 'Open': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'Fundraising': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
-      case 'Funded': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 0: return 'bg-green-500/20 text-green-400 border-green-500/30'; // OPEN
+      case 1: 
+      case 2: return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'; // FUNDRAISING/PARTIALLYFUNDED
+      case 3: return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'; // FUNDED
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     }
   };
@@ -169,7 +157,7 @@ export default function PoolsPage() {
         </div>
         <div className="text-right text-sm text-gray-400">
           <div>Total Available: {pools.length} pools</div>
-          <div>Total Value: {formatETH(pools.reduce((sum, pool) => sum + parseFloat(pool.totalLoanAmount || '0'), 0).toString())}</div>
+          <div>Total Value: ${pools.reduce((sum, pool) => sum + (Number(pool.totalLoanAmount) / 1e18 * 3000), 0).toLocaleString()}</div>
         </div>
       </div>
 
@@ -211,13 +199,19 @@ export default function PoolsPage() {
 
       {/* Pool Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredPools.map((pool) => (
-          <Card key={pool.id} className="bg-slate-900/50 border-slate-800 hover:bg-slate-900/70 transition-all hover:scale-105 group">
+        {filteredPools.map((pool) => {
+          const totalLoanUSD = Number(pool.totalLoanAmount) / 1e18 * 3000; // Wei to USD
+          const amountInvestedUSD = Number(pool.amountInvested) / 1e18 * 3000;
+          const startDateFormatted = new Date(Number(pool.startDate) * 1000).toLocaleDateString();
+          const endDateFormatted = new Date(Number(pool.endDate) * 1000).toLocaleDateString();
+          
+          return (
+          <Card key={Number(pool.id)} className="bg-slate-900/50 border-slate-800 hover:bg-slate-900/70 transition-all hover:scale-105 group">
             <CardHeader className="pb-4">
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-white text-lg leading-tight">{pool.name}</CardTitle>
                 <Badge className={`${getStatusColor(pool.status)} text-xs`}>
-                  {pool.status}
+                  {getPoolStatus(pool.status)}
                 </Badge>
               </div>
               <p className="text-gray-400 text-sm mt-2">{pool.description}</p>
@@ -228,7 +222,7 @@ export default function PoolsPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="text-gray-400">Target Amount</div>
-                  <div className="text-white font-medium">{formatETH(pool.totalLoanAmount)}</div>
+                  <div className="text-white font-medium">${totalLoanUSD.toLocaleString()}</div>
                 </div>
                 <div>
                   <div className="text-gray-400">Expected Yield</div>
@@ -236,11 +230,11 @@ export default function PoolsPage() {
                 </div>
                 <div>
                   <div className="text-gray-400">Invoices</div>
-                  <div className="text-white font-medium">{pool.invoiceCount} invoices</div>
+                  <div className="text-white font-medium">{pool.invoiceIds.length} invoices</div>
                 </div>
                 <div>
                   <div className="text-gray-400">Risk Level</div>
-                  <div className={`font-medium ${getRiskColor(pool.riskCategory)}`}>{pool.riskCategory}</div>
+                  <div className={`font-medium ${getRiskColor(pool.riskCategory || 'Medium')}`}>{pool.riskCategory}</div>
                 </div>
               </div>
 
@@ -252,24 +246,24 @@ export default function PoolsPage() {
                 </div>
                 <Progress value={pool.fundingProgress} className="h-2" />
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>{formatETH(pool.amountInvested)} raised</span>
-                  <span>{formatETH(pool.totalLoanAmount)} target</span>
+                  <span>${amountInvestedUSD.toLocaleString()} raised</span>
+                  <span>${totalLoanUSD.toLocaleString()} target</span>
                 </div>
               </div>
 
               {/* Duration */}
               <div className="flex items-center gap-2 text-sm text-gray-400">
                 <Clock className="w-4 h-4" />
-                <span>{pool.startDate} - {pool.endDate}</span>
+                <span>{startDateFormatted} - {endDateFormatted}</span>
               </div>
 
               {/* Action Button */}
               <Button 
                 onClick={() => router.push(`/investor/pools/${pool.id}`)}
                 className="w-full bg-gradient-to-r from-cyan-500 to-teal-400 text-white hover:shadow-lg hover:shadow-cyan-500/50 group-hover:scale-105 transition-all"
-                disabled={pool.status === 'Funded'}
+                disabled={pool.status === 3}
               >
-                {pool.status === 'Funded' ? (
+                {pool.status === 3 ? (
                   <>
                     <Target className="w-4 h-4 mr-2" />
                     Fully Funded
@@ -283,7 +277,7 @@ export default function PoolsPage() {
               </Button>
             </CardContent>
           </Card>
-        ))}
+        )})}
       </div>
 
       {/* Empty State */}

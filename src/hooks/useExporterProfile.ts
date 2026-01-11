@@ -51,21 +51,20 @@ export const useExporterProfile = () => {
         .from('exporters')
         .select('*')
         .eq('wallet_address', walletAddress)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to avoid 406
 
       if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          // No rows returned - exporter doesn't exist
-          setProfile(null);
-        } else {
-          throw fetchError;
-        }
-      } else {
-        setProfile(data);
+        console.error('Supabase fetch error:', fetchError);
+        throw fetchError;
       }
-    } catch (err) {
+      
+      setProfile(data);
+    } catch (err: any) {
       console.error('Error fetching exporter profile:', err);
+      console.error('Error code:', err?.code);
+      console.error('Error message:', err?.message);
       setError(err instanceof Error ? err.message : 'Failed to fetch profile');
+      setProfile(null);
     } finally {
       setLoading(false);
     }
@@ -93,8 +92,13 @@ export const useExporterProfile = () => {
 
       setProfile(newProfile);
       return newProfile;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating exporter profile:', err);
+      console.error('Error type:', typeof err);
+      console.error('Error message:', err?.message);
+      console.error('Error code:', err?.code);
+      console.error('Error details:', err?.details);
+      console.error('Error hint:', err?.hint);
       throw err;
     }
   };

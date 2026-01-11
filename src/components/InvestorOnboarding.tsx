@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Wallet, CreditCard, Building2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Wallet, CreditCard, Building2, Sparkles } from 'lucide-react';
 import { useActiveAccount } from 'panna-sdk';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { toast } from 'sonner';
+import { generateInvestorOnboardingData } from '@/lib/auto-fill-data';
 
 interface InvestorOnboardingProps {
   onComplete: () => void;
@@ -27,7 +28,7 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
 
   const activeAccount = useActiveAccount();
   const { createProfile } = useInvestorProfile();
-  const { grantInvestorRole } = useAccessControl();
+  const { registerInvestor, checkUserRoles } = useSEATrax();
   const [walletConnected, setWalletConnected] = useState(!!activeAccount);
 
   const countries = ['Indonesia', 'Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Singapore', 'United States', 'United Kingdom'];
@@ -43,7 +44,7 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
 
   const handleSubmit = async () => {
     if (!activeAccount?.address) {
-      toast.error('Please connect your wallet first');
+      toast.error('❌ Please connect your wallet first');
       return;
     }
 
@@ -52,7 +53,45 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
     try {
       setSubmitting(true);
       
-      // 1. Create investor profile in Supabase
+      console.log('🔍 Pre-flight checks...');
+      console.log('✓ Wallet connected:', activeAccount.address);
+      console.log('✓ Form data ready');
+      
+      // Check if already registered
+      console.log('🔍 Checking registration status...');
+      const roles = await checkUserRoles(activeAccount.address);
+      
+      if (roles.isInvestor) {
+        console.log('⚠️ Already registered as investor on blockchain');
+        toast.info('You are already registered on blockchain. Creating/updating profile...');
+        
+        // Skip blockchain registration, just create/update profile
+        console.log('📝 Creating/updating profile in database...');
+        await createProfile({
+          name: formData.name,
+          address: formData.address,
+          email: formData.email,
+          phone: formData.phone,
+        });
+        
+        toast.success('✅ Profile updated! You can now invest in pools.');
+        onComplete();
+        return;
+      }
+      
+      // 1. Self-register as investor on-chain
+      console.log('📝 Step 1: Registering on blockchain...');
+      const result = await registerInvestor();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Blockchain registration failed');
+      }
+      
+      console.log('✅ Blockchain registration successful!');
+      console.log('📝 Transaction hash:', result.txHash);
+      
+      // 2. Create investor profile in Supabase
+      console.log('📝 Step 2: Creating profile in database...');
       await createProfile({
         name: formData.name,
         address: formData.address,
@@ -60,22 +99,19 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
         phone: formData.phone,
       });
 
-      // 2. Attempt auto-grant investor role (lower risk profile)
-      try {
-        await grantInvestorRole(activeAccount.address);
-        toast.success('Registration completed! You can now invest in pools.');
-      } catch (roleError) {
-        // Auto-grant failed, but profile created successfully
-        console.log('Auto-grant failed, requires admin approval:', roleError);
-        toast.success('Profile created! Admin will review and approve your investor role.');
-      }
+      toast.success('✅ Registration completed! You can now invest in pools.');
       
       setTimeout(() => {
         onComplete();
       }, 1000);
     } catch (error: any) {
-      console.error('Registration failed:', error);
-      toast.error(error.message || 'Registration failed. Please try again.');
+      console.error('❌ Registration failed:', error);
+      console.error('Error type:', typeof error);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      
+      const errorMessage = error?.message || error?.toString() || 'Registration failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -99,9 +135,45 @@ export default function InvestorOnboarding({ onComplete, onBack }: InvestorOnboa
     return false;
   };
 
+  const handleAutoFill = () => {
+    const randomData = generateInvestorOnboardingData();
+    setFormData({
+      ...formData,
+      name: randomData.name,
+      address: randomData.address,
+      country: randomData.country,
+      email: randomData.email,
+      phone: randomData.phone,
+      investmentProfile: randomData.investmentProfile,
+      expectedAmount: randomData.expectedAmount,
+      riskTolerance: randomData.riskTolerance,
+      investmentExperience: '',
+    });
+    
+    toast.success('🎲 Form auto-filled with test data. Review and submit!');
+  };
+
   return (
     <div className="min-h-screen py-8">
       <div className="max-w-3xl mx-auto px-4">
+        {/* Auto-fill Button */}
+        <div className="mb-6 flex justify-between items-center">
+          <button 
+            onClick={handleBack}
+            className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 hover-color hover-scale-sm"
+          >
+            <ArrowLeft className="w-5 h-5 hover-bounce" />
+            Back
+          </button>
+          <button
+            onClick={handleAutoFill}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 rounded-lg hover-lift transition-all"
+          >
+            <Sparkles className="w-4 h-4" />
+            Auto-fill Test Data
+          </button>
+        </div>
+        
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">

@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { usePoolNFT } from '@/hooks/usePoolNFT';
-import { usePoolFunding } from '@/hooks/usePoolFunding';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +24,7 @@ import {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Pool, PoolStatus } from '@/types';
@@ -38,7 +37,19 @@ const POOL_STATUS_MAP: Record<number, { label: string; color: string; bgColor: s
   3: { label: 'Cancelled', color: 'text-red-400', bgColor: 'bg-red-600' },
 };
 
-interface PoolWithMetadata extends Pool {
+interface PoolWithMetadata {
+  poolId: bigint;
+  name: string;
+  startDate: bigint;
+  endDate: bigint;
+  invoiceIds: bigint[];
+  totalLoanAmount: bigint;
+  totalShippingAmount: bigint;
+  amountInvested: bigint;
+  amountDistributed: bigint;
+  feePaid: bigint;
+  status: number;
+  createdAt: bigint;
   metadata?: {
     description: string;
     risk_category: 'low' | 'medium' | 'high';
@@ -48,10 +59,8 @@ interface PoolWithMetadata extends Pool {
 }
 
 export default function AdminPoolsPage() {
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { getAllOpenPools, getPool } = usePoolNFT();
-  const { getPoolFundingPercentage } = usePoolFunding();
+  const { isConnected, address } = useMetaMaskAdmin();
+  const { getAllOpenPools, getPool, getPoolFundingPercentage, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [pools, setPools] = useState<PoolWithMetadata[]>([]);
@@ -60,42 +69,21 @@ export default function AdminPoolsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loadingPools, setLoadingPools] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [userRoles, setUserRoles] = useState<any>(null);
 
-  // Check admin role and redirect if not admin
+  // Fetch pools when connected
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-      return;
-    }
-
-    if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
-          router.push('/');
-        }
-      });
-    }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
-
-  // Fetch pools when admin role is confirmed
-  useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (isConnected && address) {
       fetchPools();
     }
-  }, [userRoles]);
+  }, [isConnected, address]);
 
-  // Helper function to check pool status (handles both string and number)
-  const isPoolStatus = (status: any, target: string) => {
-    if (typeof status === 'string') {
-      return status === target;
-    }
-    // Map numbers to status strings
+  // Helper function to check pool status (numeric: 0=Open, 1=Fundraising, 2=PartiallyFunded, 3=Funded)
+  const isPoolStatus = (status: number, target: string) => {
     const statusMap: Record<number, string> = {
       0: 'OPEN',
-      1: 'FUNDED', 
-      2: 'COMPLETED'
+      1: 'FUNDRAISING',
+      2: 'PARTIALLYFUNDED',
+      3: 'FUNDED'
     };
     return statusMap[status] === target;
   };
@@ -106,11 +94,11 @@ export default function AdminPoolsPage() {
 
     // Apply status filter
     if (filter === 'open') {
-      filtered = filtered.filter(pool => isPoolStatus(pool.status, 'OPEN'));
+      filtered = filtered.filter(pool => isPoolStatus(Number(pool.status), 'OPEN'));
     } else if (filter === 'funded') {
-      filtered = filtered.filter(pool => isPoolStatus(pool.status, 'FUNDED'));
+      filtered = filtered.filter(pool => isPoolStatus(Number(pool.status), 'FUNDED'));
     } else if (filter === 'completed') {
-      filtered = filtered.filter(pool => isPoolStatus(pool.status, 'COMPLETED'));
+      filtered = filtered.filter(pool => isPoolStatus(Number(pool.status), 'COMPLETED'));
     }
 
     // Apply search filter
@@ -128,36 +116,63 @@ export default function AdminPoolsPage() {
     try {
       setLoadingPools(true);
       
+      // Get all open pools from smart contract first (blockchain-first approach)
+      const openPoolIds = await getAllOpenPools();
+      
+      // Filter out invalid pool IDs (0 or negative)
+      const validPoolIds = openPoolIds.filter(id => id > 0n);
+      
+      if (validPoolIds.length === 0) {
+        console.log('No valid pool IDs found');
+        setPools([]);
+        setLoadingPools(false);
+        return;
+      }
+      
+      console.log(`Found ${validPoolIds.length} valid pool IDs:`, validPoolIds.map(id => id.toString()));
+      
       // Get all pool metadata from Supabase
       const { data: metadataList, error: metadataError } = await supabase
         .from('pool_metadata')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (metadataError) throw metadataError;
+      if (metadataError) {
+        console.warn('Metadata fetch error:', metadataError.message);
+        // Don't throw - we can still show pools without metadata
+      }
 
-      // Get pool data from smart contract for each metadata
+      // Get pool data from smart contract for each pool ID
       const poolsWithData: PoolWithMetadata[] = [];
       
-      for (const metadata of metadataList || []) {
+      for (const poolId of validPoolIds) {
         try {
-          const poolData = await getPool(BigInt(metadata.pool_id));
-          if (poolData) {
-            // Get funding percentage
-            const fundingPercentage = await getPoolFundingPercentage(BigInt(metadata.pool_id));
-            
-            poolsWithData.push({
-              ...poolData,
-              metadata: {
-                description: metadata.description || '',
-                risk_category: metadata.risk_category || 'medium',
-              },
-              fundingPercentage: Number(fundingPercentage),
-              investorCount: 0, // TODO: Get from contract
-            });
+          const poolData = await getPool(poolId);
+          
+          // Skip if pool data is null (pool doesn't exist or error occurred)
+          if (!poolData) {
+            console.warn(`Pool ${poolId} returned null, skipping...`);
+            continue;
           }
+          
+          // Find metadata for this pool
+          const metadata = metadataList?.find(m => m.pool_id === Number(poolId));
+          
+          // Get funding percentage
+          const fundingPercentage = await getPoolFundingPercentage(poolId);
+          
+          poolsWithData.push({
+            ...poolData,
+            metadata: metadata ? {
+              description: metadata.description || '',
+              risk_category: metadata.risk_category || 'medium',
+            } : undefined,
+            fundingPercentage: Number(fundingPercentage),
+            investorCount: 0, // TODO: Get from contract
+          });
         } catch (error) {
-          console.error(`Failed to fetch pool ${metadata.pool_id}:`, error);
+          console.error(`Failed to fetch pool ${poolId}:`, error);
+          // Skip this pool and continue with others
         }
       }
 
@@ -169,23 +184,15 @@ export default function AdminPoolsPage() {
     }
   };
 
-  // Helper function to get pool status info (handles both string and number)
-  const getPoolStatusInfo = (status: any) => {
-    if (typeof status === 'string') {
-      const stringStatusMap: Record<string, { label: string; color: string; bgColor: string }> = {
-        'OPEN': { label: 'Open', color: 'text-blue-400', bgColor: 'bg-blue-600' },
-        'FUNDED': { label: 'Funded', color: 'text-green-400', bgColor: 'bg-green-600' },
-        'COMPLETED': { label: 'Completed', color: 'text-gray-400', bgColor: 'bg-gray-600' },
-      };
-      return stringStatusMap[status] || stringStatusMap['OPEN'];
-    }
-    return POOL_STATUS_MAP[status as number] || POOL_STATUS_MAP[0];
+  // Helper function to get pool status info
+  const getPoolStatusInfo = (status: number) => {
+    return POOL_STATUS_MAP[status] || POOL_STATUS_MAP[0];
   };
 
   const getFilterStats = () => {
-    const open = pools.filter(pool => isPoolStatus(pool.status, 'OPEN')).length;
-    const funded = pools.filter(pool => isPoolStatus(pool.status, 'FUNDED')).length;
-    const completed = pools.filter(pool => isPoolStatus(pool.status, 'COMPLETED')).length;
+    const open = pools.filter(pool => isPoolStatus(Number(pool.status), 'OPEN')).length;
+    const funded = pools.filter(pool => isPoolStatus(Number(pool.status), 'FUNDED')).length;
+    const completed = pools.filter(pool => isPoolStatus(Number(pool.status), 'COMPLETED')).length;
     const totalValue = pools.reduce((sum, pool) => sum + Number(pool.totalLoanAmount || 0), 0);
     
     return { open, funded, completed, total: pools.length, totalValue };
@@ -201,21 +208,10 @@ export default function AdminPoolsPage() {
 
   const stats = getFilterStats();
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading...</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -516,5 +512,6 @@ export default function AdminPoolsPage() {
         </Card>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

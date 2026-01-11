@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
+import { useSEATrax } from '@/hooks/useSEATrax';
+import { useAdminContract } from '@/hooks/useAdminContract';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,11 +21,13 @@ import {
   ArrowLeft,
   Download,
   ExternalLink,
-  X
+  X,
+  Wallet
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { appConfig } from '@/config';
@@ -35,46 +37,32 @@ import type { Invoice, InvoiceStatus } from '@/types';
 interface InvoiceWithContractData {
   tokenId: bigint;
   exporter: string;
-  invoiceValue: bigint;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
   loanAmount: bigint;
-  fundedAmount: bigint;
-  withdrawnAmount: bigint;
-  status: InvoiceStatus | number; // Can be either string enum or number
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
   poolId: bigint;
-  invoiceDate: number;
-  dueDate: number;
-  createdAt: number;
-  updatedAt: number;
   ipfsHash: string;
+  createdAt: bigint;
   id?: string;
-  // Additional fields from contract
-  exporterCompany?: string;
-  importerCompany?: string;
-  shippingDate?: number;
-  shippingAmount?: bigint;
-  amountInvested?: bigint;
-  amountWithdrawn?: bigint;
   metadata?: any;
 }
 
-// Invoice status mapping
+// Invoice status mapping (8 statuses)
 const INVOICE_STATUS_MAP: Record<number, { label: string; color: string; bgColor: string }> = {
-  0: { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
+  0: { label: 'Pending', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
   1: { label: 'Approved', color: 'text-green-400', bgColor: 'bg-green-600' },
   2: { label: 'In Pool', color: 'text-blue-400', bgColor: 'bg-blue-600' },
   3: { label: 'Funded', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
-  4: { label: 'Paid', color: 'text-green-400', bgColor: 'bg-green-600' },
-  5: { label: 'Cancelled', color: 'text-red-400', bgColor: 'bg-red-600' },
-};
-
-// Status mapping for string values from hook
-const STATUS_STRING_MAP: Record<string, { label: string; color: string; bgColor: string }> = {
-  'PENDING': { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
-  'FINALIZED': { label: 'Approved', color: 'text-green-400', bgColor: 'bg-green-600' },
-  'FUNDRAISING': { label: 'In Pool', color: 'text-blue-400', bgColor: 'bg-blue-600' },
-  'FUNDED': { label: 'Funded', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
-  'PAID': { label: 'Paid', color: 'text-green-400', bgColor: 'bg-green-600' },
-  'CANCELLED': { label: 'Cancelled', color: 'text-red-400', bgColor: 'bg-red-600' },
+  4: { label: 'Withdrawn', color: 'text-purple-400', bgColor: 'bg-purple-600' },
+  5: { label: 'Paid', color: 'text-green-400', bgColor: 'bg-green-600' },
+  6: { label: 'Completed', color: 'text-emerald-400', bgColor: 'bg-emerald-600' },
+  7: { label: 'Rejected', color: 'text-red-400', bgColor: 'bg-red-600' },
 };
 
 interface InvoiceMetadata {
@@ -91,9 +79,9 @@ interface InvoiceDetailProps {
 }
 
 export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { getInvoice, finalizeInvoice } = useInvoiceNFT();
+  const { isConnected, address } = useMetaMaskAdmin();
+  const { getInvoice } = useSEATrax();
+  const { approveInvoice, rejectInvoice, isLoading: contractLoading } = useAdminContract();
   const router = useRouter();
   
   const [invoice, setInvoice] = useState<InvoiceWithContractData | null>(null);
@@ -104,7 +92,6 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [userRoles, setUserRoles] = useState<any>(null);
 
   // Get invoice ID from params
   useEffect(() => {
@@ -113,29 +100,12 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
     });
   }, [params]);
 
-  // Check admin role and redirect if not admin
+  // Fetch invoice data when connected and invoiceId is available
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-      return;
-    }
-
-    if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
-          router.push('/');
-        }
-      });
-    }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
-
-  // Fetch invoice data when admin role is confirmed and invoiceId is available
-  useEffect(() => {
-    if (userRoles?.hasAdminRole && invoiceId) {
+    if (isConnected && address && invoiceId) {
       fetchInvoiceData();
     }
-  }, [userRoles, invoiceId]);
+  }, [isConnected, address, invoiceId]);
 
   const fetchInvoiceData = async () => {
     try {
@@ -149,14 +119,8 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
         return;
       }
 
-      // Map Invoice to InvoiceWithContractData
-      const mappedInvoice: InvoiceWithContractData = {
-        ...invoiceData,
-        updatedAt: Date.now(),
-        id: invoiceId,
-      };
-      
-      setInvoice(mappedInvoice);
+      // Use invoice data directly (already matches InvoiceWithContractData)
+      setInvoice({ ...invoiceData, id: invoiceId });
 
       // Get metadata from Supabase
       const { data: metadataData, error: metadataError } = await supabase
@@ -165,10 +129,12 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
         .eq('token_id', parseInt(invoiceId))
         .single();
 
-      if (metadataError) {
-        console.error('Metadata error:', metadataError);
-        // Don't throw error, metadata might not exist for old invoices
-      } else {
+      if (metadataError && metadataError.code !== 'PGRST116') {
+        // Only log error if it's not "no rows returned" error
+        console.error('Metadata fetch error:', metadataError.message);
+      }
+      
+      if (metadataData) {
         setMetadata(metadataData);
       }
 
@@ -186,8 +152,12 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
       setApproving(true);
       setMessage(null);
 
-      // Call finalizeInvoice to approve it
-      await finalizeInvoice(BigInt(invoiceId));
+      // Call approveInvoice
+      const result = await approveInvoice(BigInt(invoiceId));
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to approve invoice');
+      }
 
       setMessage({ 
         type: 'success', 
@@ -217,9 +187,18 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
       setRejecting(true);
       setMessage(null);
 
-      // For now, we'll just record the rejection in Supabase
-      // In a full implementation, you might want a dedicated rejection table
-      console.log('Rejecting invoice with reason:', rejectReason);
+      // Call rejectInvoice from SEATrax contract
+      const result = await rejectInvoice(BigInt(invoiceId));
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to reject invoice');
+      }
+
+      // Store rejection reason in Supabase for reference
+      await supabase
+        .from('invoice_metadata')
+        .update({ rejection_reason: rejectReason })
+        .eq('token_id', parseInt(invoiceId));
 
       setMessage({ 
         type: 'success', 
@@ -228,6 +207,9 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
 
       // Clear rejection reason
       setRejectReason('');
+      
+      // Refresh invoice data
+      await fetchInvoiceData();
 
     } catch (error: any) {
       setMessage({ 
@@ -295,41 +277,44 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
     );
   };
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole || loadingInvoice) {
+  // Show loading while fetching invoice data
+  if (loadingInvoice) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading invoice...</div>
+      <AdminAuthGuard>
+        <div className="flex items-center justify-center min-h-screen bg-slate-950">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+            <div className="text-gray-400">Loading invoice...</div>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
   if (!invoice) {
     return (
-      <div className="min-h-screen bg-slate-950">
-        <AdminHeader />
-        <div className="container mx-auto px-4 py-8">
-          <Alert className="border-red-500 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              Invoice not found or failed to load.
-            </AlertDescription>
-          </Alert>
+      <AdminAuthGuard>
+        <div className="min-h-screen bg-slate-950">
+          <AdminHeader />
+          <div className="container mx-auto px-4 py-8">
+            <Alert className="border-red-500 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                Invoice not found or failed to load.
+              </AlertDescription>
+            </Alert>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
-  const statusInfo = typeof invoice.status === 'string' ? 
-    STATUS_STRING_MAP[invoice.status] || STATUS_STRING_MAP['PENDING'] :
-    INVOICE_STATUS_MAP[Number(invoice.status)] || INVOICE_STATUS_MAP[0];
+  const statusInfo = INVOICE_STATUS_MAP[Number(invoice.status)] || INVOICE_STATUS_MAP[0];
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -385,7 +370,7 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
                     <Label className="text-gray-400">Exporter Company</Label>
                     <div className="flex items-center gap-2 mt-1">
                       <Building2 className="h-4 w-4 text-cyan-400" />
-                      <span className="text-white font-medium">{invoice.metadata?.invoiceNumber || `Invoice #${invoice.tokenId}`}</span>
+                      <span className="text-white font-medium">{invoice.exporterCompany || 'Unknown Exporter'}</span>
                     </div>
                   </div>
                   <div>
@@ -393,7 +378,7 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
                     <div className="flex items-center gap-2 mt-1">
                       <Building2 className="h-4 w-4 text-cyan-400" />
                       <span className="text-white font-medium">
-                        {metadata?.importer_name || invoice.metadata?.importerName || 'Unknown Importer'}
+                        {invoice.importerCompany || metadata?.importer_name || 'Unknown Importer'}
                       </span>
                     </div>
                   </div>
@@ -402,7 +387,7 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
                     <div className="flex items-center gap-2 mt-1">
                       <Calendar className="h-4 w-4 text-cyan-400" />
                       <span className="text-white font-medium">
-                        {formatDate(invoice.invoiceDate)}
+                        {formatDate(Number(invoice.shippingDate) * 1000)}
                       </span>
                     </div>
                   </div>
@@ -438,7 +423,7 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
                     <div className="flex items-center gap-2 mt-1">
                       <DollarSign className="h-4 w-4 text-green-400" />
                       <span className="text-white font-bold text-lg">
-                        {formatCurrency(Number(invoice.invoiceValue) / 100)}
+                        {formatCurrency(Number(invoice.shippingAmount) / 100)}
                       </span>
                     </div>
                   </div>
@@ -456,7 +441,7 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
                     <div className="flex items-center gap-2 mt-1">
                       <DollarSign className="h-4 w-4 text-green-400" />
                       <span className="text-green-400 font-bold text-lg">
-                        {formatCurrency(Number(invoice.amountInvested) / 100)}
+                        {formatCurrency(Number(invoice.amountInvested) / 1e18 * 3000)}
                       </span>
                     </div>
                   </div>
@@ -466,14 +451,14 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-400">Loan to Shipping Ratio:</span>
                     <span className="text-white font-medium">
-                      {((Number(invoice.loanAmount) / Number(invoice.invoiceValue)) * 100).toFixed(1)}%
+                      {((Number(invoice.loanAmount) / Number(invoice.shippingAmount)) * 100).toFixed(1)}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-sm mt-2">
                     <span className="text-gray-400">Funding Progress:</span>
                     <span className="text-white font-medium">
                       {Number(invoice.loanAmount) > 0 
-                        ? ((Number(invoice.amountInvested) / Number(invoice.loanAmount)) * 100).toFixed(1)
+                        ? ((Number(invoice.amountInvested) / 1e18 * 3000 * 100 / (Number(invoice.loanAmount) / 100))).toFixed(1)
                         : 0}%
                     </span>
                   </div>
@@ -506,7 +491,7 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {invoice.status === 0 ? (
+                {Number(invoice.status) === 0 ? (
                   <>
                     <Button
                       onClick={handleApproveInvoice}
@@ -602,5 +587,6 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
         </div>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

@@ -1,391 +1,114 @@
 import { appConfig } from '@/config';
-import { liskSepolia } from 'panna-sdk'
-import { prepareContractCall, sendTransaction, readContract, waitForReceipt } from 'thirdweb/transaction'
-import { getContract } from 'thirdweb/contract'
-import { toWei } from 'thirdweb/utils'
+import SEATRAX_ABI_JSON from './seatrax-abi.json';
 
-// ============== MULTIPLE SMART CONTRACT CONFIGURATION ==============
-// New architecture with specialized contracts
+// ============== SINGLE CONTRACT CONFIGURATION ==============
+// Migrated from multiple contracts to unified SEATrax contract
 
-export const CONTRACTS = {
-  ACCESS_CONTROL: appConfig.contracts.accessControl,
-  INVOICE_NFT: appConfig.contracts.invoiceNFT,
-  POOL_NFT: appConfig.contracts.poolNFT,
-  POOL_FUNDING_MANAGER: appConfig.contracts.poolFundingManager,
-  PAYMENT_ORACLE: appConfig.contracts.paymentOracle,
-  PLATFORM_ANALYTICS: appConfig.contracts.platformAnalytics,
-} as const;
+export const SEATRAX_CONTRACT = {
+  address: appConfig.contracts.seatrax.address,
+  abi: SEATRAX_ABI_JSON,
+};
 
-// Role constants (keccak256 hashes)
+// Export ABI separately for convenience
+export const SEATRAX_ABI = SEATRAX_ABI_JSON;
+
+// ============== CONTRACT ADDRESS ==============
+export const CONTRACT_ADDRESS = appConfig.contracts.seatrax.address;
+
+// ============== ROLE CONSTANTS ==============
+// OpenZeppelin AccessControl role hashes
 export const ROLES = {
+  // ADMIN_ROLE = keccak256("ADMIN_ROLE") = 0xa49807...
   ADMIN: '0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775',
-  EXPORTER: '0x7b765e0e932d348852a6f810bfa1ab891e259123f02db8cdcde614c570223357',
-  INVESTOR: '0x2d41a8a8a5c8e7c8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8f8e8',
+  // Note: Exporter and Investor roles are now simple mappings, not AccessControl roles
+  // registeredExporters[address] => bool
+  // registeredInvestors[address] => bool
 } as const;
 
-// Invoice status enum
+// ============== STATUS ENUMS ==============
+
+// Invoice Status (from SEATrax.sol)
 export const INVOICE_STATUS = {
-  PENDING: 0,
-  FINALIZED: 1,
-  FUNDRAISING: 2,
-  FUNDED: 3,
-  PAID: 4,
-  CANCELLED: 5,
+  PENDING: 0,      // Created, awaiting admin approval
+  APPROVED: 1,     // Approved by admin, can be added to pool
+  IN_POOL: 2,      // Added to pool, accepting investments
+  FUNDED: 3,       // Received funds from pool (≥70%)
+  WITHDRAWN: 4,    // Exporter withdrew funds, awaiting payment
+  PAID: 5,         // Importer paid, ready for profit distribution
+  COMPLETED: 6,    // Profits distributed
+  REJECTED: 7,     // Rejected by admin
 } as const;
 
-// Pool status enum
+// Pool Status (from SEATrax.sol)
 export const POOL_STATUS = {
-  OPEN: 0,
-  FUNDRAISING: 1,
-  PARTIALLY_FUNDED: 2,
-  FUNDED: 3,
-  SETTLING: 4,
-  COMPLETED: 5,
+  OPEN: 0,         // Accepting investments
+  FUNDED: 1,       // 100% funded, auto-distributed
+  COMPLETED: 2,    // All profits distributed
+  CANCELLED: 3,    // Cancelled by admin
 } as const;
 
-// ============== LEGACY CONTRACT SUPPORT (DEPRECATED) ==============
-// Keep for backward compatibility with existing demo code
-
-export const SEATRAX_ABI = [
-  // ============== EXPORTER FUNCTIONS ==============
-  {
-    inputs: [],
-    name: 'registerExporter',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'invoiceValue', type: 'uint256' },
-      { name: 'loanAmount', type: 'uint256' },
-      { name: 'invoiceDate', type: 'uint256' },
-      { name: 'dueDate', type: 'uint256' },
-      { name: 'ipfsHash', type: 'string' },
-    ],
-    name: 'createInvoice',
-    outputs: [{ name: 'tokenId', type: 'uint256' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'invoiceId', type: 'uint256' }],
-    name: 'withdrawFunds',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-
-  // ============== INVESTOR FUNCTIONS ==============
-  {
-    inputs: [],
-    name: 'registerInvestor',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'poolId', type: 'uint256' }],
-    name: 'invest',
-    outputs: [],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'poolId', type: 'uint256' }],
-    name: 'claimReturns',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-
-  // ============== ADMIN FUNCTIONS ==============
-  {
-    inputs: [{ name: 'exporter', type: 'address' }],
-    name: 'verifyExporter',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'invoiceId', type: 'uint256' }],
-    name: 'approveInvoice',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'invoiceId', type: 'uint256' }],
-    name: 'rejectInvoice',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'name', type: 'string' },
-      { name: 'invoiceIds', type: 'uint256[]' },
-      { name: 'startDate', type: 'uint256' },
-      { name: 'endDate', type: 'uint256' },
-    ],
-    name: 'createPool',
-    outputs: [{ name: 'poolId', type: 'uint256' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'invoiceId', type: 'uint256' }],
-    name: 'markInvoicePaid',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'poolId', type: 'uint256' }],
-    name: 'distributeProfits',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-
-  // ============== VIEW FUNCTIONS ==============
-  {
-    inputs: [{ name: 'invoiceId', type: 'uint256' }],
-    name: 'getInvoice',
-    outputs: [
-      {
-        components: [
-          { name: 'tokenId', type: 'uint256' },
-          { name: 'exporter', type: 'address' },
-          { name: 'invoiceValue', type: 'uint256' },
-          { name: 'loanAmount', type: 'uint256' },
-          { name: 'fundedAmount', type: 'uint256' },
-          { name: 'withdrawnAmount', type: 'uint256' },
-          { name: 'status', type: 'uint8' },
-          { name: 'poolId', type: 'uint256' },
-          { name: 'invoiceDate', type: 'uint256' },
-          { name: 'dueDate', type: 'uint256' },
-          { name: 'createdAt', type: 'uint256' },
-          { name: 'ipfsHash', type: 'string' },
-        ],
-        name: '',
-        type: 'tuple',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'poolId', type: 'uint256' }],
-    name: 'getPool',
-    outputs: [
-      {
-        components: [
-          { name: 'poolId', type: 'uint256' },
-          { name: 'name', type: 'string' },
-          { name: 'startDate', type: 'uint256' },
-          { name: 'endDate', type: 'uint256' },
-          { name: 'totalLoanAmount', type: 'uint256' },
-          { name: 'totalInvested', type: 'uint256' },
-          { name: 'totalDistributed', type: 'uint256' },
-          { name: 'status', type: 'uint8' },
-          { name: 'invoiceIds', type: 'uint256[]' },
-          { name: 'createdAt', type: 'uint256' },
-        ],
-        name: '',
-        type: 'tuple',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'poolId', type: 'uint256' },
-      { name: 'investor', type: 'address' },
-    ],
-    name: 'getInvestment',
-    outputs: [
-      {
-        components: [
-          { name: 'investor', type: 'address' },
-          { name: 'poolId', type: 'uint256' },
-          { name: 'amount', type: 'uint256' },
-          { name: 'percentage', type: 'uint256' },
-          { name: 'timestamp', type: 'uint256' },
-          { name: 'returnsClaimed', type: 'bool' },
-        ],
-        name: '',
-        type: 'tuple',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'poolId', type: 'uint256' }],
-    name: 'getPoolInvestors',
-    outputs: [{ name: '', type: 'address[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'exporter', type: 'address' }],
-    name: 'getExporterInvoices',
-    outputs: [{ name: '', type: 'uint256[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'investor', type: 'address' }],
-    name: 'getInvestorPools',
-    outputs: [{ name: '', type: 'uint256[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'invoiceId', type: 'uint256' }],
-    name: 'canWithdraw',
-    outputs: [
-      { name: 'canWithdraw', type: 'bool' },
-      { name: 'withdrawableAmount', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'poolId', type: 'uint256' }],
-    name: 'getPoolFundingPercentage',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'getAllOpenPools',
-    outputs: [{ name: '', type: 'uint256[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'getAllPendingInvoices',
-    outputs: [{ name: '', type: 'uint256[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'getAllApprovedInvoices',
-    outputs: [{ name: '', type: 'uint256[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-
-  // ============== EVENTS ==============
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'tokenId', type: 'uint256' },
-      { indexed: true, name: 'exporter', type: 'address' },
-      { indexed: false, name: 'loanAmount', type: 'uint256' },
-    ],
-    name: 'InvoiceCreated',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'tokenId', type: 'uint256' },
-      { indexed: true, name: 'admin', type: 'address' },
-    ],
-    name: 'InvoiceApproved',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'tokenId', type: 'uint256' },
-      { indexed: true, name: 'admin', type: 'address' },
-    ],
-    name: 'InvoiceRejected',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'poolId', type: 'uint256' },
-      { indexed: false, name: 'name', type: 'string' },
-      { indexed: false, name: 'totalLoanAmount', type: 'uint256' },
-    ],
-    name: 'PoolCreated',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'poolId', type: 'uint256' },
-      { indexed: true, name: 'investor', type: 'address' },
-      { indexed: false, name: 'amount', type: 'uint256' },
-    ],
-    name: 'InvestmentMade',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'invoiceId', type: 'uint256' },
-      { indexed: false, name: 'amount', type: 'uint256' },
-    ],
-    name: 'InvoiceFunded',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'invoiceId', type: 'uint256' },
-      { indexed: true, name: 'exporter', type: 'address' },
-      { indexed: false, name: 'amount', type: 'uint256' },
-    ],
-    name: 'FundsWithdrawn',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'invoiceId', type: 'uint256' },
-    ],
-    name: 'InvoicePaid',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'poolId', type: 'uint256' },
-      { indexed: false, name: 'investorShare', type: 'uint256' },
-      { indexed: false, name: 'platformFee', type: 'uint256' },
-    ],
-    name: 'ProfitsDistributed',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'poolId', type: 'uint256' },
-      { indexed: true, name: 'investor', type: 'address' },
-      { indexed: false, name: 'amount', type: 'uint256' },
-    ],
-    name: 'ReturnsClaimed',
-    type: 'event',
-  },
-] as const;
-
-// ============== LEGACY EXPORTS (DEPRECATED) ==============
-// Keep for backward compatibility with existing demo code
-
-export const CONTRACT_ADDRESS = appConfig.contract.address;
-
-// Platform constants (basis points: 10000 = 100%)
+// ============== PLATFORM CONSTANTS ==============
+// Business logic constants (basis points: 10000 = 100%)
 export const INVESTOR_YIELD_BPS = 400;     // 4%
 export const PLATFORM_FEE_BPS = 100;       // 1%
 export const FUNDING_THRESHOLD_BPS = 7000; // 70%
+
+// ============== TYPESCRIPT TYPES ==============
+
+export type InvoiceStatus = (typeof INVOICE_STATUS)[keyof typeof INVOICE_STATUS];
+export type PoolStatus = (typeof POOL_STATUS)[keyof typeof POOL_STATUS];
+
+export interface Invoice {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: InvoiceStatus;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
+}
+
+export interface Pool {
+  poolId: bigint;
+  name: string;
+  startDate: bigint;
+  endDate: bigint;
+  invoiceIds: bigint[];
+  totalLoanAmount: bigint;
+  totalShippingAmount: bigint;
+  amountInvested: bigint;
+  amountDistributed: bigint;
+  feePaid: bigint;
+  status: PoolStatus;
+  createdAt: bigint;
+}
+
+export interface Investment {
+  investor: string;
+  poolId: bigint;
+  amount: bigint;
+  percentage: bigint;
+  timestamp: bigint;
+  returnsClaimed: boolean;
+}
+
+// ============== LEGACY SUPPORT (for rollback) ==============
+// Keep old contract addresses commented for reference
+
+/*
+export const LEGACY_CONTRACTS = {
+  ACCESS_CONTROL: '0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F',
+  INVOICE_NFT: '0x8Da2dF6050158ae8B058b90B37851323eFd69E16',
+  POOL_NFT: '0x317Ce254731655E19932b9EFEAf7eeA31F0775ad',
+  POOL_FUNDING_MANAGER: '0xbD5f292F75D22996E7A4DD277083c75aB29ff45C',
+  PAYMENT_ORACLE: '0x7894728174E53Df9Fec402De07d80652659296a8',
+  PLATFORM_ANALYTICS: '0xb77C5C42b93ec46A323137B64586F0F8dED987A9',
+} as const;
+*/

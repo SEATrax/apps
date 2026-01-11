@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSEATrax } from '@/hooks/useSEATrax'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
-  CreditCard, 
   FileText, 
   Building2, 
   Calendar, 
@@ -14,10 +14,15 @@ import {
   CheckCircle,
   Clock,
   Info,
-  Download,
   ExternalLink,
-  Loader2
+  Loader2,
+  Copy
 } from 'lucide-react'
+import { getContract, prepareContractCall, sendTransaction, waitForReceipt, toWei } from 'thirdweb'
+import { liskSepolia } from 'panna-sdk'
+import { CONTRACT_ADDRESS } from '@/lib/contract'
+import { DEV_MODE, DEV_PAYMENT_AMOUNT } from '@/lib/env'
+import { useToast } from '@/hooks/use-toast'
 
 interface ImporterPaymentProps {
   invoiceId: string
@@ -46,73 +51,74 @@ interface PaymentData {
 }
 
 export default function ImporterPayment({ invoiceId }: ImporterPaymentProps) {
+  const { getInvoice } = useSEATrax()
+  const { toast } = useToast()
+  
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<'bank' | 'crypto' | ''>('')
   const [error, setError] = useState<string | null>(null)
-  const [paymentSubmitted, setPaymentSubmitted] = useState(false)
+  const [txHash, setTxHash] = useState<string>('')
 
-  // Fetch payment data
+  // Fetch invoice data from blockchain
   useEffect(() => {
-    const fetchPaymentData = async () => {
+    const fetchInvoiceData = async () => {
       try {
         setIsLoading(true)
         setError(null)
         
-        const response = await fetch(`/api/payment/${invoiceId}`)
-        const data = await response.json()
+        const invoice = await getInvoice(BigInt(invoiceId))
         
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to load payment information')
+        if (!invoice) {
+          throw new Error('Invoice not found')
         }
         
-        setPaymentData(data)
+        // Check if already paid
+        const isPaid = invoice.status >= 5 // PAID status or higher
+        
+        setPaymentData({
+          invoice: {
+            id: invoiceId,
+            amount: Number(invoice.shippingAmount) / 100, // USD cents to dollars
+            amountFormatted: `$${(Number(invoice.shippingAmount) / 100).toFixed(2)}`,
+            exporter: invoice.exporterCompany,
+            importer: invoice.importerCompany,
+            invoiceNumber: `INV-${invoiceId}`,
+            goodsDescription: 'Shipping Invoice',
+            shippingDate: Number(invoice.shippingDate),
+            status: invoice.status.toString(),
+          },
+          payment: {
+            status: isPaid ? 'paid' : 'pending',
+            dueDate: new Date(Number(invoice.shippingDate) * 1000 + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            paymentLink: `/pay/${invoiceId}`,
+            isPaid,
+          },
+        })
       } catch (err: any) {
-        console.error('Payment data fetch error:', err)
-        setError(err.message || 'Failed to load payment information')
+        console.error('Invoice fetch error:', err)
+        setError(err.message || 'Failed to load invoice information')
       } finally {
         setIsLoading(false)
       }
     }
 
     if (invoiceId) {
-      fetchPaymentData()
+      fetchInvoiceData()
     }
-  }, [invoiceId])
+  }, [invoiceId, getInvoice])
 
-  const handlePayment = async () => {
-    if (!paymentMethod || !paymentData) return
+  const handleContactExporter = () => {
+    if (!paymentData) return
     
-    try {
-      setIsProcessing(true)
-      
-      // Submit dummy payment
-      const response = await fetch(`/api/payment/${invoiceId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          paymentMethod,
-          amount: paymentData.invoice.amount,
-          paymentReference: `PAY-${Date.now()}`,
-        }),
-      })
-      
-      const result = await response.json()
-      
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Payment submission failed')
-      }
-      
-      setPaymentSubmitted(true)
-    } catch (err: any) {
-      console.error('Payment submission error:', err)
-      setError(err.message || 'Payment submission failed')
-    } finally {
-      setIsProcessing(false)
-    }
+    // Copy email for contact
+    const message = `Hello ${paymentData.invoice.exporter},\n\nI would like to arrange payment for Invoice #${paymentData.invoice.invoiceNumber}.\n\nAmount due: ${paymentData.invoice.amountFormatted}\nShipping date: ${new Date(paymentData.invoice.shippingDate * 1000).toLocaleDateString()}\n\nPlease provide payment instructions.\n\nThank you.`
+    
+    navigator.clipboard.writeText(message)
+    
+    toast({
+      title: 'Message Copied',
+      description: 'Payment inquiry message copied to clipboard. Please contact the exporter via email.',
+    })
   }
 
   const getStatusBadge = (status: string) => {
@@ -187,57 +193,8 @@ export default function ImporterPayment({ invoiceId }: ImporterPaymentProps) {
     )
   }
 
-  // Payment completed state
-  if (paymentData.payment.isPaid || paymentSubmitted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
-        <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800 w-full max-w-2xl">
-          <CardContent className="p-12 text-center">
-            <div className="w-20 h-20 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-10 h-10 text-green-400" />
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-4">
-              {paymentSubmitted ? 'Payment Submitted!' : 'Payment Completed'}
-            </h1>
-            <p className="text-slate-400 text-lg mb-6">
-              {paymentSubmitted 
-                ? 'Your payment has been submitted and is awaiting admin confirmation.'
-                : 'Thank you! Your payment has been successfully processed.'
-              }
-            </p>
-            <div className="bg-slate-800/30 rounded-lg p-6 mb-6">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-slate-400">Invoice Number</p>
-                  <p className="text-white font-medium">{paymentData.invoice.invoiceNumber}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400">Amount Paid</p>
-                  <p className="text-white font-medium">{paymentData.invoice.amountFormatted}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400">Exporter</p>
-                  <p className="text-white font-medium">{paymentData.invoice.exporter}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400">Status</p>
-                  <div>{getStatusBadge(paymentSubmitted ? 'pending_confirmation' : 'paid')}</div>
-                </div>
-              </div>
-            </div>
-            {paymentSubmitted && (
-              <Alert className="bg-orange-600/20 border-orange-600 mb-6">
-                <Info className="h-4 w-4 text-orange-400" />
-                <AlertDescription className="text-orange-200">
-                  Your payment is pending admin confirmation. You will be notified once it's verified.
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+  // Check if payment is completed
+  const isPaid = paymentData?.payment.isPaid || false
 
   // Main payment form
   return (
@@ -249,35 +206,38 @@ export default function ImporterPayment({ invoiceId }: ImporterPaymentProps) {
           <p className="text-slate-400">Complete your payment for the shipping invoice</p>
         </div>
 
-        {/* System Status Indicators */}
-        {paymentData.warnings && paymentData.warnings.length > 0 && (
-          <div className="max-w-6xl mx-auto mb-6">
-            <Alert className="bg-yellow-900/20 border-yellow-700">
-              <Info className="h-4 w-4 text-yellow-400" />
-              <AlertDescription className="text-yellow-200">
-                <strong>System Notice:</strong>
-                <ul className="list-disc list-inside mt-1">
-                  {paymentData.warnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
+        {/* Onramp Info Banner */}
+        <div className="max-w-6xl mx-auto mb-6">
+          <Alert className="bg-blue-900/20 border-blue-700">
+            <Info className="h-4 w-4 text-blue-400" />
+            <AlertDescription className="text-blue-200">
+              <strong>💡 Coming Soon:</strong> Onramp payment gateway integration will allow you to pay with credit card/bank transfer without needing a crypto wallet. 
+              For now, please contact the exporter for payment instructions.
+            </AlertDescription>
+          </Alert>
+        </div>
 
-        {/* Data Source Indicator (Development/Debug) */}
-        {paymentData.dataSource && paymentData.dataSource !== 'contract' && (
+        {/* Payment Success Alert */}
+        {isPaid && (
           <div className="max-w-6xl mx-auto mb-6">
-            <Alert className="bg-blue-900/20 border-blue-700">
-              <Info className="h-4 w-4 text-blue-400" />
-              <AlertDescription className="text-blue-200 text-sm">
-                <strong>Data Source:</strong> {
-                  paymentData.dataSource === 'hybrid' ? '🔗 Smart Contract + 💾 Database' :
-                  paymentData.dataSource === 'database' ? '💾 Database Only (Contract Unavailable)' :
-                  paymentData.dataSource === 'mock' ? '⚠️ Mock Data (System Offline)' :
-                  'Unknown'
-                }
+            <Alert className="bg-green-900/20 border-green-700">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <AlertDescription className="text-green-200">
+                <strong>✅ Payment Completed!</strong> This invoice has been paid successfully.
+                {txHash && (
+                  <>
+                    <br />
+                    <span className="text-xs">TX: </span>
+                    <a 
+                      href={`https://sepolia-blockscout.lisk.com/tx/${txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-green-300 hover:text-green-200 underline text-xs break-all"
+                    >
+                      {txHash}
+                    </a>
+                  </>
+                )}
               </AlertDescription>
             </Alert>
           </div>
@@ -329,7 +289,7 @@ export default function ImporterPayment({ invoiceId }: ImporterPaymentProps) {
             <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800 sticky top-4">
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
-                  <CreditCard className="w-5 h-5" />
+                  <DollarSign className="w-5 h-5" />
                   Payment Summary
                 </CardTitle>
               </CardHeader>
@@ -354,68 +314,43 @@ export default function ImporterPayment({ invoiceId }: ImporterPaymentProps) {
                   </Alert>
                 )}
 
-                {!isProcessing && (
-                  <>
-                    <div>
-                      <h4 className="text-white font-medium mb-3">Select Payment Method</h4>
-                      <div className="space-y-3">
-                        <div 
-                          onClick={() => setPaymentMethod('bank')}
-                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                            paymentMethod === 'bank' 
-                              ? 'border-cyan-500 bg-cyan-500/10' 
-                              : 'border-slate-700 hover:border-slate-600'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-4 h-4 border-2 rounded-full ${
-                              paymentMethod === 'bank' ? 'border-cyan-500 bg-cyan-500' : 'border-slate-600'
-                            }`} />
-                            <span className="text-white text-sm">Bank Transfer</span>
-                          </div>
-                        </div>
-                        
-                        <div 
-                          onClick={() => setPaymentMethod('crypto')}
-                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                            paymentMethod === 'crypto' 
-                              ? 'border-cyan-500 bg-cyan-500/10' 
-                              : 'border-slate-700 hover:border-slate-600'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-4 h-4 border-2 rounded-full ${
-                              paymentMethod === 'crypto' ? 'border-cyan-500 bg-cyan-500' : 'border-slate-600'
-                            }`} />
-                            <span className="text-white text-sm">Cryptocurrency</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button 
-                      onClick={handlePayment}
-                      disabled={!paymentMethod}
-                      className="w-full bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50"
-                    >
-                      <DollarSign className="w-4 h-4 mr-2" />
-                      Pay {paymentData.invoice.amountFormatted}
-                    </Button>
-                  </>
-                )}
-
-                {isProcessing && (
-                  <div className="text-center py-6">
-                    <Loader2 className="w-8 h-8 text-cyan-600 mx-auto mb-4 animate-spin" />
-                    <p className="text-white font-medium">Processing Payment...</p>
-                    <p className="text-slate-400 text-sm">Please wait while we process your payment</p>
+                {/* Payment Instructions */}
+                <div className="space-y-4">
+                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                    <p className="text-slate-400 text-sm mb-2">Amount Due</p>
+                    <p className="text-3xl font-bold text-white">
+                      {paymentData.invoice.amountFormatted}
+                    </p>
+                    <p className="text-slate-500 text-xs mt-1">Total shipping value</p>
                   </div>
-                )}
 
-                <div className="text-xs text-slate-400 space-y-1">
-                  <p>• This is a dummy payment system for demonstration</p>
-                  <p>• Payment will be submitted for admin confirmation</p>
-                  <p>• You will receive confirmation once verified</p>
+                  <Alert className="bg-blue-900/20 border-blue-700">
+                    <Info className="h-4 w-4 text-blue-400" />
+                    <AlertDescription className="text-blue-200 text-sm">
+                      <strong>Payment Instructions:</strong>
+                      <ol className="list-decimal list-inside mt-2 space-y-1 text-xs">
+                        <li>Contact the exporter for payment details (bank account, etc.)</li>
+                        <li>Make payment via bank transfer or agreed method</li>
+                        <li>Provide proof of payment to the exporter</li>
+                        <li>Admin will verify and mark invoice as paid</li>
+                      </ol>
+                    </AlertDescription>
+                  </Alert>
+
+                  <Button 
+                    onClick={handleContactExporter}
+                    size="lg"
+                    className="w-full bg-cyan-600 hover:bg-cyan-700"
+                  >
+                    <Copy className="w-5 h-5 mr-2" />
+                    Copy Contact Message
+                  </Button>
+                </div>
+
+                <div className="text-xs text-slate-400 space-y-1 mt-4">
+                  <p>ℹ️ Payment is processed off-chain (bank transfer)</p>
+                  <p>ℹ️ Invoice status will be updated after admin verification</p>
+                  <p>ℹ️ Contact exporter for specific payment instructions</p>
                 </div>
               </CardContent>
             </Card>

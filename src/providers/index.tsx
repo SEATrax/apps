@@ -3,6 +3,7 @@
 import { ReactNode, useEffect } from 'react';
 import { PannaProvider } from 'panna-sdk';
 import { ToastProvider } from '@/hooks/use-toast';
+import { DevModeProvider } from '@/contexts/DevModeContext';
 import { appConfig } from '@/config';
 
 interface ProvidersProps {
@@ -39,9 +40,11 @@ export function Providers({ children }: ProvidersProps) {
       clientId={appConfig.panna.clientId}
       partnerId={appConfig.panna.partnerId}
     >
-      <ToastProvider>
-        {children}
-      </ToastProvider>
+      <DevModeProvider>
+        <ToastProvider>
+          {children}
+        </ToastProvider>
+      </DevModeProvider>
     </PannaProvider>
   );
 }

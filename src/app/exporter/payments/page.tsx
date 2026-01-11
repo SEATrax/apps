@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { useInvoiceNFT, INVOICE_STATUS } from '@/hooks/useInvoiceNFT';
+import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,7 +54,7 @@ interface PaymentRecord {
 
 export default function PaymentsTracking() {
   const { isLoaded, isConnected, address } = useWalletSession();
-  const { getInvoicesByExporter, getInvoice, isLoading: contractLoading } = useInvoiceNFT();
+  const { getExporterInvoices, getInvoice, isLoading: contractLoading } = useSEATrax();
   const router = useRouter();
   
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -90,7 +90,7 @@ export default function PaymentsTracking() {
       setError(null);
       
       // Get all invoices for the exporter
-      const invoiceIds = await getInvoicesByExporter(address);
+      const invoiceIds = await getExporterInvoices(address);
       
       if (!invoiceIds || invoiceIds.length === 0) {
         setPayments([]);
@@ -103,7 +103,8 @@ export default function PaymentsTracking() {
           const invoice = await getInvoice(tokenId);
           
           // Only include invoices that have been withdrawn (ready for payment)
-          if (invoice && invoice.status === 'FUNDED' && invoice.withdrawnAmount > 0n) {
+          // Status 4 = WITHDRAWN (exporter withdrew, awaiting importer payment)
+          if (invoice && (invoice.status === INVOICE_STATUS.WITHDRAWN || invoice.status === INVOICE_STATUS.PAID) && invoice.amountWithdrawn > 0n) {
             // Get payment metadata from Supabase
             let paymentData = null;
             if (isSupabaseConfigured) {
@@ -138,7 +139,7 @@ export default function PaymentsTracking() {
               importerCompany: invoiceMetadata?.importer_name || 'Unknown Importer',
               exporterCompany: 'Your Company', // TODO: Get from exporter profile
               loanAmount,
-              amountWithdrawn: Number(invoice.withdrawnAmount) / 1e18,
+              amountWithdrawn: Number(invoice.amountWithdrawn) / 1e18,
               interestAmount,
               totalDue,
               paymentLink: paymentData?.payment_link || null,
@@ -171,7 +172,7 @@ export default function PaymentsTracking() {
   
   const determinePaymentStatus = (invoice: any, paymentData: any): PaymentRecord['status'] => {
     if (paymentData?.paid_at) return 'paid';
-    if (invoice.status === 'PAID') return 'paid';
+    if (invoice.status === INVOICE_STATUS.PAID) return 'paid';
     if (paymentData?.sent_at) return 'link_sent';
     if (paymentData?.payment_link) return 'link_generated';
     

@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
-import { useAccessControl } from '@/hooks/useAccessControl';
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+import { useState, useEffect, useRef } from 'react';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
+import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +18,9 @@ import {
   Filter,
   Eye,
   Building2,
-  Clock
+  Clock,
+  X,
+  Wallet
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -31,31 +32,49 @@ import type { Invoice, InvoiceStatus } from '@/types';
 // Invoice status mapping for numbers
 const INVOICE_STATUS_MAP: Record<number, { label: string; color: string; bgColor: string }> = {
   0: { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
-  1: { label: 'Approved', color: 'text-green-400', bgColor: 'bg-green-600' },
-  2: { label: 'In Pool', color: 'text-blue-400', bgColor: 'bg-blue-600' },
-  3: { label: 'Funded', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
-  4: { label: 'Paid', color: 'text-green-400', bgColor: 'bg-green-600' },
-  5: { label: 'Cancelled', color: 'text-red-400', bgColor: 'bg-red-600' },
+  1: { label: 'Approved', color: 'text-blue-400', bgColor: 'bg-blue-600' },
+  2: { label: 'In Pool', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
+  3: { label: 'Funded', color: 'text-green-400', bgColor: 'bg-green-600' },
+  4: { label: 'Withdrawn', color: 'text-purple-400', bgColor: 'bg-purple-600' },
+  5: { label: 'Paid', color: 'text-emerald-400', bgColor: 'bg-emerald-600' },
+  6: { label: 'Completed', color: 'text-teal-400', bgColor: 'bg-teal-600' },
+  7: { label: 'Rejected', color: 'text-red-400', bgColor: 'bg-red-600' },
 };
 
 // Status mapping for string values from hook
 const STATUS_STRING_MAP: Record<string, { label: string; color: string; bgColor: string }> = {
-  'PENDING': { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
-  'FINALIZED': { label: 'Approved', color: 'text-green-400', bgColor: 'bg-green-600' },
-  'FUNDRAISING': { label: 'In Pool', color: 'text-blue-400', bgColor: 'bg-blue-600' },
-  'FUNDED': { label: 'Funded', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
-  'PAID': { label: 'Paid', color: 'text-green-400', bgColor: 'bg-green-600' },
-  'CANCELLED': { label: 'Cancelled', color: 'text-red-400', bgColor: 'bg-red-600' },
+  'pending': { label: 'Pending Review', color: 'text-yellow-400', bgColor: 'bg-yellow-600' },
+  'approved': { label: 'Approved', color: 'text-blue-400', bgColor: 'bg-blue-600' },
+  'in_pool': { label: 'In Pool', color: 'text-cyan-400', bgColor: 'bg-cyan-600' },
+  'funded': { label: 'Funded', color: 'text-green-400', bgColor: 'bg-green-600' },
+  'withdrawn': { label: 'Withdrawn', color: 'text-purple-400', bgColor: 'bg-purple-600' },
+  'paid': { label: 'Paid', color: 'text-emerald-400', bgColor: 'bg-emerald-600' },
+  'completed': { label: 'Completed', color: 'text-teal-400', bgColor: 'bg-teal-600' },
+  'rejected': { label: 'Rejected', color: 'text-red-400', bgColor: 'bg-red-600' },
 };
 
 // Helper function to get status info
 const getStatusInfo = (status: InvoiceStatus | number) => {
   return typeof status === 'string' ? 
-    STATUS_STRING_MAP[status] || STATUS_STRING_MAP['PENDING'] :
+    STATUS_STRING_MAP[status] || STATUS_STRING_MAP['pending'] :
     INVOICE_STATUS_MAP[Number(status)] || INVOICE_STATUS_MAP[0];
 };
 
-interface InvoiceWithMetadata extends Invoice {
+interface InvoiceWithMetadata {
+  tokenId: bigint;
+  exporter: string;
+  exporterCompany: string;
+  importerCompany: string;
+  importerEmail: string;
+  shippingDate: bigint;
+  shippingAmount: bigint;
+  loanAmount: bigint;
+  amountInvested: bigint;
+  amountWithdrawn: bigint;
+  status: number;
+  poolId: bigint;
+  ipfsHash: string;
+  createdAt: bigint;
   metadata?: {
     invoice_number: string;
     importer_name: string;
@@ -65,39 +84,70 @@ interface InvoiceWithMetadata extends Invoice {
 }
 
 export default function AdminInvoicesPage() {
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { getUserRoles, isLoading } = useAccessControl();
-  const { getInvoice } = useInvoiceNFT();
+  const { 
+    isConnected, 
+    address, 
+    connect, 
+    disconnect,
+    switchToLiskSepolia,
+    isCorrectNetwork,
+    isMetaMaskInstalled,
+    error: metaMaskError 
+  } = useMetaMaskAdmin();
+  const { checkUserRoles, getAllPendingInvoices, getAllApprovedInvoices, getInvoice, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [invoices, setInvoices] = useState<InvoiceWithMetadata[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<InvoiceWithMetadata[]>([]);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'funded'>('pending');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'funded'>('pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [userRoles, setUserRoles] = useState<any>(null);
+  const [checkingRole, setCheckingRole] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
-  // Check admin role and redirect if not admin
+  // Check admin role when wallet connects
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
+    if (!isConnected || !address) {
+      setCheckingRole(false);
+      setUserRoles(null);
       return;
     }
 
-    if (isLoaded && isConnected && !isLoading && address) {
-      getUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.hasAdminRole) {
-          router.push('/');
-        }
-      });
+    // Check if on correct network
+    if (!isCorrectNetwork) {
+      setCheckingRole(false);
+      setAccessDenied(true);
+      return;
     }
-  }, [isLoaded, isConnected, isLoading, address, getUserRoles, router]);
+
+    // Check admin role
+    console.log('🔍 Checking admin role for MetaMask address:', address);
+    setCheckingRole(true);
+    
+    checkUserRoles(address).then((roles) => {
+      console.log('✅ Role check completed:', roles);
+      setUserRoles(roles);
+      setCheckingRole(false);
+      
+      if (!roles?.isAdmin) {
+        console.warn('❌ Access denied: User is not admin');
+        console.log('📋 Current address:', address);
+        console.log('💡 To grant admin role, run:');
+        console.log(`   NEW_ADMIN_ADDRESS=${address} npx hardhat run scripts/grant-admin.js --network lisk-sepolia`);
+        setAccessDenied(true);
+      }
+    }).catch(err => {
+      console.error('❌ Error checking roles:', err);
+      setCheckingRole(false);
+      setAccessDenied(true);
+    });
+  }, [isConnected, address, isCorrectNetwork, checkUserRoles]);
 
   // Fetch invoices when admin role is confirmed
   useEffect(() => {
-    if (userRoles?.hasAdminRole) {
+    if (userRoles?.isAdmin) {
       fetchInvoices();
     }
   }, [userRoles]);
@@ -106,13 +156,15 @@ export default function AdminInvoicesPage() {
   useEffect(() => {
     let filtered = invoices;
 
-    // Apply status filter  
+    // Apply status filter (invoice.status is a number from contract)
     if (filter === 'pending') {
-      filtered = filtered.filter(inv => inv.status === 'PENDING');
+      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.PENDING);
     } else if (filter === 'approved') {
-      filtered = filtered.filter(inv => inv.status === 'FINALIZED'); // Hook returns 'FINALIZED' for approved
+      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.APPROVED);
+    } else if (filter === 'rejected') {
+      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.REJECTED);
     } else if (filter === 'funded') {
-      filtered = filtered.filter(inv => inv.status === 'FUNDED');
+      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.FUNDED);
     }
 
     // Apply search filter
@@ -131,36 +183,47 @@ export default function AdminInvoicesPage() {
     try {
       setLoadingInvoices(true);
       
-      // Get all invoice metadata from Supabase
-      const { data: metadataList, error: metadataError } = await supabase
-        .from('invoice_metadata')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (metadataError) throw metadataError;
-
-      // Get invoice data from smart contract for each metadata
+      // Get all invoice IDs from blockchain (source of truth)
+      const [pendingIds, approvedIds] = await Promise.all([
+        getAllPendingInvoices(),
+        getAllApprovedInvoices()
+      ]);
+      
+      // Combine all IDs for comprehensive list
+      const allInvoiceIds = [...pendingIds, ...approvedIds];
+      
+      // Get full invoice data from blockchain
       const invoicesWithData: InvoiceWithMetadata[] = [];
       
-      for (const metadata of metadataList || []) {
+      for (const invoiceId of allInvoiceIds) {
         try {
-          const invoiceData = await getInvoice(BigInt(metadata.token_id));
+          const invoiceData = await getInvoice(invoiceId);
           if (invoiceData) {
+            // Try to enrich with Supabase metadata
+            const { data: metadata } = await supabase
+              .from('invoice_metadata')
+              .select('*')
+              .eq('token_id', Number(invoiceId))
+              .single();
+            
             invoicesWithData.push({
               ...invoiceData,
-              metadata: {
+              metadata: metadata ? {
                 invoice_number: metadata.invoice_number,
                 importer_name: metadata.importer_name || 'Unknown',
                 goods_description: metadata.goods_description || '',
                 created_at: metadata.created_at,
-              }
+              } : undefined
             });
           }
         } catch (error) {
-          console.error(`Failed to fetch invoice ${metadata.token_id}:`, error);
+          console.error(`Failed to fetch invoice ${invoiceId}:`, error);
         }
       }
 
+      // Sort by creation date (newest first)
+      invoicesWithData.sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
+      
       setInvoices(invoicesWithData);
     } catch (error: any) {
       setMessage({ type: 'error', text: 'Failed to load invoices: ' + error.message });
@@ -170,22 +233,220 @@ export default function AdminInvoicesPage() {
   };
 
   const getFilterStats = () => {
-    const pending = invoices.filter(inv => inv.status === 'PENDING').length;
-    const approved = invoices.filter(inv => inv.status === 'FINALIZED').length;
-    const funded = invoices.filter(inv => inv.status === 'FUNDED').length;
-    return { pending, approved, funded, total: invoices.length };
+    const pending = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.PENDING).length;
+    const approved = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.APPROVED).length;
+    const rejected = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.REJECTED).length;
+    const funded = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.FUNDED).length;
+    return { pending, approved, rejected, funded, total: invoices.length };
   };
 
   const stats = getFilterStats();
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole) {
+  // Show loading while checking roles
+  if (checkingRole) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading...</div>
+          <div className="text-gray-400">Checking admin permissions...</div>
         </div>
+      </div>
+    );
+  }
+
+  // Show access denied error instead of redirecting
+  if (accessDenied || !isConnected || (isConnected && !userRoles?.isAdmin)) {
+    // MetaMask not installed
+    if (!isMetaMaskInstalled) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+          <Card className="bg-slate-800 border-red-500 max-w-2xl w-full">
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <AlertCircle className="h-8 w-8 text-red-400" />
+                <CardTitle className="text-white text-2xl">MetaMask Required</CardTitle>
+              </div>
+              <CardDescription className="text-gray-400">
+                Admin panel requires MetaMask browser extension
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="border-blue-500 bg-blue-50">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <p className="font-semibold mb-2">Install MetaMask</p>
+                  <p className="text-sm">
+                    Admin pages use MetaMask for direct EOA access (no account abstraction).
+                  </p>
+                </AlertDescription>
+              </Alert>
+              <div className="flex gap-3">
+                <Button 
+                  onClick={() => window.open('https://metamask.io/download/', '_blank')}
+                  className="flex-1 bg-orange-600 hover:bg-orange-700"
+                >
+                  Install MetaMask
+                </Button>
+                <Button onClick={() => router.push('/')} variant="outline" className="flex-1">
+                  Go to Home
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    // Wrong network
+    if (isConnected && !isCorrectNetwork) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+          <Card className="bg-slate-800 border-yellow-500 max-w-2xl w-full">
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <AlertCircle className="h-8 w-8 text-yellow-400" />
+                <CardTitle className="text-white text-2xl">Wrong Network</CardTitle>
+              </div>
+              <CardDescription className="text-gray-400">
+                Please switch to Lisk Sepolia network
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="border-blue-500 bg-blue-50">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <p className="text-sm">
+                    Admin panel requires Lisk Sepolia Testnet network.
+                  </p>
+                </AlertDescription>
+              </Alert>
+              <Button onClick={switchToLiskSepolia} className="w-full bg-cyan-600 hover:bg-cyan-700">
+                Switch to Lisk Sepolia
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    // Wallet not connected
+    if (!isConnected) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+          <Card className="bg-slate-800 border-orange-500 max-w-2xl w-full">
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <Wallet className="h-8 w-8 text-orange-400" />
+                <CardTitle className="text-white text-2xl">Connect MetaMask</CardTitle>
+              </div>
+              <CardDescription className="text-gray-400">
+                Connect your MetaMask wallet to access admin panel
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {metaMaskError && (
+                <Alert className="border-red-500 bg-red-50">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-800">
+                    {metaMaskError}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Alert className="border-blue-500 bg-blue-50">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <p className="font-semibold mb-2">Admin Access with MetaMask</p>
+                  <p className="text-sm">
+                    Admin pages use MetaMask for direct EOA connection.
+                    This allows you to use your existing admin role without account abstraction.
+                  </p>
+                </AlertDescription>
+              </Alert>
+
+              <div className="bg-slate-700 p-4 rounded-lg">
+                <p className="text-white font-semibold mb-3">After connecting:</p>
+                <ol className="list-decimal list-inside space-y-2 text-gray-300 text-sm">
+                  <li>MetaMask will request connection approval</li>
+                  <li>Your address will be verified for admin role</li>
+                  <li>If you have admin role → access granted</li>
+                  <li>If you don't have admin role → see grant instructions</li>
+                </ol>
+              </div>
+
+              <Button 
+                onClick={connect}
+                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white"
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                Connect MetaMask
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    // Wallet connected but not admin
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <Card className="bg-slate-800 border-red-500 max-w-2xl w-full">
+          <CardHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <AlertCircle className="h-8 w-8 text-red-400" />
+              <CardTitle className="text-white text-2xl">Access Denied</CardTitle>
+            </div>
+            <CardDescription className="text-gray-400">
+              You don't have admin permissions to access this page
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Alert className="border-yellow-500 bg-yellow-50">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <AlertDescription className="text-yellow-800">
+                <div className="space-y-2">
+                  <p className="font-semibold">Your wallet address:</p>
+                  <code className="block bg-yellow-100 p-2 rounded text-sm break-all">
+                    {address || 'Not available'}
+                  </code>
+                </div>
+              </AlertDescription>
+            </Alert>
+
+            <div className="bg-slate-700 p-4 rounded-lg">
+              <p className="text-white font-semibold mb-3">To grant admin role to this address:</p>
+              <ol className="list-decimal list-inside space-y-2 text-gray-300 text-sm">
+                <li>Open terminal in project directory</li>
+                <li>Run the following command:</li>
+              </ol>
+              <code className="block bg-slate-900 p-3 rounded mt-2 text-cyan-400 text-xs break-all">
+                NEW_ADMIN_ADDRESS={address} npx hardhat run scripts/grant-admin.js --network lisk-sepolia
+              </code>
+              <p className="text-gray-400 text-xs mt-3">
+                Or use the check-admin-role.js script to verify if role was already granted:
+              </p>
+              <code className="block bg-slate-900 p-3 rounded mt-2 text-cyan-400 text-xs break-all">
+                node check-admin-role.js {address}
+              </code>
+            </div>
+
+            <div className="flex gap-3">
+              <Button 
+                onClick={() => router.push('/')}
+                variant="outline"
+                className="flex-1"
+              >
+                Go to Home
+              </Button>
+              <Button 
+                onClick={() => window.location.reload()}
+                className="flex-1 bg-cyan-600 hover:bg-cyan-700"
+              >
+                Retry After Granting Role
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -275,7 +536,7 @@ export default function AdminInvoicesPage() {
           <CardContent className="p-6">
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
               {/* Filter Tabs */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   variant={filter === 'all' ? 'default' : 'outline'}
                   size="sm"
@@ -302,6 +563,15 @@ export default function AdminInvoicesPage() {
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Approved ({stats.approved})
+                </Button>
+                <Button
+                  variant={filter === 'rejected' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('rejected')}
+                  className={filter === 'rejected' ? 'bg-red-600 hover:bg-red-700' : ''}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Rejected ({stats.rejected})
                 </Button>
                 <Button
                   variant={filter === 'funded' ? 'default' : 'outline'}
@@ -337,6 +607,7 @@ export default function AdminInvoicesPage() {
             <CardDescription className="text-gray-400">
               {filter === 'pending' && 'Invoices awaiting admin review and approval'}
               {filter === 'approved' && 'Approved invoices ready for pool inclusion'}
+              {filter === 'rejected' && 'Invoices that have been rejected'}
               {filter === 'funded' && 'Funded invoices in active investment pools'}
               {filter === 'all' && 'All registered invoices in the platform'}
             </CardDescription>
@@ -356,6 +627,7 @@ export default function AdminInvoicesPage() {
                 <h3 className="text-lg font-medium text-gray-300 mb-2">
                   {filter === 'pending' && 'No pending invoices'}
                   {filter === 'approved' && 'No approved invoices'}
+                  {filter === 'rejected' && 'No rejected invoices'}
                   {filter === 'funded' && 'No funded invoices'}
                   {filter === 'all' && 'No invoices found'}
                 </h3>
@@ -406,7 +678,7 @@ export default function AdminInvoicesPage() {
                               <p className="text-gray-400">Shipping Date</p>
                               <p className="text-white font-medium flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
-                                {formatDate(invoice.invoiceDate)}
+                                {formatDate(Number(invoice.shippingDate) * 1000)}
                               </p>
                             </div>
                           </div>
@@ -415,7 +687,7 @@ export default function AdminInvoicesPage() {
                             <div>
                               <p className="text-gray-400">Shipping Amount</p>
                               <p className="text-white font-medium">
-                                {formatCurrency(Number(invoice.invoiceValue) / 100)}
+                                {formatCurrency(Number(invoice.shippingAmount) / 100)}
                               </p>
                             </div>
                             <div>
@@ -427,7 +699,7 @@ export default function AdminInvoicesPage() {
                             <div>
                               <p className="text-gray-400">Amount Invested</p>
                               <p className="text-green-400 font-medium">
-                                {formatCurrency(Number(invoice.fundedAmount) / 100)}
+                                {formatCurrency(Number(invoice.amountInvested) / 1e18 * 3000)}
                               </p>
                             </div>
                           </div>

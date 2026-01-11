@@ -1,8 +1,8 @@
 {
   "network": "lisk-sepolia",
-  "contractAddress": "0x5c50eD2f705C6FaDdB0AcC478edDB4Edf109A5f2",
+  "contractAddress": "0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E",
   "deployer": "0x3023A1B0fAf10DeE06a0aA5197eE00882b401152",
   "platformTreasury": "0x8ebc2bf5a904a5da2e09b7a8ab5d5aaec32610f8",
-  "deployedAt": "2025-11-29T09:46:34.781Z",
-  "blockNumber": 29548300
+  "deployedAt": "2026-01-11T23:26:37.327Z",
+  "blockNumber": 31430501
 }

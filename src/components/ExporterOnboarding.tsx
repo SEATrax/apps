@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Upload, Check, HelpCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, Check, HelpCircle, Sparkles } from 'lucide-react';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import { useActiveAccount } from 'panna-sdk';
 import { toast } from 'sonner';
+import { generateExporterOnboardingData } from '@/lib/auto-fill-data';
 
 interface ExporterOnboardingProps {
   onComplete: () => void;
@@ -16,7 +17,7 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
   
   const activeAccount = useActiveAccount();
   const { createProfile } = useExporterProfile();
-  const { grantExporterRole } = useAccessControl();
+  const { registerExporter, checkUserRoles } = useSEATrax();
   
   const [formData, setFormData] = useState({
     companyName: '',
@@ -52,14 +53,54 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
   
   const handleSubmit = async () => {
     if (!activeAccount?.address) {
-      toast.error('Please connect your wallet first');
+      toast.error('❌ Please connect your wallet first');
       return;
     }
     
     try {
       setSubmitting(true);
       
-      // 1. Create exporter profile in Supabase
+      console.log('🔍 Pre-flight checks...');
+      console.log('✓ Wallet connected:', activeAccount.address);
+      console.log('✓ Form data ready');
+      
+      // Check if already registered
+      console.log('🔍 Checking registration status...');
+      const roles = await checkUserRoles(activeAccount.address);
+      
+      if (roles.isExporter) {
+        console.log('⚠️ Already registered as exporter on blockchain');
+        toast.info('You are already registered on blockchain. Creating/updating profile...');
+        
+        // Skip blockchain registration, just create/update profile
+        console.log('📝 Creating/updating profile in database...');
+        await createProfile({
+          company_name: formData.companyName,
+          tax_id: formData.taxId,
+          country: formData.country,
+          export_license: formData.exportLicense,
+          phone: formData.phone,
+          address: formData.address,
+        });
+        
+        toast.success('✅ Profile updated! You can now create invoices.');
+        onComplete();
+        return;
+      }
+      
+      // 1. Self-register as exporter on-chain
+      console.log('📝 Step 1: Registering on blockchain...');
+      const result = await registerExporter();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Blockchain registration failed');
+      }
+      
+      console.log('✅ Blockchain registration successful!');
+      console.log('📝 Transaction hash:', result.txHash);
+      
+      // 2. Create exporter profile in Supabase
+      console.log('📝 Step 2: Creating profile in database...');
       await createProfile({
         company_name: formData.companyName,
         tax_id: formData.taxId,
@@ -69,13 +110,16 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
         address: formData.address,
       });
       
-      // Note: Role will be granted by admin after verification
-      
-      toast.success('Registration submitted successfully! Your account will be verified by admin.');
+      toast.success('✅ Registration successful! You can now create invoices. Admin will verify your account.');
       onComplete();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Registration failed:', error);
-      toast.error('Registration failed. Please try again.');
+      console.error('Error type:', typeof error);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      
+      const errorMessage = error?.message || error?.toString() || 'Registration failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -102,18 +146,54 @@ export default function ExporterOnboarding({ onComplete, onBack }: ExporterOnboa
     return false;
   };
 
+  const handleAutoFill = () => {
+    const randomData = generateExporterOnboardingData();
+    setFormData({
+      ...formData,
+      companyName: randomData.companyName,
+      country: randomData.country,
+      taxId: randomData.taxId,
+      businessType: randomData.businessType,
+      email: randomData.email,
+      phone: randomData.phone,
+      picName: randomData.picName,
+      address: randomData.address,
+      exportLicense: randomData.exportLicense,
+    });
+    
+    // Auto-check required documents to bypass validation
+    setUploadedDocs({
+      license: true,
+      registration: true,
+      bankVerification: true,
+      idCard: true,
+      selfie: true,
+    });
+    
+    toast.success('🎲 Form auto-filled with test data. Review and submit!');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-8">
       <div className="max-w-3xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <button 
-            onClick={handleBack}
-            className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 mb-4 hover-color hover-scale-sm"
-          >
-            <ArrowLeft className="w-5 h-5 hover-bounce" />
-            Back
-          </button>
+          <div className="flex items-center justify-between mb-4">
+            <button 
+              onClick={handleBack}
+              className="flex items-center gap-2 text-slate-400 hover:text-cyan-400 hover-color hover-scale-sm"
+            >
+              <ArrowLeft className="w-5 h-5 hover-bounce" />
+              Back
+            </button>
+            <button
+              onClick={handleAutoFill}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 rounded-lg hover-lift transition-all"
+            >
+              <Sparkles className="w-4 h-4" />
+              Auto-fill Test Data
+            </button>
+          </div>
           <h1 className="text-3xl text-white mb-2">Exporter Registration</h1>
           <p className="text-slate-400">Complete your profile to start receiving funding</p>
         </div>
