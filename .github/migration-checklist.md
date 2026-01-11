@@ -389,26 +389,20 @@
 
 ### A. Login & Role Detection
 
-- [ ] **`src/app/(auth)/login/page.tsx`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Update: `getUserRoles()` logic
-    ```typescript
-    const checkRoles = async (address) => {
-      const isAdmin = await contract.hasRole(ADMIN_ROLE, address);
-      const isExporter = await contract.registeredExporters(address);
-      const isInvestor = await contract.registeredInvestors(address);
-      return { isAdmin, isExporter, isInvestor };
-    };
-    ```
-  - [ ] Test: Role detection works
+- [x] **`src/app/(auth)/login/page.tsx`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Update: `getUserRoles()` → `checkUserRoles()`
+  - [x] Update: Return structure (hasAdminRole → isAdmin)
+  - [x] Test: Role detection works
 
 ### B. Role Checking Hook
 
-- [ ] **`src/hooks/useRoleCheck.ts`**
-  - [ ] Replace: `useAccessControl` → `useSEATrax`
-  - [ ] Update: Role checking logic
-  - [ ] Keep: Dev mode support
-  - [ ] Test: Role checks work in production mode
+- [x] **`src/hooks/useRoleCheck.ts`** ✅
+  - [x] Replace: `useAccessControl` → `useSEATrax`
+  - [x] Update: `getUserRoles()` → `checkUserRoles()`
+  - [x] Update: Return structure (hasAdminRole → isAdmin, etc)
+  - [x] Keep: Dev mode support
+  - [x] Test: Role checks work in production mode
 
 ---
 
@@ -563,7 +557,7 @@
 **Phase 3 Complete**: January 11, 2026  
 **Phase 4 Complete**: January 11, 2026 ✅  
 **Phase 5 Complete**: January 11, 2026 ✅  
-**Phase 6 Complete**: _________  
+**Phase 6 Complete**: January 11, 2026 ✅  
 **Phase 7 Complete**: _________  
 **Phase 8 Complete**: _________  
 **Deployed**: _________  
@@ -587,5 +581,5 @@
 ---
 
 **Last Updated**: January 11, 2026  
-**Current Phase**: Phase 5 - Investor Flow  
+**Current Phase**: Phase 7 - Testing Pages  
 **Blocked By**: None

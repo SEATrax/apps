@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useActiveAccount } from 'panna-sdk';
-import { useAccessControl } from './useAccessControl';
+import { useSEATrax } from './useSEATrax';
 import { useDevMode } from '@/contexts/DevModeContext';
 import { appConfig } from '@/config';
 
@@ -21,7 +21,7 @@ interface RoleCheckResult {
  */
 export function useRoleCheck(): RoleCheckResult {
   const activeAccount = useActiveAccount();
-  const { getUserRoles } = useAccessControl();
+  const { checkUserRoles } = useSEATrax();
   const { isDevMode, devRole } = useDevMode();
   
   const [roles, setRoles] = useState({
@@ -85,13 +85,13 @@ export function useRoleCheck(): RoleCheckResult {
 
         // Fetch roles from smart contract
         console.log('📡 Fetching roles from smart contract...');
-        const contractRoles = await getUserRoles(activeAccount.address);
+        const contractRoles = await checkUserRoles(activeAccount.address);
         console.log('📋 Contract roles:', contractRoles);
         
         setRoles({
-          isAdmin: contractRoles.hasAdminRole,
-          isExporter: contractRoles.hasExporterRole,
-          isInvestor: contractRoles.hasInvestorRole,
+          isAdmin: contractRoles.isAdmin,
+          isExporter: contractRoles.isExporter,
+          isInvestor: contractRoles.isInvestor,
         });
       } catch (error) {
         console.error('❌ Error checking roles:', error);
@@ -102,7 +102,7 @@ export function useRoleCheck(): RoleCheckResult {
     }
 
     checkRoles();
-  }, [activeAccount?.address, getUserRoles, isDevMode, devRole]);
+  }, [activeAccount?.address, checkUserRoles, isDevMode, devRole]);
 
   return {
     ...roles,

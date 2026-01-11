@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useInvestorProfile } from '@/hooks/useInvestorProfile';
-import { useAccessControl } from '@/hooks/useAccessControl';
+import { useSEATrax } from '@/hooks/useSEATrax';
 import LandingPage from '@/components/LandingPage';
 import RoleSelection from '@/components/RoleSelection';
 
@@ -16,7 +16,7 @@ export default function LoginPage() {
   
   const { profile: exporterProfile, loading: exporterLoading } = useExporterProfile();
   const { profile: investorProfile, loading: investorLoading } = useInvestorProfile();
-  const { getUserRoles, isLoading: rolesLoading } = useAccessControl();
+  const { checkUserRoles, isLoading: rolesLoading } = useSEATrax();
   
   const [checking, setChecking] = useState(false);
   const [adminCheck, setAdminCheck] = useState(false);
@@ -29,9 +29,9 @@ export default function LoginPage() {
 
     if (!adminCheck && activeAccount?.address) {
       setAdminCheck(true);
-      getUserRoles(activeAccount.address).then((roles) => {
+      checkUserRoles(activeAccount.address).then((roles) => {
         // If user has admin role, redirect to admin dashboard
-        if (roles?.hasAdminRole) {
+        if (roles?.isAdmin) {
           router.push('/admin');
           return;
         }
@@ -70,7 +70,7 @@ export default function LoginPage() {
         router.push('/select-role');
       });
     }
-  }, [isConnected, exporterProfile, investorProfile, exporterLoading, investorLoading, rolesLoading, activeAccount, adminCheck, getUserRoles, router]);
+  }, [isConnected, exporterProfile, investorProfile, exporterLoading, investorLoading, rolesLoading, activeAccount, adminCheck, checkUserRoles, router]);
 
   const handleRoleSelect = (role: 'exporter' | 'investor') => {
     router.push(`/onboarding/${role}`);
