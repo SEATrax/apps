@@ -29,6 +29,10 @@ const requiredEnvVars = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
 } as const;
 
+// Dev mode configuration
+export const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+export const DEV_PAYMENT_AMOUNT = process.env.NEXT_PUBLIC_DEV_PAYMENT_AMOUNT || '0.0001';
+
 // Server-only environment variables
 const serverEnvVars = {
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
