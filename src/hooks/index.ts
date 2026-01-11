@@ -2,6 +2,8 @@
 export { usePanna } from './usePanna';
 export { useWalletSession } from './useWalletSession';
 export { useAuthFlow } from './useAuthFlow';
+export { useMetaMaskAdmin } from './useMetaMaskAdmin';
+export { useAdminContract } from './useAdminContract';
 
 // Profile hooks
 export { useExporterProfile } from './useExporterProfile';

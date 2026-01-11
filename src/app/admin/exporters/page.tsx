@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,17 +16,19 @@ import {
   FileText, 
   Globe,
   Search,
-  Filter
+  Filter,
+  Wallet
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase, type Database } from '@/lib/supabase';
 
 type Exporter = Database['public']['Tables']['exporters']['Row'];
 
 export default function ExporterVerificationPage() {
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { verifyExporter, checkUserRoles, isLoading } = useSEATrax();
+  const { isConnected, address } = useMetaMaskAdmin();
+  const { verifyExporter, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [exporters, setExporters] = useState<Exporter[]>([]);
@@ -36,31 +38,13 @@ export default function ExporterVerificationPage() {
   const [loadingExporters, setLoadingExporters] = useState(true);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [userRoles, setUserRoles] = useState<any>(null);
 
-  // Check admin role and redirect if not admin
+  // Fetch exporters from Supabase when connected
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-      return;
-    }
-
-    if (isLoaded && isConnected && !isLoading && address) {
-      checkUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.isAdmin) {
-          router.push('/');
-        }
-      });
-    }
-  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
-
-  // Fetch exporters from Supabase
-  useEffect(() => {
-    if (userRoles?.isAdmin) {
+    if (isConnected && address) {
       fetchExporters();
     }
-  }, [userRoles]);
+  }, [isConnected, address]);
 
   // Filter exporters based on selected filter and search term
   useEffect(() => {
@@ -152,21 +136,10 @@ export default function ExporterVerificationPage() {
 
   const stats = getFilterStats();
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading...</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -432,5 +405,6 @@ export default function ExporterVerificationPage() {
         </Card>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

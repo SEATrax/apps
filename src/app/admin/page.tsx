@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,8 @@ import {
   Plus,
   ArrowUpRight,
   AlertCircle,
-  Loader2
+  Loader2,
+  Wallet
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import AdminHeader from '@/components/AdminHeader';
@@ -27,34 +28,57 @@ import { supabase } from '@/lib/supabase';
 import { formatCurrency } from '@/lib/utils';
 
 export default function AdminDashboard() {
-  const { isLoaded, isConnected, address } = useWalletSession();
+  const { 
+    isConnected, 
+    address, 
+    connect, 
+    switchToLiskSepolia, 
+    isCorrectNetwork, 
+    isMetaMaskInstalled,
+    error: walletError 
+  } = useMetaMaskAdmin();
   const { checkUserRoles, getAllOpenPools, getPool, isLoading: contractLoading } = useSEATrax();
   const router = useRouter();
   
   const [userRoles, setUserRoles] = useState<any>(null);
   const [platformStats, setPlatformStats] = useState<any>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check admin role and redirect if not admin
+  // Function to connect MetaMask
+  const handleConnectWallet = async () => {
+    const success = await connect();
+    if (!success) {
+      console.error('Failed to connect MetaMask');
+    }
+  };
+
+  // Check admin role when MetaMask connected
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
+    // Don't check role if not connected or wrong network
+    if (!isMetaMaskInstalled || !isCorrectNetwork || !isConnected || !address) {
+      setCheckingRole(false);
       return;
     }
 
-    if (isLoaded && isConnected && !contractLoading && address) {
-      checkUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.isAdmin) {
-          router.push('/');
-        }
-      }).catch((error) => {
-        setError('Failed to check user roles');
-        console.error('Error checking roles:', error);
-      });
-    }
-  }, [isLoaded, isConnected, contractLoading, address, checkUserRoles, router]);
+    // Check admin role
+    setCheckingRole(true);
+    
+    checkUserRoles(address).then((roles) => {
+      setUserRoles(roles);
+      setCheckingRole(false);
+      
+      if (!roles?.isAdmin) {
+        setAccessDenied(true);
+      }
+    }).catch(err => {
+      console.error('Error checking roles:', err);
+      setCheckingRole(false);
+      setAccessDenied(true);
+    });
+  }, [isMetaMaskInstalled, isCorrectNetwork, isConnected, address, checkUserRoles]);
 
   // Load platform statistics
   useEffect(() => {
@@ -113,31 +137,138 @@ export default function AdminDashboard() {
     loadStats();
   }, [isConnected, userRoles, getAllOpenPools, getPool]);
 
-  // Show loading screen while checking authentication
-  if (!isLoaded || !isConnected || contractLoading) {
+  // Show loading ONLY while checking roles or loading stats
+  if (checkingRole || (userRoles?.isAdmin && isLoadingStats)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-950">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading admin dashboard...</div>
+          <div className="text-gray-400">
+            {checkingRole && 'Checking admin permissions...'}
+            {!checkingRole && isLoadingStats && 'Loading dashboard...'}
+          </div>
         </div>
       </div>
     );
   }
 
-  // Redirect if not admin
-  if (!userRoles?.isAdmin) {
-    return null;
+  // MetaMask not installed
+  if (!isMetaMaskInstalled) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-orange-500 bg-orange-50">
+            <AlertCircle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              <p className="font-semibold mb-2">MetaMask Not Installed</p>
+              <p className="text-sm">Admin dashboard requires MetaMask wallet. Please install MetaMask extension first.</p>
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button 
+              onClick={() => window.open('https://metamask.io/download/', '_blank')}
+              className="bg-cyan-600"
+            >
+              Install MetaMask
+            </Button>
+            <Button onClick={() => router.push('/')} variant="outline">
+              Go Home
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Wrong network
+  if (isConnected && !isCorrectNetwork) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-orange-500 bg-orange-50">
+            <AlertCircle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              <p className="font-semibold mb-2">Wrong Network</p>
+              <p className="text-sm">Please switch to Lisk Sepolia Testnet (Chain ID: 4202)</p>
+              <p className="text-sm mt-1">Current address: <code className="bg-orange-100 px-2 py-1 rounded">{address}</code></p>
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button onClick={switchToLiskSepolia} className="bg-cyan-600">
+              Switch to Lisk Sepolia
+            </Button>
+            <Button onClick={() => router.push('/')} variant="outline">
+              Go Home
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Wallet not connected
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-orange-500 bg-orange-50">
+            <Wallet className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              <p className="font-semibold mb-2">MetaMask Wallet Not Connected</p>
+              <p className="text-sm">Please connect your MetaMask wallet to access admin dashboard.</p>
+              {walletError && (
+                <p className="text-sm mt-2 text-red-600">Error: {walletError}</p>
+              )}
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button onClick={handleConnectWallet} className="bg-cyan-600">
+              <Wallet className="h-4 w-4 mr-2" />
+              Connect MetaMask
+            </Button>
+            <Button onClick={() => router.push('/')} variant="outline">
+              Go Home
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Access denied - not admin
+  if (accessDenied || !userRoles?.isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-red-500 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">
+              <p className="font-semibold mb-2">Access Denied - Admin Role Required</p>
+              <p className="text-sm">Your address: <code className="bg-red-100 px-2 py-1 rounded">{address}</code></p>
+              <p className="text-sm mt-2">Run this command to grant admin role:</p>
+              <code className="block bg-red-100 p-2 rounded mt-1 text-xs break-all">
+                NEW_ADMIN_ADDRESS={address} npx hardhat run scripts/grant-admin.js --network lisk-sepolia
+              </code>
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button onClick={() => router.push('/')} variant="outline">
+              Go Home
+            </Button>
+            <Button onClick={() => window.location.reload()} className="bg-cyan-600">
+              Retry After Granting Role
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const quickActions = [
-    {
-      title: 'Verify Exporters',
-      description: 'Review and approve new exporter registrations',
-      icon: UserCheck,
-      href: '/admin/exporters',
-      color: 'bg-blue-500',
-    },
     {
       title: 'Review Invoices', 
       description: 'Approve or reject invoice submissions',
@@ -153,8 +284,8 @@ export default function AdminDashboard() {
       color: 'bg-purple-500',
     },
     {
-      title: 'Manage Roles',
-      description: 'Grant roles to wallet addresses for testing',
+      title: 'Grant Admin Role',
+      description: 'Grant admin role to new addresses',
       icon: Shield,
       href: '/admin/roles',
       color: 'bg-amber-500',

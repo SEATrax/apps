@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate, formatDateString, formatAddress } from '@/lib/utils';
 import { INVOICE_STATUS } from '@/lib/contract';
@@ -75,7 +76,7 @@ type PaymentStatus = 'all' | 'link_generated' | 'pending_confirmation' | 'paid' 
 type InvoiceStatus = 'all' | 'funded' | 'paid';
 
 export default function PaymentTrackingPage() {
-  const { isLoaded, isConnected, address } = useWalletSession();
+  const { isConnected, address, connect, switchToLiskSepolia, isCorrectNetwork, isMetaMaskInstalled, error: walletError } = useMetaMaskAdmin();
   const { checkUserRoles, getInvoice, markInvoicePaid, isLoading } = useSEATrax();
   const router = useRouter();
   
@@ -87,28 +88,42 @@ export default function PaymentTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<InvoiceStatus>('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<PaymentStatus>('all');
 
-  // Check admin role and redirect if not admin
-  useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-      return;
-    }
+  const handleConnectWallet = async () => {
+    await connect();
+  };
 
-    if (isLoaded && isConnected && !isLoading && address) {
-      checkUserRoles(address).then((roles) => {
+  // Check admin role
+  useEffect(() => {
+    const verifyAdminRole = async () => {
+      if (!isMetaMaskInstalled || !isCorrectNetwork || !isConnected || !address) {
+        setCheckingRole(false);
+        return;
+      }
+
+      try {
+        const roles = await checkUserRoles(address);
         setUserRoles(roles);
         if (!roles?.isAdmin) {
-          router.push('/');
+          setAccessDenied(true);
         }
-      });
-    }
-  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
+      } catch (error) {
+        console.error('Error checking roles:', error);
+        setAccessDenied(true);
+      } finally {
+        setCheckingRole(false);
+      }
+    };
+
+    verifyAdminRole();
+  }, [isMetaMaskInstalled, isCorrectNetwork, isConnected, address, checkUserRoles]);
 
   // Load data when admin role is confirmed
   useEffect(() => {
@@ -408,34 +423,23 @@ export default function PaymentTrackingPage() {
     );
   };
 
-  // Show loading or access check
-  if (!isLoaded || isLoading) {
+  // Show loading while data is being fetched
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-cyan-600 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isConnected || !userRoles?.isAdmin) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-        <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800 w-full max-w-md">
-          <CardContent className="p-8 text-center">
-            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h2 className="text-white font-semibold mb-2">Access Denied</h2>
-            <p className="text-slate-400">Admin privileges required to access this page.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <AdminAuthGuard>
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-cyan-600 animate-spin" />
+        </div>
+      </AdminAuthGuard>
     );
   }
 
   const { totalInvoices, paidInvoices, totalAmount, paidAmount, pendingConfirmations } = calculateTotals();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
@@ -768,5 +772,6 @@ export default function PaymentTrackingPage() {
         </Tabs>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

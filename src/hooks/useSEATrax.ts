@@ -531,7 +531,12 @@ export function useSEATrax() {
         createdAt: isArray ? result[11] : (result.createdAt ?? result[11]),
       };
     } catch (err: any) {
-      console.error('Failed to get pool:', err);
+      // Log detailed error for debugging
+      if (err.name === 'PositionOutOfBoundsError') {
+        console.error(`Pool ${poolId}: Data decode error (corrupt or invalid pool data)`, err.message);
+      } else {
+        console.error(`Pool ${poolId}: Failed to get pool`, err.message || err);
+      }
       return null;
     }
   }, [client, getContractInstance]);
@@ -1040,6 +1045,7 @@ export function useSEATrax() {
    */
   const checkUserRoles = useCallback(async (accountAddress: string) => {
     if (!client) {
+      console.log('⚠️ checkUserRoles: Client not initialized');
       return {
         isAdmin: false,
         isExporter: false,
@@ -1049,6 +1055,9 @@ export function useSEATrax() {
 
     try {
       const contract = getContractInstance();
+      
+      console.log('🔍 Checking roles for address:', accountAddress);
+      console.log('📋 Using ADMIN_ROLE:', ROLES.ADMIN);
       
       // Check all three role types
       const [isAdmin, isExporter, isInvestor] = await Promise.all([
@@ -1068,6 +1077,8 @@ export function useSEATrax() {
           params: [accountAddress],
         }),
       ]);
+      
+      console.log('✅ Role check results:', { isAdmin, isExporter, isInvestor });
       
       return {
         isAdmin: isAdmin as boolean,

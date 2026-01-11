@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useWalletSession } from '@/hooks/useWalletSession';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate, formatAddress } from '@/lib/utils';
 import type { Pool, Invoice } from '@/types';
@@ -89,7 +90,7 @@ export default function PoolDetailPage() {
   const router = useRouter();
   const poolId = params.id as string;
   
-  const { isLoaded, isConnected, address } = useWalletSession();
+  const { isConnected, address, connect, switchToLiskSepolia, isCorrectNetwork, isMetaMaskInstalled, error: walletError } = useMetaMaskAdmin();
   const { 
     checkUserRoles,
     getPool,
@@ -102,6 +103,8 @@ export default function PoolDetailPage() {
   } = useSEATrax();
   
   const [userRoles, setUserRoles] = useState<any>(null);
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [pool, setPool] = useState<PoolData | null>(null);
   const [poolMetadata, setPoolMetadata] = useState<PoolMetadata | null>(null);
   const [invoices, setInvoices] = useState<InvoiceWithMetadata[]>([]);
@@ -111,22 +114,30 @@ export default function PoolDetailPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Check admin role and redirect if not admin
+  const handleConnectWallet = async () => { await connect(); };
+
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
+    if (!isConnected || !address) {
+      setCheckingRole(false);
+      setAccessDenied(true);
       return;
     }
-
-    if (isLoaded && isConnected && !isLoading && address) {
-      checkUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.isAdmin) {
-          router.push('/');
-        }
-      });
+    if (!isCorrectNetwork) {
+      setCheckingRole(false);
+      return;
     }
-  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
+    setCheckingRole(true);
+    checkUserRoles(address).then((roles) => {
+      setUserRoles(roles);
+      setCheckingRole(false);
+      if (!roles?.isAdmin) {
+        setAccessDenied(true);
+      }
+    }).catch(() => {
+      setCheckingRole(false);
+      setAccessDenied(true);
+    });
+  }, [isConnected, isCorrectNetwork, address, checkUserRoles]);
 
   // Load pool data when admin role is confirmed
   useEffect(() => {
@@ -356,37 +367,42 @@ export default function PoolDetailPage() {
     return allInvoicesPaid && isFunded;
   };
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.hasAdminRole || loading) {
+  // Show loading while pool data is being fetched
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading pool details...</div>
+      <AdminAuthGuard>
+        <div className="flex items-center justify-center min-h-screen bg-slate-950">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+            <div className="text-gray-400">Loading pool details...</div>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
   if (!pool) {
     return (
-      <div className="min-h-screen bg-slate-950">
-        <AdminHeader />
-        <div className="container mx-auto px-4 py-8">
-          <Alert className="border-red-500 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              Pool not found or failed to load.
-            </AlertDescription>
-          </Alert>
+      <AdminAuthGuard>
+        <div className="min-h-screen bg-slate-950">
+          <AdminHeader />
+          <div className="container mx-auto px-4 py-8">
+            <Alert className="border-red-500 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                Pool not found or failed to load.
+              </AlertDescription>
+            </Alert>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -777,5 +793,6 @@ export default function PoolDetailPage() {
         </Tabs>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }

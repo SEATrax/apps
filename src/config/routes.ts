@@ -16,7 +16,6 @@ export const PROTECTED_ROUTES = [
   '/investor/returns',
   '/admin',
   '/admin/roles',
-  '/admin/exporters',
   '/admin/invoices',
   '/admin/pools',
   '/admin/payments',
@@ -48,7 +47,6 @@ export const EXPORTER_NAV = [
 
 export const ADMIN_NAV = [
   { href: '/admin', label: 'Dashboard', icon: 'LayoutDashboard' },
-  { href: '/admin/exporters', label: 'Verify Exporters', icon: 'UserCheck' },
   { href: '/admin/invoices', label: 'Review Invoices', icon: 'FileText' },
   { href: '/admin/pools', label: 'Manage Pools', icon: 'TrendingUp' },
   { href: '/admin/payments', label: 'Payment Tracking', icon: 'CreditCard' },

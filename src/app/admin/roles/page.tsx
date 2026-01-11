@@ -2,64 +2,69 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePanna } from '@/hooks/usePanna';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
 import { useSEATrax } from '@/hooks/useSEATrax';
-import { useRoleCheck } from '@/hooks/useRoleCheck';
-import { Shield, UserPlus, Copy, Check } from 'lucide-react';
+import { Shield, UserPlus, Copy, Check, AlertCircle, Wallet } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { useDevMode } from '@/contexts/DevModeContext';
 import AdminHeader from '@/components/AdminHeader';
 
 export default function RoleManagementPage() {
   const router = useRouter();
-  const { isConnected, address } = usePanna();
-  const { grantAdminRole, isLoading } = useSEATrax();
-  const { isAdmin, loading: rolesLoading } = useRoleCheck();
-  const { isDevMode, devRole } = useDevMode();
+  const { 
+    isConnected, 
+    address, 
+    connect, 
+    switchToLiskSepolia, 
+    isCorrectNetwork, 
+    isMetaMaskInstalled,
+    error: walletError 
+  } = useMetaMaskAdmin();
+  const { checkUserRoles, isLoading } = useSEATrax();
   const { toast } = useToast();
 
   const [targetAddress, setTargetAddress] = useState('');
   const [copied, setCopied] = useState(false);
+  const [userRoles, setUserRoles] = useState<any>(null);
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('🔍 Admin Roles Page State:', {
-      isConnected,
-      address,
-      rolesLoading,
-      isAdmin,
-      isDevMode,
-      devRole,
-    });
-  }, [isConnected, address, rolesLoading, isAdmin, isDevMode, devRole]);
+  // Function to connect MetaMask
+  const handleConnectWallet = async () => {
+    const success = await connect();
+    if (!success) {
+      console.error('Failed to connect MetaMask');
+    }
+  };
 
-  // Redirect ONLY if user is confirmed not admin (after loading completes)
+  // Check admin role when MetaMask connected
   useEffect(() => {
-    // DISABLED AUTO-REDIRECT - Show "Access Denied" page instead
-    // This allows users to see their wallet address and copy it
+    // Don't check role if not connected or wrong network
+    if (!isMetaMaskInstalled || !isCorrectNetwork || !isConnected || !address) {
+      setCheckingRole(false);
+      return;
+    }
+
+    // Check admin role
+    setCheckingRole(true);
     
-    // Don't do anything until roles are fully loaded
-    if (rolesLoading) {
-      console.log('⏳ Still loading roles, not redirecting yet');
-      return;
-    }
-
-    // If dev mode is active, allow access
-    if (isDevMode && devRole === 'admin') {
-      console.log('🔧 Dev mode active as admin, allowing access');
-      return;
-    }
-
-    // Show access denied page instead of redirecting
-    if (isConnected && !isAdmin) {
-      console.log('❌ Connected but not admin. Showing access denied page. Address:', address);
-      // Don't redirect - let the component render "Access Denied" UI
-    }
-  }, [isConnected, isAdmin, rolesLoading, router, address, isDevMode, devRole]);
+    checkUserRoles(address).then((roles) => {
+      setUserRoles(roles);
+      setCheckingRole(false);
+      
+      if (!roles?.isAdmin) {
+        setAccessDenied(true);
+      }
+    }).catch(err => {
+      console.error('Error checking roles:', err);
+      setCheckingRole(false);
+      setAccessDenied(true);
+    });
+  }, [isMetaMaskInstalled, isCorrectNetwork, isConnected, address, checkUserRoles]);
 
   const handleCopyOwnAddress = () => {
     if (address) {
@@ -83,7 +88,7 @@ export default function RoleManagementPage() {
     }
   };
 
-  const handleGrantRole = async (role: 'admin' | 'exporter' | 'investor') => {
+  const handleGrantRole = async () => {
     if (!targetAddress) {
       toast({
         title: 'Error',
@@ -97,222 +102,173 @@ export default function RoleManagementPage() {
     if (!isConnected || !address) {
       toast({
         title: 'Wallet Not Connected',
-        description: 'You need to connect your wallet to grant roles (blockchain transaction required)',
+        description: 'You need to connect MetaMask to grant admin role',
         variant: 'destructive',
       });
       return;
     }
 
-    try {
-      if (role !== 'admin') {
-        toast({
-          title: 'Notice',
-          description: 'Exporters and Investors self-register. Only admin roles can be granted here.',
-          variant: 'default',
-        });
-        return;
-      }
-      
-      const result = await grantAdminRole(targetAddress);
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to grant admin role');
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Admin role granted successfully!',
-      });
-
-      setTargetAddress('');
-    } catch (error: any) {
-      console.error('Error granting role:', error);
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to grant role',
-        variant: 'destructive',
-      });
-    }
+    toast({
+      title: 'Use Command Line',
+      description: 'Please use the grant-admin.js script from terminal to grant admin role.',
+    });
   };
 
-  // Show loading state
-  if (rolesLoading) {
+  // Show loading ONLY while checking roles
+  if (checkingRole) {
     return (
-      <>
-        <AdminHeader />
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-400 mx-auto"></div>
-            <p className="mt-4 text-cyan-400">Checking permissions...</p>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  // Not connected - show connect wallet UI ONLY if not in dev mode
-  if (!isConnected && !isDevMode) {
-    return (
-      <>
-        <AdminHeader />
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <Button
-              variant="ghost"
-              onClick={() => router.push('/')}
-              className="mb-4 text-gray-400 hover:text-white"
-            >
-              ← Back to Home
-            </Button>
-          </div>
-
-          <Card className="bg-slate-800/50 border-cyan-500/20">
-            <CardHeader className="text-center">
-              <div className="flex justify-center mb-4">
-                <Shield className="w-16 h-16 text-cyan-400" />
-              </div>
-              <CardTitle className="text-white text-2xl">Admin Role Management</CardTitle>
-              <CardDescription>Connect your wallet to access this page</CardDescription>
-            </CardHeader>
-            <CardContent className="text-center space-y-4">
-              <p className="text-gray-400">
-                This page is restricted to administrators only. Please connect your wallet to continue.
-              </p>
-              
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
-                <h4 className="text-amber-400 font-semibold mb-2">💡 Quick Access Options:</h4>
-                <ol className="text-gray-300 text-sm space-y-2 list-decimal list-inside text-left">
-                  <li>Connect your Panna wallet from the homepage</li>
-                  <li>Or enable Dev Mode (⚙️ button, bottom right) and select "Admin" role</li>
-                  <li>Then navigate back to this page</li>
-                </ol>
-              </div>
-
-              <Button
-                onClick={() => router.push('/')}
-                className="bg-cyan-600 hover:bg-cyan-700"
-              >
-                Go to Homepage to Connect
-              </Button>
-            </CardContent>
-          </Card>
+      <div className="flex items-center justify-center min-h-screen bg-slate-950">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+          <div className="text-gray-400">Checking admin permissions...</div>
         </div>
       </div>
-      </>
     );
   }
 
-  // Connected but not admin (or dev mode but wrong role)
-  if (!isAdmin && !rolesLoading) {
-    console.log('🚫 Not admin. isAdmin:', isAdmin, 'address:', address, 'isDevMode:', isDevMode);
-    
+  // MetaMask not installed
+  if (!isMetaMaskInstalled) {
     return (
-      <>
+      <div className="min-h-screen bg-slate-950">
         <AdminHeader />
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <Button
-              variant="ghost"
-              onClick={() => router.push('/')}
-              className="mb-4 text-gray-400 hover:text-white"
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-orange-500 bg-orange-50">
+            <AlertCircle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              <p className="font-semibold mb-2">MetaMask Not Installed</p>
+              <p className="text-sm">Admin pages require MetaMask wallet. Please install MetaMask extension first.</p>
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button 
+              onClick={() => window.open('https://metamask.io/download/', '_blank')}
+              className="bg-cyan-600"
             >
-              ← Back to Home
+              Install MetaMask
+            </Button>
+            <Button onClick={() => router.push('/admin')} variant="outline">
+              Back to Dashboard
             </Button>
           </div>
-
-          <Card className="bg-slate-800/50 border-red-500/20">
-            <CardHeader className="text-center">
-              <div className="flex justify-center mb-4">
-                <Shield className="w-16 h-16 text-red-400" />
-              </div>
-              <CardTitle className="text-white text-2xl">Access Denied</CardTitle>
-              <CardDescription className="text-red-400">You are not authorized to access this page</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                <p className="text-gray-300 mb-2">
-                  <strong>Your wallet address:</strong>
-                </p>
-                <code className="block bg-slate-900 text-cyan-400 p-3 rounded font-mono text-sm break-all">
-                  {address || 'Not connected'}
-                </code>
-              </div>
-
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
-                <h4 className="text-amber-400 font-semibold mb-2">💡 To get admin access:</h4>
-                <ol className="text-gray-300 text-sm space-y-2 list-decimal list-inside text-left">
-                  <li>Copy your wallet address above</li>
-                  <li>Add it to <code className="bg-slate-900 px-2 py-1 rounded text-xs">ADMIN_ADDRESSES</code> in <code className="bg-slate-900 px-2 py-1 rounded text-xs">.env.local</code></li>
-                  <li>Restart the dev server: <code className="bg-slate-900 px-2 py-1 rounded text-xs">Ctrl+C</code> then <code className="bg-slate-900 px-2 py-1 rounded text-xs">npm run dev</code></li>
-                  <li>Refresh this page</li>
-                </ol>
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => {
-                    if (address) {
-                      navigator.clipboard.writeText(address);
-                      toast({
-                        title: 'Address Copied',
-                        description: 'Paste it in your .env.local file',
-                      });
-                    }
-                  }}
-                  className="flex-1 bg-cyan-600 hover:bg-cyan-700"
-                  disabled={!address}
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  Copy My Address
-                </Button>
-                <Button
-                  onClick={() => router.push('/')}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  Go to Homepage
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
-      </>
     );
   }
 
-  console.log('✅ Rendering admin roles page. isAdmin:', isAdmin);
+  // Wrong network
+  if (isConnected && !isCorrectNetwork) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-orange-500 bg-orange-50">
+            <AlertCircle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              <p className="font-semibold mb-2">Wrong Network</p>
+              <p className="text-sm">Please switch to Lisk Sepolia Testnet (Chain ID: 4202)</p>
+              <p className="text-sm mt-1">Current address: <code className="bg-orange-100 px-2 py-1 rounded">{address}</code></p>
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button onClick={switchToLiskSepolia} className="bg-cyan-600">
+              Switch to Lisk Sepolia
+            </Button>
+            <Button onClick={() => router.push('/admin')} variant="outline">
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Wallet not connected
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-orange-500 bg-orange-50">
+            <Wallet className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              <p className="font-semibold mb-2">MetaMask Wallet Not Connected</p>
+              <p className="text-sm">Please connect your MetaMask wallet to access grant admin page.</p>
+              {walletError && (
+                <p className="text-sm mt-2 text-red-600">Error: {walletError}</p>
+              )}
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button onClick={handleConnectWallet} className="bg-cyan-600">
+              <Wallet className="h-4 w-4 mr-2" />
+              Connect MetaMask
+            </Button>
+            <Button onClick={() => router.push('/admin')} variant="outline">
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Access denied - not admin
+  if (accessDenied || !userRoles?.isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <Alert className="border-red-500 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">
+              <p className="font-semibold mb-2">Access Denied - Admin Role Required</p>
+              <p className="text-sm">Your address: <code className="bg-red-100 px-2 py-1 rounded">{address}</code></p>
+              <p className="text-sm mt-2">Run this command to grant admin role:</p>
+              <code className="block bg-red-100 p-2 rounded mt-1 text-xs break-all">
+                NEW_ADMIN_ADDRESS={address} npx hardhat run scripts/grant-admin.js --network lisk-sepolia
+              </code>
+            </AlertDescription>
+          </Alert>
+          <div className="mt-4 flex gap-3">
+            <Button onClick={() => router.push('/admin')} variant="outline">
+              Back to Dashboard
+            </Button>
+            <Button onClick={() => window.location.reload()} className="bg-cyan-600">
+              Retry After Granting Role
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <>
+    <div className="min-h-screen bg-slate-950">
       <AdminHeader />
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}
         <div className="mb-8">
           <Button
             variant="ghost"
             onClick={() => router.push('/admin')}
-            className="mb-4 text-gray-400 hover:text-white"
+            className="mb-4 text-slate-400 hover:text-white"
           >
             ← Back to Admin Dashboard
           </Button>
           
           <div className="flex items-center gap-3 mb-2">
             <Shield className="w-8 h-8 text-cyan-400" />
-            <h1 className="text-3xl font-bold text-white">Role Management</h1>
+            <h1 className="text-3xl font-bold text-white">Grant Admin Role</h1>
           </div>
-          <p className="text-gray-400">Grant roles to wallet addresses for testing and development</p>
+          <p className="text-slate-400">Use command line to grant admin role to wallet addresses</p>
         </div>
 
         {/* Your Address Card */}
         {address && (
-          <Card className="mb-6 bg-slate-800/50 border-cyan-500/20">
+          <Card className="mb-6 bg-slate-900 border-slate-800">
             <CardHeader>
-              <CardTitle className="text-white">Your Wallet Address</CardTitle>
-              <CardDescription>This is your current wallet address</CardDescription>
+              <CardTitle className="text-white">Your Admin Wallet Address</CardTitle>
+              <CardDescription>This is your current MetaMask EOA address</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
@@ -332,47 +288,21 @@ export default function RoleManagementPage() {
           </Card>
         )}
 
-        {/* Dev Mode Indicator */}
-        {isDevMode && (
-          <Card className="mb-6 bg-amber-500/10 border-amber-500/30">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex-shrink-0">
-                  <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
-                </div>
-                <div>
-                  <p className="text-amber-400 font-semibold">Dev Mode Active</p>
-                  <p className="text-amber-300/70 text-sm">
-                    You can access this page without wallet, but granting roles requires wallet connection.
-                  </p>
-                </div>
-              </div>
-              {!isConnected && (
-                <div className="bg-amber-500/20 border border-amber-500/30 rounded p-3 mt-3">
-                  <p className="text-amber-200 text-sm">
-                    ⚠️ <strong>Wallet not connected</strong> - To grant roles (blockchain transaction), please connect your wallet from the homepage.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Grant Role Card */}
-        <Card className="bg-slate-800/50 border-cyan-500/20">
+        {/* Grant Admin Role Instructions */}
+        <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <UserPlus className="w-5 h-5" />
-              Grant Role to Address
+              How to Grant Admin Role
             </CardTitle>
             <CardDescription>
-              Enter a wallet address and grant it a specific role. You can use your own address for testing.
+              Use the command line script to grant admin role to wallet addresses
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Address Input */}
             <div className="space-y-2">
-              <Label htmlFor="address" className="text-white">Wallet Address</Label>
+              <Label htmlFor="address" className="text-white">Target Wallet Address</Label>
               <div className="flex gap-2">
                 <Input
                   id="address"
@@ -380,7 +310,7 @@ export default function RoleManagementPage() {
                   placeholder="0x..."
                   value={targetAddress}
                   onChange={(e) => setTargetAddress(e.target.value)}
-                  className="flex-1 bg-slate-900 border-slate-700 text-white"
+                  className="flex-1 bg-slate-950 border-slate-700 text-white"
                 />
                 {address && (
                   <Button
@@ -392,69 +322,36 @@ export default function RoleManagementPage() {
                   </Button>
                 )}
               </div>
-              {!address && isDevMode && (
-                <p className="text-xs text-amber-400">
-                  💡 In dev mode without wallet: Enter any address to grant roles for testing
-                </p>
-              )}
             </div>
 
-            {/* Role Buttons */}
+            {/* Command Instructions */}
             <div className="space-y-3">
-              <Label className="text-white">Select Role to Grant</Label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Button
-                  onClick={() => handleGrantRole('admin')}
-                  disabled={isLoading || !targetAddress}
-                  className="bg-purple-600 hover:bg-purple-700"
-                >
-                  <Shield className="w-4 h-4 mr-2" />
-                  Grant Admin
-                </Button>
-                
-                <Button
-                  onClick={() => handleGrantRole('exporter')}
-                  disabled={isLoading || !targetAddress}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Grant Exporter
-                </Button>
-                
-                <Button
-                  onClick={() => handleGrantRole('investor')}
-                  disabled={isLoading || !targetAddress}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Grant Investor
-                </Button>
+              <Label className="text-white">Command to Run:</Label>
+              <div className="bg-slate-950 border border-slate-700 rounded-lg p-4">
+                <code className="text-cyan-400 text-sm break-all">
+                  NEW_ADMIN_ADDRESS={targetAddress || '0xYourTargetAddress'} npx hardhat run scripts/grant-admin.js --network lisk-sepolia
+                </code>
               </div>
+              <p className="text-slate-400 text-sm">
+                Copy this command and run it in your terminal. Make sure you have deployer/admin access.
+              </p>
             </div>
 
             {/* Instructions */}
-            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-4">
-              <h4 className="text-cyan-400 font-semibold mb-2">💡 Testing Guide</h4>
-              <ol className="text-gray-300 text-sm space-y-1 list-decimal list-inside">
-                <li>Connect your wallet from homepage (required for blockchain transactions)</li>
-                <li>Enter target address or click &quot;Use My Address&quot;</li>
-                <li>Click the role button you want to grant (Admin, Exporter, or Investor)</li>
-                <li>Confirm transaction in your wallet</li>
-                <li>Navigate to the respective dashboard to test the role</li>
+            <div className="bg-cyan-950 border border-cyan-800 rounded-lg p-4">
+              <h4 className="text-cyan-400 font-semibold mb-2">📋 Steps to Grant Admin Role</h4>
+              <ol className="text-slate-300 text-sm space-y-1 list-decimal list-inside">
+                <li>Enter the target wallet address (or use your own for testing)</li>
+                <li>Copy the command above</li>
+                <li>Open your terminal in the project directory</li>
+                <li>Paste and run the command</li>
+                <li>Wait for transaction confirmation</li>
+                <li>Refresh this page to verify the new admin can access</li>
               </ol>
-              
-              {!isConnected && (
-                <div className="mt-3 pt-3 border-t border-cyan-500/20">
-                  <p className="text-amber-400 text-sm">
-                    <strong>Note:</strong> You&apos;re viewing this page in dev mode. To grant roles, you must connect your wallet first.
-                  </p>
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>
       </div>
     </div>
-    </>
   );
 }

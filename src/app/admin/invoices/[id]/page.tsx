@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWalletSession } from '@/hooks/useWalletSession';
+import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
 import { useSEATrax } from '@/hooks/useSEATrax';
+import { useAdminContract } from '@/hooks/useAdminContract';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,11 +21,13 @@ import {
   ArrowLeft,
   Download,
   ExternalLink,
-  X
+  X,
+  Wallet
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
+import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { appConfig } from '@/config';
@@ -76,8 +79,9 @@ interface InvoiceDetailProps {
 }
 
 export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
-  const { isLoaded, isConnected, address } = useWalletSession();
-  const { checkUserRoles, getInvoice, approveInvoice, rejectInvoice, isLoading } = useSEATrax();
+  const { isConnected, address } = useMetaMaskAdmin();
+  const { getInvoice } = useSEATrax();
+  const { approveInvoice, rejectInvoice, isLoading: contractLoading } = useAdminContract();
   const router = useRouter();
   
   const [invoice, setInvoice] = useState<InvoiceWithContractData | null>(null);
@@ -88,7 +92,6 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [userRoles, setUserRoles] = useState<any>(null);
 
   // Get invoice ID from params
   useEffect(() => {
@@ -97,29 +100,12 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
     });
   }, [params]);
 
-  // Check admin role and redirect if not admin
+  // Fetch invoice data when connected and invoiceId is available
   useEffect(() => {
-    if (isLoaded && !isConnected) {
-      router.push('/');
-      return;
-    }
-
-    if (isLoaded && isConnected && !isLoading && address) {
-      checkUserRoles(address).then((roles) => {
-        setUserRoles(roles);
-        if (!roles?.isAdmin) {
-          router.push('/');
-        }
-      });
-    }
-  }, [isLoaded, isConnected, isLoading, address, checkUserRoles, router]);
-
-  // Fetch invoice data when admin role is confirmed and invoiceId is available
-  useEffect(() => {
-    if (userRoles?.isAdmin && invoiceId) {
+    if (isConnected && address && invoiceId) {
       fetchInvoiceData();
     }
-  }, [userRoles, invoiceId]);
+  }, [isConnected, address, invoiceId]);
 
   const fetchInvoiceData = async () => {
     try {
@@ -143,10 +129,12 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
         .eq('token_id', parseInt(invoiceId))
         .single();
 
-      if (metadataError) {
-        console.error('Metadata error:', metadataError);
-        // Don't throw error, metadata might not exist for old invoices
-      } else {
+      if (metadataError && metadataError.code !== 'PGRST116') {
+        // Only log error if it's not "no rows returned" error
+        console.error('Metadata fetch error:', metadataError.message);
+      }
+      
+      if (metadataData) {
         setMetadata(metadataData);
       }
 
@@ -289,39 +277,44 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
     );
   };
 
-  // Show loading if checking roles or not connected
-  if (!isLoaded || !isConnected || isLoading || !userRoles?.isAdmin || loadingInvoice) {
+  // Show loading while fetching invoice data
+  if (loadingInvoice) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading invoice...</div>
+      <AdminAuthGuard>
+        <div className="flex items-center justify-center min-h-screen bg-slate-950">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+            <div className="text-gray-400">Loading invoice...</div>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
   if (!invoice) {
     return (
-      <div className="min-h-screen bg-slate-950">
-        <AdminHeader />
-        <div className="container mx-auto px-4 py-8">
-          <Alert className="border-red-500 bg-red-50">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">
-              Invoice not found or failed to load.
-            </AlertDescription>
-          </Alert>
+      <AdminAuthGuard>
+        <div className="min-h-screen bg-slate-950">
+          <AdminHeader />
+          <div className="container mx-auto px-4 py-8">
+            <Alert className="border-red-500 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                Invoice not found or failed to load.
+              </AlertDescription>
+            </Alert>
+          </div>
         </div>
-      </div>
+      </AdminAuthGuard>
     );
   }
 
   const statusInfo = INVOICE_STATUS_MAP[Number(invoice.status)] || INVOICE_STATUS_MAP[0];
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <AdminHeader />
+    <AdminAuthGuard>
+      <div className="min-h-screen bg-slate-950">
+        <AdminHeader />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -594,5 +587,6 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
         </div>
       </div>
     </div>
+    </AdminAuthGuard>
   );
 }
