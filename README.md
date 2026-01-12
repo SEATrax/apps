@@ -84,12 +84,13 @@ SEATrax is a **blockchain platform** that revolutionizes trade finance by tokeni
 
 ### Blockchain
 - **Network**: [Lisk Sepolia Testnet](https://sepolia.lisk.com/)
-- **Wallet Integration**: [Panna SDK](https://panna.io/)
+- **Wallet Integration**: [Panna SDK](https://panna.io/) (for users), MetaMask (for admin)
 - **Smart Contract Interaction**: [Thirdweb SDK](https://thirdweb.com/)
-- **Smart Contract**: Unified SEATrax contract
+- **Smart Contract**: Unified SEATrax contract (all-in-one architecture)
   - **Repository**: [github.com/SEATrax/smart-contract](https://github.com/SEATrax/smart-contract)
-  - **SEATrax**: [0x5c50eD...09A5f2](https://sepolia-blockscout.lisk.com/address/0x5c50eD2f705C6FaDdB0AcC478edDB4Edf109A5f2)
-  - **Features**: Role management, invoice NFTs, pool NFTs, funding, payments, analytics
+  - **Contract Address**: [0x561D0d...1F233E](https://sepolia-blockscout.lisk.com/address/0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E)
+  - **Deployed**: January 12, 2026
+  - **Features**: Role management, invoice NFTs, pool NFTs, investment tracking, payment oracle, platform analytics
 
 ### Backend & Storage
 - **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
@@ -274,26 +275,30 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Testing with Multiple Roles
 
-Since Panna SDK uses Account Abstraction and generates new addresses, we've implemented **3 solutions** for testing different roles:
+**Admin Access**: Use MetaMask with wallet address listed in `ADMIN_ADDRESSES` environment variable.
 
-#### 1. Console Logging
-- Open browser DevTools (F12)
-- Connect wallet - your Panna address will be logged
-- Copy address to `.env.local` ADMIN_ADDRESSES
+**Testing Different Roles**:
 
-#### 2. Admin Self-Service Panel (Recommended)
+#### 1. Admin Self-Service Panel (Recommended)
 - Navigate to `/admin/roles`
+- Connect with MetaMask (admin wallet)
 - Click "Use My Address" 
 - Grant yourself any role (Admin, Exporter, Investor)
-- No need to restart server
+- Roles are granted on-chain via smart contract
 
-#### 3. Development Mode (Fastest)
-- Click ⚙️ Settings button (bottom right)
-- Toggle Dev Mode ON
-- Select any role instantly
-- Perfect for rapid testing
+#### 2. Console Logging (For Panna SDK addresses)
+- Open browser DevTools (F12)
+- Connect wallet - your Panna address will be logged
+- Use logged address for testing
 
-**See [TESTING_GUIDE.md](./TESTING_GUIDE.md) for detailed instructions.**
+#### 3. Command Line Scripts
+```bash
+# Grant admin role
+NEW_ADMIN_ADDRESS=0xYourAddress npx hardhat run scripts/grant-admin.js --network lisk-sepolia
+
+# Check role status
+node scripts/check-role.js 0xYourAddress
+```
 
 ### First Time Setup Tutorial
 
@@ -320,14 +325,14 @@ Since Panna SDK uses Account Abstraction and generates new addresses, we've impl
 9. **Claim Returns**: Claim 4% returns after invoices are paid
 
 #### For Admins:
-1. **Connect Wallet**: Use wallet address listed in `ADMIN_ADDRESSES`
+1. **Connect Wallet**: Use MetaMask with wallet address listed in `ADMIN_ADDRESSES`
 2. **Auto-Access**: Automatically redirected to Admin Dashboard
-3. **Verify Exporters**: Review and approve exporter applications
-4. **Approve Invoices**: Review submitted invoices and documents
-5. **Create Pools**: Select finalized invoices to create investment pools
-6. **Manage Funding**: Allocate funds when pools reach ≥70% funding
-7. **Confirm Payments**: Mark invoices as paid after importer confirmation
-8. **Distribute Profits**: Distribute 4% returns to investors
+3. **Approve Invoices**: Review submitted invoices and documents (auto-approve exporters)
+4. **Create Pools**: Use autofill feature to quickly create investment pools
+5. **Manage Funding**: Funds auto-allocated when pools reach 100% funding
+6. **Confirm Payments**: Mark invoices as paid after importer confirmation
+7. **Distribute Profits**: Distribute 4% returns to investors
+8. **Monitor Health**: Check data consistency between blockchain and database
 
 ---
 
@@ -355,16 +360,16 @@ apps/
 │   │   │   │   └── [id]/         # Pool detail & invest
 │   │   │   ├── investments/      # Portfolio tracking
 │   │   │   └── returns/          # Claim returns
-│   │   ├── admin/                # Admin features (8 pages)
+│   │   ├── admin/                # Admin features (7 pages)
 │   │   │   ├── page.tsx          # Dashboard
 │   │   │   ├── roles/            # Role management
-│   │   │   ├── exporters/        # Verify exporters
 │   │   │   ├── invoices/         # Review invoices
 │   │   │   │   └── [id]/         # Invoice review detail
 │   │   │   ├── pools/            # Pool management
-│   │   │   │   ├── new/          # Create pool
+│   │   │   │   ├── new/          # Create pool (with autofill)
 │   │   │   │   └── [id]/         # Pool detail
-│   │   │   └── payments/         # Payment confirmation
+│   │   │   ├── payments/         # Payment confirmation
+│   │   │   └── health/           # Data health monitor
 │   │   ├── pay/[invoiceId]/      # Public payment page (importer)
 │   │   └── api/                  # API routes
 │   │       ├── currency/         # USD ↔ ETH conversion
@@ -437,14 +442,10 @@ Create `.env.local` file with the following variables:
 # BLOCKCHAIN CONFIGURATION
 # ========================
 
-# Smart Contract Addresses (Lisk Sepolia)
-# Deployed contracts: https://github.com/seatrax/smart-contract
-NEXT_PUBLIC_ACCESS_CONTROL="0x6dA6C2Afcf8f2a1F31fC0eCc4C037C0b6317bA2F"
-NEXT_PUBLIC_INVOICE_NFT="0x8Da2dF6050158ae8B058b90B37851323eFd69E16"
-NEXT_PUBLIC_POOL_NFT="0x317Ce254731655E19932b9EFEAf7eeA31F0775ad"
-NEXT_PUBLIC_POOL_FUNDING_MANAGER="0xbD5f292F75D22996E7A4DD277083c75aB29ff45C"
-NEXT_PUBLIC_PAYMENT_ORACLE="0x7894728174E53Df9Fec402De07d80652659296a8"
-NEXT_PUBLIC_PLATFORM_ANALYTICS="0xb77C5C42b93ec46A323137B64586F0F8dED987A9"
+# Smart Contract Address (Unified SEATrax Contract)
+# Deployed: January 12, 2026
+# Source: https://github.com/seatrax/smart-contract
+NEXT_PUBLIC_CONTRACT_ADDRESS="0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E"
 
 # Network Configuration
 NEXT_PUBLIC_CHAIN_ID=4202
@@ -568,8 +569,20 @@ npm run reinstall
 # Check database status
 ./scripts/check-db.sh
 
-# Verify exporter role (example)
-./scripts/verify-exporter.sh 0xYourWalletAddress
+# Clean database (reset for testing)
+node scripts/cleanup-database.js
+```
+
+#### Smart Contract & Role Management
+```bash
+# Check admin role status
+node scripts/check-role.js 0xYourWalletAddress
+
+# Grant admin role (requires deployer private key)
+NEW_ADMIN_ADDRESS=0xYourAddress npx hardhat run scripts/grant-admin.js --network lisk-sepolia
+
+# Deploy new contract
+npx hardhat run scripts/deploy.js --network lisk-sepolia
 ```
 
 ### Development Workflow
@@ -586,19 +599,21 @@ npm run reinstall
 
 **Smart Contract Hooks**:
 ```typescript
-// Example: Using InvoiceNFT hook
-import { useInvoiceNFT } from '@/hooks/useInvoiceNFT';
+// Example: Using unified SEATrax hook
+import { useSEATrax } from '@/hooks/useSEATrax';
 
 function MyComponent() {
-  const { mintInvoice, getInvoice, loading, error } = useInvoiceNFT();
+  const { createInvoice, getInvoice, isLoading } = useSEATrax();
   
-  const createInvoice = async (data) => {
-    const tokenId = await mintInvoice(
+  const handleCreateInvoice = async (data) => {
+    const result = await createInvoice(
       data.exporterCompany,
       data.importerCompany,
-      data.shippingAmount,
-      data.loanAmount,
-      data.shippingDate
+      data.importerEmail,
+      BigInt(data.shippingAmount),
+      BigInt(data.loanAmount),
+      BigInt(data.shippingDate),
+      data.ipfsHash
     );
   };
 }
@@ -747,14 +762,13 @@ const { invoice, amountDue, paymentLink } = await response.json();
 - **Logo**: Responsive brand logo (4 variants)
 
 #### Custom Hooks
-- **useAccessControl**: Role management operations
-- **useInvoiceNFT**: Invoice creation, finalization, withdrawal
-- **usePoolNFT**: Pool creation and management
-- **usePoolFunding**: Investment and profit distribution
-- **usePaymentOracle**: Payment confirmation
-- **usePlatformAnalytics**: Platform metrics
+- **useSEATrax**: Unified hook for all contract interactions (invoices, pools, investments, payments)
+- **useAdminContract**: Admin-specific operations using MetaMask (approve, create pool, distribute)
+- **useMetaMaskAdmin**: Admin wallet connection and network management
+- **usePanna**: User wallet connection and account management (Panna SDK)
 - **useTransaction**: Transaction state management
-- **usePanna**: Wallet connection and account management
+- **useExporterProfile**: Exporter registration and profile
+- **useInvestorProfile**: Investor registration and profile
 
 ---
 
