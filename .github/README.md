@@ -1,271 +1,546 @@
-# 📚 Implementation Plans - Quick Navigation
+# SEATrax - Shipping Invoice Funding Platform
 
-**Last Updated:** January 11, 2026
+> 🌊 **Shipping Excellence Across Borders** - Blockchain-based trade finance platform connecting exporters, investors, and administrators
 
----
-
-## 🎯 Where to Start?
-
-### 👉 **New to the project?**
-Start here: [`MASTER_IMPLEMENTATION_PLAN.md`](MASTER_IMPLEMENTATION_PLAN.md)
-
-### 👉 **Ready to code today?**
-Start here: [`QUICK_START_TODAY.md`](QUICK_START_TODAY.md)
-
-### 👉 **Need exporter details?**
-Start here: [`EXPORTER_REFACTOR_PLAN.md`](EXPORTER_REFACTOR_PLAN.md)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
+[![Lisk Sepolia](https://img.shields.io/badge/Blockchain-Lisk%20Sepolia-purple)](https://sepolia.lisk.com/)
 
 ---
 
-## 📋 Document Index
+## 📖 Table of Contents
 
-| Document | Purpose | When to Use |
-|----------|---------|-------------|
-| **[MASTER_IMPLEMENTATION_PLAN.md](MASTER_IMPLEMENTATION_PLAN.md)** | Complete 3-week roadmap | Understanding full scope and timeline |
-| **[QUICK_START_TODAY.md](QUICK_START_TODAY.md)** | Today's tasks (Week 1, Day 1-2) | Daily execution guide |
-| **[EXPORTER_REFACTOR_PLAN.md](EXPORTER_REFACTOR_PLAN.md)** | Detailed exporter fixes | Deep dive into exporter issues |
-| **[PROJECT_STATUS.md](PROJECT_STATUS.md)** | Current status report | Checking overall progress |
-| **[copilot-instructions.md](copilot-instructions.md)** | Project context for AI | Understanding architecture |
-| **[TESTING_QUICK_START.md](TESTING_QUICK_START.md)** | Testing guide | Running tests |
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Technology Stack](#-technology-stack)
+- [Smart Contract](#-smart-contract)
+- [Getting Started](#-getting-started)
+- [Environment Setup](#-environment-setup)
 
 ---
 
-## 🗺️ Implementation Roadmap
+## 🌊 Overview
 
-### ✅ **Completed**
-- Smart contract deployment (SEATrax.sol)
-- Thirdweb SDK migration (all 26 functions)
-- Database schema setup
-- IPFS integration (Pinata)
-- Basic UI pages (registration, invoice creation)
+SEATrax is a **blockchain platform** that revolutionizes trade finance by tokenizing shipping invoices as NFTs and enabling decentralized funding through investor pools. The platform provides a secure, transparent, and efficient way for exporters to access immediate liquidity while offering investors attractive returns on trade finance investments.
 
-### 🟡 **In Progress (This Week)**
-- Exporter features refactoring
-- Event parsing fixes
-- Mock data removal
-- Real statistics implementation
+### How It Works
 
-### 🔴 **Upcoming (Next 2 Weeks)**
-- Admin invoice approval UI
-- Admin pool creation UI
-- Investor investment flow
-- Payment management
-- Profit distribution
-- E2E testing
+1. **Exporters** submit shipping invoices and receive up to 70-100% advance funding
+2. **Investors** browse curated invoice pools and invest to earn 4% returns
+3. **Admin** verifies exporters, approves invoices, and manages investment pools
+4. **Smart Contracts** automate fund distribution, payments, and profit sharing
+5. **Blockchain** ensures transparency, immutability, and trust
 
 ---
 
-## 🎯 Critical Path
+## ✨ Key Features
 
-To enable full business cycle testing, complete in order:
+### For Exporters
+- ✅ **Invoice Tokenization**: Convert shipping invoices into NFTs
+- ✅ **Instant Liquidity**: Access funds when invoices reach 70% funding
+- ✅ **Document Storage**: Secure IPFS-based document management via Pinata
+- ✅ **Real-time Tracking**: Monitor funding progress and payment status
+- ✅ **Automatic Withdrawal**: Seamless fund withdrawal to wallet
 
-1. **Exporter Refactoring** (Days 1-2)
-   - Fix event parsing
-   - Remove mock data
-   - Real statistics
-   - **Blocks:** Everything
+### For Investors
+- ✅ **Curated Pools**: Browse admin-verified investment opportunities
+- ✅ **Risk Assessment**: View pool risk categories and invoice details
+- ✅ **Guaranteed Returns**: Earn 4% yield on successful settlements
+- ✅ **Portfolio Tracking**: Monitor active investments and claimed returns
+- ✅ **Transparent Metrics**: Real-time pool performance analytics
 
-2. **Admin Invoice Management** (Day 3)
-   - Approval UI
-   - **Blocks:** Pool creation
+### For Administrators
+- ✅ **User Verification**: Approve exporter applications with KYC data
+- ✅ **Invoice Review**: Validate and approve submitted invoices
+- ✅ **Pool Creation**: Curate invoice pools for investor funding
+- ✅ **Payment Confirmation**: Verify importer payments via oracle
+- ✅ **Platform Analytics**: Monitor platform-wide metrics and performance
 
-3. **Admin Pool Creation** (Day 4)
-   - Pool creation UI
-   - **Blocks:** Investment
-
-4. **Investor Investment** (Days 6-7)
-   - Pool browsing
-   - Investment flow
-   - **Blocks:** Payment
-
-5. **Payment & Distribution** (Days 8-10)
-   - Payment management
-   - Profit distribution
-   - **Blocks:** Returns
+### Technical Features
+- ✅ **Unified Contract**: Single SEATrax smart contract with all functionality
+- ✅ **Hybrid Sync System**: Smart contract authority + Supabase metadata
+- ✅ **Responsive Design**: Mobile-first UI with adaptive components
+- ✅ **Error Handling**: Comprehensive error boundaries and recovery
+- ✅ **Security**: Production-grade headers, env validation, role guards
+- ✅ **Real-time Conversion**: USD ↔ ETH via CurrencyFreaks API
 
 ---
 
-## 📊 Progress Tracking
+## 🔄 How It Works
 
-### Overall Completion: 40%
+### Invoice Lifecycle
+1. **Exporter** creates shipping invoice with documents
+2. **Admin** verifies and approves invoice
+3. **Admin** creates investment pool with approved invoices
+4. **Investors** fund the pool with ETH
+5. **Exporter** withdraws funds when pool reaches 70%+ funding
+6. **Importer** pays invoice after shipment
+7. **Investors** claim 4% returns after payment confirmation
 
+### Key Business Rules
+- **70% Threshold**: Exporters can withdraw when invoice is 70%+ funded
+- **Auto-Distribution**: Funds automatically distributed at 100% pool funding
+- **Returns**: 4% to investors, 1% platform fee
+- **Minimum Investment**: 1000 tokens per pool
+
+### Frontend
+- **Framework**: [Next.js 15](https://nextjs.org/) with App Router
+- **Language**: [TypeScript 5](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
+- **UI Components**: [shadcn/ui](https://ui.shadcn.com/) (Radix UI primitives)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **State Management**: React Hooks & Context
+
+### Blockchain
+- **Network**: [Lisk Sepolia Testnet](https://sepolia.lisk.com/)
+- **Wallet Integration**: [Panna SDK](https://panna.io/) (for users), MetaMask (for admin)
+- **Smart Contract Interaction**: [Thirdweb SDK](https://thirdweb.com/)
+- **Smart Contract**: Unified SEATrax contract (all-in-one architecture)
+  - **Repository**: [github.com/SEATrax/smart-contract](https://github.com/SEATrax/smart-contract)
+  - **Contract Address**: [0x561D0d...1F233E](https://sepolia-blockscout.lisk.com/address/0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E)
+  - **Deployed**: January 12, 2026
+  - **Features**: Role management, invoice NFTs, pool NFTs, investment tracking, payment oracle, platform analytics
+
+### Backend & Storage
+- **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
+- **File Storage**: [Pinata](https://pinata.cloud/) (IPFS)
+- **Currency API**: [CurrencyFreaks](https://currencyfreaks.com/) (USD ↔ ETH)
+
+### Development Tools
+- **Package Manager**: npm
+- **Linting**: ESLint
+- **Type Checking**: TypeScript Compiler
+- **Build Tool**: Next.js
+
+## 🛠️ Technology Stack
+
+### Unified Architecture
+
+SEATrax uses a **single unified smart contract** that handles all platform functionality:
+
+- **Contract Address**: [`0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E`](https://sepolia-blockscout.lisk.com/address/0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E)
+- **Network**: Lisk Sepolia Testnet
+- **Deployed**: January 12, 2026
+- **Verified**: ✅ Yes
+
+### Contract Features
+
+| Module | Functionality |
+|--------|---------------|
+| **Role Management** | Admin, Exporter, Investor roles with access control |
+| **Invoice NFT** | ERC-721 tokenization of shipping invoices |
+| **Pool NFT** | ERC-721 tokenization of investment pools |
+| **Investment Tracking** | On-chain record of investor contributions |
+| **Payment Oracle** | Importer payment verification |
+| **Platform Analytics** | Real-time metrics and statistics |
+
+### Key Functions
+
+```solidity
+// Invoice Management
+createInvoice(company, importer, email, amount, loan, date, ipfsHash)
+approveInvoice(invoiceId)
+withdrawFunds(invoiceId)
+
+// Pool Management
+createPool(name, invoiceIds, startDate, endDate)
+invest(poolId) payable
+claimReturns(poolId)
+
+// Payment & Distribution
+markInvoicePaid(invoiceId)
+distributeProfits(poolId)
 ```
-[████████░░░░░░░░░░░░] 40%
-```
-
-### By Component:
-
-| Component | Progress | Status |
-|-----------|----------|--------|
-| Smart Contract | 100% | ✅ Complete |
-| useSEATrax Hook | 100% | ✅ Complete |
-| Database Schema | 95% | ✅ Complete |
-| Exporter UI | 70% | 🟡 Refactoring |
-| Admin UI | 30% | 🔴 In Development |
-| Investor UI | 40% | 🔴 In Development |
-| E2E Testing | 10% | 🔴 Blocked |
 
 ---
+## � Getting Started
 
-## 🚀 Quick Commands
+### Prerequisites
 
-### Development
+Before starting, ensure you have:
+- ✅ **Node.js 18+** installed ([Download](https://nodejs.org/))
+- ✅ **npm** or **yarn** package manager
+- ✅ **Wallet** (MetaMask or compatible EVM wallet)
+- ✅ **Lisk Sepolia ETH** ([Get from faucet](https://sepolia-faucet.lisk.com/))
+
+### Quick Setup (5 minutes)
+
+#### 1. Clone the Repository
 ```bash
-# Start dev server
+git clone https://github.com/seatrax/apps.git
+cd apps
+```
+
+#### 2. Install Dependencies
+```bash
+npm install
+```
+
+#### 3. Configure Environment Variables
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` with your configuration (see [Environment Configuration](#-environment-configuration) section below).
+
+#### 4. Setup Supabase Database
+
+Run the SQL migration in your Supabase SQL Editor:
+```bash
+cat supabase/migrations/*.sql | pbcopy  # Copy SQL
+# Then paste in Supabase SQL Editor and run
+```
+
+Or use the migration script:
+```bash
+chmod +x scripts/apply-migrations.sh
+./scripts/apply-migrations.sh
+```
+
+#### 5. Start Development Server
+```bash
 npm run dev
-
-# Build for production
-npm run build
-
-# Run tests
-npm test
 ```
 
-### Blockchain Verification
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### First Steps
+
+1. **Connect Wallet**: Use MetaMask or compatible wallet
+2. **Get Test ETH**: Get Lisk Sepolia ETH from [faucet](https://sepolia-faucet.lisk.com/)
+3. **Select Role**: Choose Exporter, Investor, or Admin
+4. **Complete Onboarding**: Fill required profile information
+5. **Start Using**: Create invoices, invest in pools, or manage platform
+
+---
+
+## � Project Structure
+
+```
+apps/
+├── src/
+│   ├── app/                      # Next.js App Router
+│   │   ├── (auth)/login/         # Role selection & wallet connection
+│   │   ├── onboarding/           # User registration flows
+│   │   │   ├── exporter/         # Exporter onboarding
+│   │   │   └── investor/         # Investor onboarding
+│   │   ├── exporter/             # Exporter features (5 pages)
+│   │   │   ├── page.tsx          # Dashboard
+│   │   │   ├── invoices/         # Invoice management
+│   │   │   │   ├── page.tsx      # Invoice list
+│   │   │   │   ├── new/          # Create invoice
+│   │   │   │   └── [id]/         # Invoice detail
+│   │   │   └── payments/         # Payment tracking
+│   │   ├── investor/             # Investor features (5 pages)
+│   │   │   ├── page.tsx          # Dashboard
+│   │   │   ├── pools/            # Pool browsing
+│   │   │   │   ├── page.tsx      # Pool list
+│   │   │   │   └── [id]/         # Pool detail & invest
+│   │   │   ├── investments/      # Portfolio tracking
+│   │   │   └── returns/          # Claim returns
+│   │   ├── admin/                # Admin features (7 pages)
+│   │   │   ├── page.tsx          # Dashboard
+│   │   │   ├── roles/            # Role management
+│   │   │   ├── invoices/         # Review invoices
+│   │   │   │   └── [id]/         # Invoice review detail
+│   │   │   ├── pools/            # Pool management
+│   │   │   │   ├── new/          # Create pool (with autofill)
+│   │   │   │   └── [id]/         # Pool detail
+│   │   │   ├── payments/         # Payment confirmation
+│   │   │   └── health/           # Data health monitor
+│   │   ├── pay/[invoiceId]/      # Public payment page (importer)
+│   │   └── api/                  # API routes
+│   │       ├── currency/         # USD ↔ ETH conversion
+│   │       └── payment/          # Payment processing
+│   ├── components/
+│   │   ├── ui/                   # shadcn/ui components (40+)
+│   │   ├── common/               # Shared components
+│   │   │   ├── Logo.tsx          # Brand logo (responsive)
+│   │   │   ├── ErrorBoundary.tsx # Error handling
+│   │   │   ├── ErrorMessage.tsx  # Error display
+│   │   │   ├── Skeleton.tsx      # Loading states
+│   │   │   ├── MobileNav.tsx     # Mobile navigation
+│   │   │   └── ResponsiveTable.tsx
+│   │   ├── invoice/              # Invoice components
+│   │   └── pool/                 # Pool components
+│   ├── hooks/                    # Custom React hooks
+│   │   ├── useAccessControl.ts   # Role management
+│   │   ├── useInvoiceNFT.ts      # Invoice operations
+│   │   ├── usePoolNFT.ts         # Pool operations
+│   │   ├── usePoolFunding.ts     # Investment logic
+│   │   ├── usePaymentOracle.ts   # Payment verification
+│   │   ├── usePlatformAnalytics.ts # Metrics
+│   │   ├── useTransaction.ts     # Transaction management
+│   │   ├── usePanna.ts           # Wallet connection
+│   │   └── use-toast.tsx         # Toast notifications
+│   ├── lib/
+│   │   ├── contract.ts           # Contract ABIs & addresses
+│   │   ├── currency.ts           # Currency conversion
+│   │   ├── supabase.ts           # Database client
+│   │   ├── pinata.ts             # IPFS upload
+│   │   ├── env.ts                # Environment validation
+│   │   └── utils.ts              # Utilities
+│   ├── providers/                # Context providers
+│   ├── config/                   # App configuration
+│   └── types/                    # TypeScript types
+├── supabase/
+│   ├── migrations/               # Database migrations
+│   └── config.toml               # Supabase config
+├── public/                       # Static assets
+│   ├── navbar.png                # Logo for navigation (720x183)
+│   ├── logo.png                  # Logo for hero (767x363)
+│   ├── icon.png                  # Square icon (840x848)
+│   └── favicon.png               # Browser favicon (1200x1200)
+├── scripts/                      # Utility scripts
+│   ├── apply-migrations.sh       # Database setup
+│   └── check-db.sh               # Verify database
+├── .github/                      # Documentation
+│   ├── copilot-instructions.md   # Development guidelines
+│   ├── implementation-checklist.md # Feature tracking
+│   ├── plan.md                   # Development roadmap
+│   ├── PROJECT_STATUS.md         # Current status
+│   └── business-process-documentation.md # Business logic
+├── .env.local                    # Environment variables
+├── package.json                  # Dependencies
+├── next.config.ts                # Next.js config (security headers)
+├── tailwind.config.ts            # Tailwind config
+└── tsconfig.json                 # TypeScript config
+```
+
+---
+
+## ⚙️ Environment Setup
+
+### Required Environment Variables
+
+Create `.env.local` file with the following variables:
+
+```env
+# ========================
+# BLOCKCHAIN CONFIGURATION
+# ========================
+
+# Smart Contract Address (Unified SEATrax Contract)
+# Deployed: January 12, 2026
+# Source: https://github.com/seatrax/smart-contract
+NEXT_PUBLIC_CONTRACT_ADDRESS="0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E"
+
+# Network Configuration
+NEXT_PUBLIC_CHAIN_ID=4202
+NEXT_PUBLIC_RPC_URL=https://rpc.sepolia-api.lisk.com
+
+# ========================
+# WALLET & AUTHENTICATION
+# ========================
+
+# Panna SDK (Wallet Provider)
+# Sign up: https://panna.io/
+NEXT_PUBLIC_PANNA_CLIENT_ID=your_panna_client_id
+NEXT_PUBLIC_PANNA_PARTNER_ID=your_panna_partner_id
+
+# ========================
+# DATABASE & STORAGE
+# ========================
+
+# Supabase (PostgreSQL Database)
+# Create project: https://supabase.com/
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_key
+
+# Pinata (IPFS Storage)
+# Sign up: https://pinata.cloud/
+NEXT_PUBLIC_PINATA_GATEWAY=https://gateway.pinata.cloud
+PINATA_JWT=your_pinata_jwt_token
+
+# ========================
+# EXTERNAL APIS
+# ========================
+
+# CurrencyFreaks (USD ↔ ETH Conversion)
+# Get API key: https://currencyfreaks.com/
+CURRENCY_FREAKS_API_KEY=your_currencyfreaks_api_key
+
+# ========================
+# PLATFORM CONFIGURATION
+# ========================
+
+# Admin Wallet Addresses (comma-separated, lowercase)
+ADMIN_ADDRESSES=0xaddress1,0xaddress2,0xaddress3
+
+# Platform Treasury Address
+PLATFORM_TREASURY_ADDRESS=0xyour_treasury_address
+
+# App Settings
+NEXT_PUBLIC_APP_NAME=SEATrax
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### How to Get API Keys
+
+#### 1. Supabase Setup
 ```bash
-# Check invoices on blockchain
-node check-invoice.js
-
-# Check transaction events
-node check-tx.js
-
-# Check database
-./scripts/check-db.sh
+1. Go to https://supabase.com/ and create account
+2. Create new project
+3. Go to Settings → API
+4. Copy "Project URL" → NEXT_PUBLIC_SUPABASE_URL
+5. Copy "anon public" key → NEXT_PUBLIC_SUPABASE_ANON_KEY
+6. Copy "service_role" key → SUPABASE_SERVICE_KEY
+7. Run migrations (see Getting Started section)
 ```
 
-### Documentation
+#### 2. Pinata IPFS Setup
 ```bash
-# Open master plan
-cat .github/MASTER_IMPLEMENTATION_PLAN.md
+1. Go to https://pinata.cloud/ and sign up
+2. Go to API Keys → New Key
+3. Enable "pinFileToIPFS" permission
+4. Generate key
+5. Copy JWT token → PINATA_JWT
+6. Go to Gateways → Create Gateway
+7. Copy gateway URL → NEXT_PUBLIC_PINATA_GATEWAY
+```
 
-# Open today's tasks
-cat .github/QUICK_START_TODAY.md
+#### 3. CurrencyFreaks Setup
+```bash
+1. Go to https://currencyfreaks.com/
+2. Sign up for free account
+3. Get API key from dashboard
+4. Copy API key → CURRENCY_FREAKS_API_KEY
+```
 
-# Open exporter plan
-cat .github/EXPORTER_REFACTOR_PLAN.md
+#### 4. Panna SDK Setup
+```bash
+1. Contact Panna team or use test credentials
+2. Get Client ID and Partner ID
+3. Copy to NEXT_PUBLIC_PANNA_CLIENT_ID and NEXT_PUBLIC_PANNA_PARTNER_ID
 ```
 
 ---
 
-## 🐛 Issue Tracking
+## 🛠️ Available Scripts
 
-### Critical Issues (Blockers)
+```bash
+# Development
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint
 
-1. **Invoice Event Parsing** 🔴
-   - Sometimes returns null invoice ID
-   - See: `EXPORTER_REFACTOR_PLAN.md` - Issue #1
+# Database
+./scripts/apply-migrations.sh   # Setup Supabase
+./scripts/check-db.sh           # Verify database
 
-2. **Mock Data Contamination** 🔴
-   - Multiple pages show fake data
-   - See: `EXPORTER_REFACTOR_PLAN.md` - Issue #2
-
-3. **Missing Admin Pages** 🔴
-   - Cannot approve invoices or create pools
-   - See: `MASTER_IMPLEMENTATION_PLAN.md` - Week 1, Days 3-4
-
-### High Priority Issues
-
-4. **Dashboard Statistics** 🟡
-   - Using hardcoded values
-   - See: `EXPORTER_REFACTOR_PLAN.md` - Issue #3
-
-5. **Payment Link Integration** 🟡
-   - Not fetching from database
-   - See: `EXPORTER_REFACTOR_PLAN.md` - Issue #4
+# Deployment
+npm run build        # Build application
+vercel --prod        # Deploy to Vercel
+```
 
 ---
 
-## 📞 Support Resources
+## � Documentation
 
-### Documentation
-- **Business Process:** `business-process-documentation.md`
-- **Architecture:** `copilot-instructions.md`
-- **Testing:** `TESTING_QUICK_START.md`
-- **Deployment:** `DEPLOYMENT_READINESS.md`
+### Project Documentation
 
-### Contract Information
-- **Address:** `0x5c50eD2f705C6FaDdB0AcC478edDB4Edf109A5f2`
-- **Network:** Lisk Sepolia (Chain ID: 4202)
-- **Explorer:** https://sepolia-blockscout.lisk.com/
+Located in `.github/` folder:
 
-### Database
-- **Dashboard:** https://yazynajjhzowyvuzrqkb.supabase.co
-- **Tables:** exporters, investors, invoice_metadata, payments
+- **[copilot-instructions.md](.github/copilot-instructions.md)** - Development guidelines, architecture patterns, coding conventions
+- **[implementation-checklist.md](.github/implementation-checklist.md)** - Feature implementation tracking, completion status
+- **[plan.md](.github/plan.md)** - Development roadmap, priority tasks, timeline
+- **[PROJECT_STATUS.md](.github/PROJECT_STATUS.md)** - Comprehensive project status report, achievements, metrics
+- **[business-process-documentation.md](.github/business-process-documentation.md)** - Business logic, process flows, smart contract integration
 
-### External Services
-- **IPFS:** Pinata (documents storage)
-- **Currency API:** CurrencyFreaks (USD ↔ ETH)
+### Smart Contract Documentation
 
----
+Smart contracts are maintained in a separate repository:
+- **Repository**: [https://github.com/seatrax/smart-contract](https://github.com/seatrax/smart-contract)
+- **Contracts**: AccessControl, InvoiceNFT, PoolNFT, PoolFundingManager, PaymentOracle, PlatformAnalytics
+- **Network**: Lisk Sepolia Testnet
+- **Documentation**: See smart-contract repository README
 
-## 🎓 Learning Path
+### API Documentation
 
-### New Developers
+#### Currency Conversion
+```typescript
+// GET /api/currency
+// Returns current USD to ETH exchange rate
+const response = await fetch('/api/currency');
+const { rate, timestamp } = await response.json();
+```
 
-1. Read `copilot-instructions.md` - Understand project
-2. Read `business-process-documentation.md` - Understand flow
-3. Read `MASTER_IMPLEMENTATION_PLAN.md` - See roadmap
-4. Read `QUICK_START_TODAY.md` - Start coding
+#### Payment Processing
+```typescript
+// GET /api/payment/[invoiceId]
+// Returns payment details for specific invoice
+const response = await fetch(`/api/payment/${invoiceId}`);
+const { invoice, amountDue, paymentLink } = await response.json();
+```
 
-### Returning Developers
+### Component Documentation
 
-1. Check `PROJECT_STATUS.md` - Current state
-2. Check `QUICK_START_TODAY.md` - Today's tasks
-3. Review recent changes in git log
-4. Continue implementation
+#### Common Components
+- **ErrorBoundary**: Catches React errors and displays fallback UI
+- **ErrorMessage**: Formats and displays blockchain error messages
+- **Skeleton**: Loading state placeholders (6 variants)
+- **TransactionPending**: Transaction progress indicators
+- **MobileNav**: Mobile navigation (hamburger + bottom tabs)
+- **ResponsiveTable**: Auto-converts tables to cards on mobile
+- **Logo**: Responsive brand logo (4 variants)
 
----
-
-## 📈 Success Metrics
-
-### Must Have for MVP
-- [ ] Exporter can create invoices (>95% success)
-- [ ] Admin can approve/reject invoices
-- [ ] Admin can create pools
-- [ ] Investor can invest in pools
-- [ ] Auto-distribution triggers at 100%
-- [ ] Payment links functional
-- [ ] Profit distribution works
-- [ ] No mock data anywhere
-
-### Current Achievement
-- [x] Smart contract 100% functional
-- [x] All hooks implemented
-- [x] IPFS integration working
-- [ ] Full business cycle testable (40%)
-
----
-
-## 🎯 This Week's Goals
-
-### Week 1: Core Flow Implementation
-
-**Monday-Tuesday:** Exporter Refactoring
-- Fix event parsing
-- Remove mock data
-- Real statistics
-
-**Wednesday:** Admin Invoice Management
-- Build approval UI
-- Test approval flow
-
-**Thursday:** Admin Pool Creation
-- Build pool creation UI
-- Test pool creation
-
-**Friday:** Testing & Bug Fixes
-- E2E testing
-- Bug fixes
-- Performance optimization
+#### Custom Hooks
+- **useSEATrax**: Unified hook for all contract interactions (invoices, pools, investments, payments)
+- **useAdminContract**: Admin-specific operations using MetaMask (approve, create pool, distribute)
+- **useMetaMaskAdmin**: Admin wallet connection and network management
+- **usePanna**: User wallet connection and account management (Panna SDK)
+- **useTransaction**: Transaction state management
+- **useExporterProfile**: Exporter registration and profile
+- **useInvestorProfile**: Investor registration and profile
 
 ---
 
-**Ready to start?** 
+## 📄 License
 
-👉 Go to [`QUICK_START_TODAY.md`](QUICK_START_TODAY.md) and begin with Step 1!
+This project is proprietary software developed for SEATrax platform.
 
 ---
 
-*Last updated: January 11, 2026*  
-*Current phase: Week 1 - Exporter Refactoring*  
-*Next milestone: Admin pages (Week 1, Days 3-4)*
+## 🙏 Acknowledgments
+
+### Technologies
+- [Next.js](https://nextjs.org/) - React framework
+- [TypeScript](https://www.typescriptlang.org/) - Type safety
+- [Tailwind CSS](https://tailwindcss.com/) - Styling
+- [shadcn/ui](https://ui.shadcn.com/) - UI components
+- [Lisk](https://lisk.com/) - Blockchain platform
+- [Supabase](https://supabase.com/) - Backend infrastructure
+- [Pinata](https://pinata.cloud/) - IPFS storage
+- [Thirdweb](https://thirdweb.com/) - Web3 development
+
+### Smart Contracts
+Smart contract development and deployment managed separately at:
+[https://github.com/seatrax/smart-contract](https://github.com/seatrax/smart-contract)
+
+---
+
+## � Links
+
+- **Contract Explorer**: [View on BlockScout](https://sepolia-blockscout.lisk.com/address/0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E)
+- **Lisk Sepolia Faucet**: [Get Test ETH](https://sepolia-faucet.lisk.com/)
+- **Network RPC**: https://rpc.sepolia-api.lisk.com
+
+---
+
+<div align="center">
+
+**Built with ❤️ by the SEATrax Team**
+
+🌊 **Shipping Excellence Across Borders** ⚓️
+
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
+[![Lisk](https://img.shields.io/badge/Blockchain-Lisk%20Sepolia-purple)](https://lisk.com/)
+
+</div>
+
+## 📄 License
+
+MIT License
