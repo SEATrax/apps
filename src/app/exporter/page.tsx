@@ -162,8 +162,9 @@ export default function ExporterDashboard() {
       // Take last 5 invoices from contract
       const recentContractInvoices = validInvoices.slice(-5).reverse();
       
-      const formattedInvoices: Invoice[] = await Promise.all(
+      const invoiceResults = await Promise.all(
         recentContractInvoices.map(async (contractData) => {
+          if (!contractData) return null;
           // Try to get metadata from Supabase (optional)
           const { data: metadata } = await supabase
             .from('invoice_metadata')
@@ -184,6 +185,8 @@ export default function ExporterDashboard() {
           };
         })
       );
+      
+      const formattedInvoices: Invoice[] = invoiceResults.filter((inv): inv is Invoice => inv !== null);
       
       setStats(realStats);
       setRecentInvoices(formattedInvoices);
