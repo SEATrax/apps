@@ -582,13 +582,13 @@ export default function InvoiceDetail() {
                   <div className="p-3 bg-slate-800 rounded-lg">
                     <p className="text-xs text-slate-400 mb-2">Payment URL</p>
                     <p className="text-sm font-mono text-slate-100 break-all">
-                      {typeof window !== 'undefined' ? window.location.origin : ''}{paymentLink}
+                      {typeof window !== 'undefined' ? window.location.origin : ''}{invoice?.paymentLink || `/pay/${invoiceId}`}
                     </p>
                   </div>
                   
                   <Button 
                     onClick={() => {
-                      const fullUrl = `${window.location.origin}${paymentLink}`;
+                      const fullUrl = `${window.location.origin}${invoice?.paymentLink || `/pay/${invoiceId}`}`;
                       navigator.clipboard.writeText(fullUrl);
                       alert('Payment link copied to clipboard!');
                     }}

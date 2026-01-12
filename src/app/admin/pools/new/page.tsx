@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useMetaMaskAdmin } from '@/hooks/useMetaMaskAdmin';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { useAdminContract } from '@/hooks/useAdminContract';
-import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,8 +28,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminHeader from '@/components/AdminHeader';
 import { AdminAuthGuard } from '@/components/admin/AdminAuthGuard';
-import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 import type { Invoice } from '@/types';
 
 interface InvoiceWithMetadata {
