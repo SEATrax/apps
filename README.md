@@ -13,14 +13,9 @@
 - [Overview](#-overview)
 - [Key Features](#-key-features)
 - [Technology Stack](#-technology-stack)
-- [User Roles](#-user-roles)
-- [Application Flow](#-application-flow)
+- [Smart Contract](#-smart-contract)
 - [Getting Started](#-getting-started)
-- [Project Structure](#-project-structure)
-- [Environment Configuration](#-environment-configuration)
-- [Development](#-development)
-- [Deployment](#-deployment)
-- [Documentation](#-documentation)
+- [Environment Setup](#-environment-setup)
 
 ---
 
@@ -71,8 +66,22 @@ SEATrax is a **blockchain platform** that revolutionizes trade finance by tokeni
 
 ---
 
+## 🔄 How It Works
 
-## 🛠️ Technology Stack
+### Invoice Lifecycle
+1. **Exporter** creates shipping invoice with documents
+2. **Admin** verifies and approves invoice
+3. **Admin** creates investment pool with approved invoices
+4. **Investors** fund the pool with ETH
+5. **Exporter** withdraws funds when pool reaches 70%+ funding
+6. **Importer** pays invoice after shipment
+7. **Investors** claim 4% returns after payment confirmation
+
+### Key Business Rules
+- **70% Threshold**: Exporters can withdraw when invoice is 70%+ funded
+- **Auto-Distribution**: Funds automatically distributed at 100% pool funding
+- **Returns**: 4% to investors, 1% platform fee
+- **Minimum Investment**: 1000 tokens per pool
 
 ### Frontend
 - **Framework**: [Next.js 15](https://nextjs.org/) with App Router
@@ -103,125 +112,47 @@ SEATrax is a **blockchain platform** that revolutionizes trade finance by tokeni
 - **Type Checking**: TypeScript Compiler
 - **Build Tool**: Next.js
 
----
+## 🛠️ Technology Stack
 
-## 👥 User Roles
+### Unified Architecture
 
-### 🏭 Exporter
-**Registration**: Complete onboarding with company details (name, tax ID, country, export license)
+SEATrax uses a **single unified smart contract** that handles all platform functionality:
 
-**Capabilities**:
-- Create shipping invoices with IPFS document upload
-- Track invoice funding progress in real-time
-- Withdraw funds when invoices reach ≥70% funding
-- Monitor payment status from importers
-- View payment history and transaction details
+- **Contract Address**: [`0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E`](https://sepolia-blockscout.lisk.com/address/0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E)
+- **Network**: Lisk Sepolia Testnet
+- **Deployed**: January 12, 2026
+- **Verified**: ✅ Yes
 
-**Workflow**:
-```
-Register → Create Invoice → Wait for Approval → Track Funding → Withdraw Funds → Payment Settlement
-```
+### Contract Features
 
-### 💼 Investor
-**Registration**: Complete onboarding with personal details (name, address)
+| Module | Functionality |
+|--------|---------------|
+| **Role Management** | Admin, Exporter, Investor roles with access control |
+| **Invoice NFT** | ERC-721 tokenization of shipping invoices |
+| **Pool NFT** | ERC-721 tokenization of investment pools |
+| **Investment Tracking** | On-chain record of investor contributions |
+| **Payment Oracle** | Importer payment verification |
+| **Platform Analytics** | Real-time metrics and statistics |
 
-**Capabilities**:
-- Browse curated investment pools with risk assessment
-- View detailed invoice breakdown per pool
-- Invest in pools (minimum 1000 tokens)
-- Track active investments and portfolio performance
-- Claim returns (4% yield) after invoice payments
+### Key Functions
 
-**Workflow**:
-```
-Register → Browse Pools → Invest → Monitor Progress → Claim Returns
-```
+```solidity
+// Invoice Management
+createInvoice(company, importer, email, amount, loan, date, ipfsHash)
+approveInvoice(invoiceId)
+withdrawFunds(invoiceId)
 
-### 🔐 Admin
-**Access**: Determined by wallet address in `ADMIN_ADDRESSES` environment variable
+// Pool Management
+createPool(name, invoiceIds, startDate, endDate)
+invest(poolId) payable
+claimReturns(poolId)
 
-**Capabilities**:
-- Verify exporter applications and grant roles
-- Review and approve/reject submitted invoices
-- Create investment pools from finalized invoices
-- Allocate funds to invoices (≥70% pool funding)
-- Confirm importer payments via oracle integration
-- Distribute profits to investors after settlements
-- Monitor platform-wide analytics and metrics
-
-**Workflow**:
-```
-Verify Exporters → Approve Invoices → Create Pools → Manage Funding → Confirm Payments → Distribute Profits
+// Payment & Distribution
+markInvoicePaid(invoiceId)
+distributeProfits(poolId)
 ```
 
 ---
-
-## 🔄 Application Flow
-
-### 1️⃣ Invoice Creation & Approval
-```mermaid
-sequenceDiagram
-    participant E as Exporter
-    participant SC as Smart Contract
-    participant A as Admin
-    participant DB as Supabase
-    
-    E->>SC: Create Invoice (mintInvoice)
-    SC->>SC: Mint Invoice NFT
-    E->>DB: Upload documents to IPFS
-    DB->>DB: Save metadata
-    A->>SC: Review & Approve (finalizeInvoice)
-    SC->>SC: Status: FINALIZED
-```
-
-### 2️⃣ Pool Creation & Investment
-```mermaid
-sequenceDiagram
-    participant A as Admin
-    participant SC as Smart Contract
-    participant I as Investor
-    participant E as Exporter
-    
-    A->>SC: Create Pool (createPool)
-    SC->>SC: Mint Pool NFT
-    A->>SC: Finalize Pool
-    I->>SC: Invest in Pool
-    SC->>SC: Track Investment
-    SC->>SC: Check if 100% funded
-    alt Pool 100% Funded
-        SC->>SC: Auto-allocate to invoices
-        SC->>E: Auto-withdraw to exporter
-    end
-```
-
-### 3️⃣ Payment & Settlement
-```mermaid
-sequenceDiagram
-    participant I as Importer
-    participant O as Oracle/Admin
-    participant SC as Smart Contract
-    participant Inv as Investor
-    
-    I->>O: Make Payment
-    O->>SC: Confirm Payment (markInvoicePaid)
-    SC->>SC: Update Invoice Status: PAID
-    SC->>SC: Check if all pool invoices paid
-    alt All Invoices Paid
-        O->>SC: Distribute Profits
-        SC->>Inv: 4% Returns
-        SC->>SC: 1% Platform Fee
-    end
-    Inv->>SC: Claim Returns
-```
-
-### Business Rules
-- **Funding Threshold**: Exporters can withdraw at ≥70% invoice funding
-- **Auto-Distribution**: Funds automatically sent to exporters at 100% pool funding
-- **Profit Distribution**: 4% to investors, 1% platform fee, remainder to exporters
-- **Minimum Investment**: 1000 tokens per investor per pool
-
----
-
 ## � Getting Started
 
 ### Prerequisites
@@ -273,66 +204,13 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Testing with Multiple Roles
+### First Steps
 
-**Admin Access**: Use MetaMask with wallet address listed in `ADMIN_ADDRESSES` environment variable.
-
-**Testing Different Roles**:
-
-#### 1. Admin Self-Service Panel (Recommended)
-- Navigate to `/admin/roles`
-- Connect with MetaMask (admin wallet)
-- Click "Use My Address" 
-- Grant yourself any role (Admin, Exporter, Investor)
-- Roles are granted on-chain via smart contract
-
-#### 2. Console Logging (For Panna SDK addresses)
-- Open browser DevTools (F12)
-- Connect wallet - your Panna address will be logged
-- Use logged address for testing
-
-#### 3. Command Line Scripts
-```bash
-# Grant admin role
-NEW_ADMIN_ADDRESS=0xYourAddress npx hardhat run scripts/grant-admin.js --network lisk-sepolia
-
-# Check role status
-node scripts/check-role.js 0xYourAddress
-```
-
-### First Time Setup Tutorial
-
-#### For Exporters:
-1. **Connect Wallet**: Click "Connect Wallet" in header
-2. **Select Role**: Choose "Exporter" on login page
-3. **Complete Onboarding**: Fill company details (name, tax ID, country, license)
-4. **Wait for Verification**: Admin will verify and grant exporter role
-5. **Create Invoice**: Navigate to Exporter Dashboard → Create Invoice
-6. **Upload Documents**: Add shipping documents (PDF, images)
-7. **Submit for Approval**: Admin reviews and approves invoice
-8. **Track Funding**: Monitor funding progress in real-time
-9. **Withdraw Funds**: Withdraw when invoice reaches ≥70% funding
-
-#### For Investors:
-1. **Connect Wallet**: Click "Connect Wallet" in header
-2. **Select Role**: Choose "Investor" on login page
-3. **Complete Onboarding**: Fill personal details (name, address)
-4. **Wait for Verification**: Admin will grant investor role
-5. **Browse Pools**: View available investment pools
-6. **Review Pool Details**: Check invoice breakdown and risk category
-7. **Invest**: Enter amount (min 1000 tokens) and confirm transaction
-8. **Track Investments**: Monitor portfolio in Investor Dashboard
-9. **Claim Returns**: Claim 4% returns after invoices are paid
-
-#### For Admins:
-1. **Connect Wallet**: Use MetaMask with wallet address listed in `ADMIN_ADDRESSES`
-2. **Auto-Access**: Automatically redirected to Admin Dashboard
-3. **Approve Invoices**: Review submitted invoices and documents (auto-approve exporters)
-4. **Create Pools**: Use autofill feature to quickly create investment pools
-5. **Manage Funding**: Funds auto-allocated when pools reach 100% funding
-6. **Confirm Payments**: Mark invoices as paid after importer confirmation
-7. **Distribute Profits**: Distribute 4% returns to investors
-8. **Monitor Health**: Check data consistency between blockchain and database
+1. **Connect Wallet**: Use MetaMask or compatible wallet
+2. **Get Test ETH**: Get Lisk Sepolia ETH from [faucet](https://sepolia-faucet.lisk.com/)
+3. **Select Role**: Choose Exporter, Investor, or Admin
+4. **Complete Onboarding**: Fill required profile information
+5. **Start Using**: Create invoices, invest in pools, or manage platform
 
 ---
 
@@ -431,7 +309,7 @@ apps/
 
 ---
 
-## ⚙️ Environment Configuration
+## ⚙️ Environment Setup
 
 ### Required Environment Variables
 
@@ -539,102 +417,22 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 ---
 
-## � Development
+## 🛠️ Available Scripts
 
-### Available Scripts
-
-#### Frontend Development
 ```bash
-# Start development server
-npm run dev
+# Development
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint
 
-# Build for production
-npm run build
+# Database
+./scripts/apply-migrations.sh   # Setup Supabase
+./scripts/check-db.sh           # Verify database
 
-# Start production server
-npm run start
-
-# Run ESLint
-npm run lint
-
-# Clean reinstall (if needed)
-npm run reinstall
-```
-
-#### Database Management
-```bash
-# Apply Supabase migrations
-./scripts/apply-migrations.sh
-
-# Check database status
-./scripts/check-db.sh
-
-# Clean database (reset for testing)
-node scripts/cleanup-database.js
-```
-
-#### Smart Contract & Role Management
-```bash
-# Check admin role status
-node scripts/check-role.js 0xYourWalletAddress
-
-# Grant admin role (requires deployer private key)
-NEW_ADMIN_ADDRESS=0xYourAddress npx hardhat run scripts/grant-admin.js --network lisk-sepolia
-
-# Deploy new contract
-npx hardhat run scripts/deploy.js --network lisk-sepolia
-```
-
-### Development Workflow
-
-#### Creating New Features
-1. Create feature branch: `git checkout -b feature/your-feature`
-2. Implement feature following project patterns
-3. Test locally with `npm run dev`
-4. Build and verify: `npm run build`
-5. Commit with clear message
-6. Push and create pull request
-
-#### Code Structure Patterns
-
-**Smart Contract Hooks**:
-```typescript
-// Example: Using unified SEATrax hook
-import { useSEATrax } from '@/hooks/useSEATrax';
-
-function MyComponent() {
-  const { createInvoice, getInvoice, isLoading } = useSEATrax();
-  
-  const handleCreateInvoice = async (data) => {
-    const result = await createInvoice(
-      data.exporterCompany,
-      data.importerCompany,
-      data.importerEmail,
-      BigInt(data.shippingAmount),
-      BigInt(data.loanAmount),
-      BigInt(data.shippingDate),
-      data.ipfsHash
-    );
-  };
-}
-```
-
-**Error Handling**:
-```typescript
-// Wrap components in ErrorBoundary
-import { ErrorBoundary } from '@/components/common/ErrorBoundary';
-
-<ErrorBoundary>
-  <YourComponent />
-</ErrorBoundary>
-```
-
-**Loading States**:
-```typescript
-// Use Skeleton components
-import { Skeleton } from '@/components/common/Skeleton';
-
-{loading ? <Skeleton variant="card" /> : <YourContent />}
+# Deployment
+npm run build        # Build application
+vercel --prod        # Deploy to Vercel
 ```
 
 ---
@@ -888,14 +686,11 @@ Smart contract development and deployment managed separately at:
 
 ---
 
-## 📞 Resources
+## � Links
 
-### Project Links
-
-- **Frontend Repository**: [https://github.com/SEATrax/apps](https://github.com/SEATrax/apps)
-- **Smart Contracts**: [https://github.com/SEATrax/smart-contract](https://github.com/SEATrax/smart-contract)
-- **Lisk Sepolia Explorer**: [https://sepolia-blockscout.lisk.com/](https://sepolia-blockscout.lisk.com/)
-- **Lisk Faucet**: [https://sepolia-faucet.lisk.com/](https://sepolia-faucet.lisk.com/)
+- **Contract Explorer**: [View on BlockScout](https://sepolia-blockscout.lisk.com/address/0x561D0d65160B6E57FAa6a0a9e9C05deCEB1F233E)
+- **Lisk Sepolia Faucet**: [Get Test ETH](https://sepolia-faucet.lisk.com/)
+- **Network RPC**: https://rpc.sepolia-api.lisk.com
 
 ---
 
