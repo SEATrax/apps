@@ -94,12 +94,12 @@ export default function AdminInvoicesPage() {
     isMetaMaskInstalled,
     error: metaMaskError 
   } = useMetaMaskAdmin();
-  const { checkUserRoles, getAllPendingInvoices, getAllApprovedInvoices, getInvoice, isLoading } = useSEATrax();
+  const { checkUserRoles, getAllPendingInvoices, getAllApprovedInvoices, getAllOpenPools, getPool, getInvoice, isLoading } = useSEATrax();
   const router = useRouter();
   
   const [invoices, setInvoices] = useState<InvoiceWithMetadata[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<InvoiceWithMetadata[]>([]);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'funded'>('pending');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'in_pool' | 'funded' | 'withdrawn' | 'paid' | 'completed' | 'rejected'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -157,14 +157,22 @@ export default function AdminInvoicesPage() {
     let filtered = invoices;
 
     // Apply status filter (invoice.status is a number from contract)
-    if (filter === 'pending') {
-      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.PENDING);
-    } else if (filter === 'approved') {
-      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.APPROVED);
-    } else if (filter === 'rejected') {
-      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.REJECTED);
-    } else if (filter === 'funded') {
-      filtered = filtered.filter(inv => Number(inv.status) === INVOICE_STATUS.FUNDED);
+    if (filter !== 'all') {
+      const statusMap: Record<string, number> = {
+        'pending': INVOICE_STATUS.PENDING,
+        'approved': INVOICE_STATUS.APPROVED,
+        'in_pool': INVOICE_STATUS.IN_POOL,
+        'funded': INVOICE_STATUS.FUNDED,
+        'withdrawn': INVOICE_STATUS.WITHDRAWN,
+        'paid': INVOICE_STATUS.PAID,
+        'completed': INVOICE_STATUS.COMPLETED,
+        'rejected': INVOICE_STATUS.REJECTED,
+      };
+      
+      const targetStatus = statusMap[filter];
+      if (targetStatus !== undefined) {
+        filtered = filtered.filter(inv => Number(inv.status) === targetStatus);
+      }
     }
 
     // Apply search filter
@@ -183,16 +191,44 @@ export default function AdminInvoicesPage() {
     try {
       setLoadingInvoices(true);
       
-      // Get all invoice IDs from blockchain (source of truth)
+      // 1. Get invoices that are not in pools yet
       const [pendingIds, approvedIds] = await Promise.all([
         getAllPendingInvoices(),
         getAllApprovedInvoices()
       ]);
       
-      // Combine all IDs for comprehensive list
-      const allInvoiceIds = [...pendingIds, ...approvedIds];
+      // 2. Get all pools and extract invoice IDs from them
+      const poolIds = await getAllOpenPools();
+      const invoicesInPools: bigint[] = [];
       
-      // Get full invoice data from blockchain
+      console.log(`📊 Found ${poolIds.length} pools to check for invoices`);
+      
+      for (const poolId of poolIds) {
+        try {
+          const poolData = await getPool(poolId);
+          if (poolData && poolData.invoiceIds && poolData.invoiceIds.length > 0) {
+            console.log(`   Pool ${poolId}: ${poolData.invoiceIds.length} invoices`);
+            invoicesInPools.push(...poolData.invoiceIds);
+          }
+        } catch (error) {
+          console.error(`Failed to fetch pool ${poolId}:`, error);
+        }
+      }
+      
+      // 3. Combine and deduplicate all invoice IDs
+      const allInvoiceIds = [...new Set([
+        ...pendingIds,
+        ...approvedIds,
+        ...invoicesInPools
+      ])];
+      
+      console.log(`📋 Total invoices found:`);
+      console.log(`   - Pending (not in pool): ${pendingIds.length}`);
+      console.log(`   - Approved (not in pool): ${approvedIds.length}`);
+      console.log(`   - In pools: ${invoicesInPools.length}`);
+      console.log(`   - Total unique: ${allInvoiceIds.length}`);
+      
+      // 4. Get full invoice data from blockchain
       const invoicesWithData: InvoiceWithMetadata[] = [];
       
       for (const invoiceId of allInvoiceIds) {
@@ -233,11 +269,17 @@ export default function AdminInvoicesPage() {
   };
 
   const getFilterStats = () => {
-    const pending = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.PENDING).length;
-    const approved = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.APPROVED).length;
-    const rejected = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.REJECTED).length;
-    const funded = invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.FUNDED).length;
-    return { pending, approved, rejected, funded, total: invoices.length };
+    return {
+      all: invoices.length,
+      pending: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.PENDING).length,
+      approved: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.APPROVED).length,
+      in_pool: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.IN_POOL).length,
+      funded: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.FUNDED).length,
+      withdrawn: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.WITHDRAWN).length,
+      paid: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.PAID).length,
+      completed: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.COMPLETED).length,
+      rejected: invoices.filter(inv => Number(inv.status) === INVOICE_STATUS.REJECTED).length,
+    };
   };
 
   const stats = getFilterStats();
@@ -487,7 +529,7 @@ export default function AdminInvoicesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-400">Total Invoices</p>
-                  <p className="text-2xl font-bold text-white">{stats.total}</p>
+                  <p className="text-2xl font-bold text-white">{stats.all}</p>
                 </div>
                 <FileText className="h-8 w-8 text-cyan-400" />
               </div>
@@ -544,7 +586,7 @@ export default function AdminInvoicesPage() {
                   className={filter === 'all' ? 'bg-cyan-600 hover:bg-cyan-700' : ''}
                 >
                   <Filter className="h-4 w-4 mr-2" />
-                  All ({stats.total})
+                  All ({stats.all})
                 </Button>
                 <Button
                   variant={filter === 'pending' ? 'default' : 'outline'}
@@ -559,10 +601,55 @@ export default function AdminInvoicesPage() {
                   variant={filter === 'approved' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setFilter('approved')}
-                  className={filter === 'approved' ? 'bg-green-600 hover:bg-green-700' : ''}
+                  className={filter === 'approved' ? 'bg-blue-600 hover:bg-blue-700' : ''}
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Approved ({stats.approved})
+                </Button>
+                <Button
+                  variant={filter === 'in_pool' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('in_pool')}
+                  className={filter === 'in_pool' ? 'bg-cyan-600 hover:bg-cyan-700' : ''}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  In Pool ({stats.in_pool})
+                </Button>
+                <Button
+                  variant={filter === 'funded' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('funded')}
+                  className={filter === 'funded' ? 'bg-green-600 hover:bg-green-700' : ''}
+                >
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Funded ({stats.funded})
+                </Button>
+                <Button
+                  variant={filter === 'withdrawn' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('withdrawn')}
+                  className={filter === 'withdrawn' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                >
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Withdrawn ({stats.withdrawn})
+                </Button>
+                <Button
+                  variant={filter === 'paid' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('paid')}
+                  className={filter === 'paid' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Paid ({stats.paid})
+                </Button>
+                <Button
+                  variant={filter === 'completed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('completed')}
+                  className={filter === 'completed' ? 'bg-teal-600 hover:bg-teal-700' : ''}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Completed ({stats.completed})
                 </Button>
                 <Button
                   variant={filter === 'rejected' ? 'default' : 'outline'}
@@ -572,15 +659,6 @@ export default function AdminInvoicesPage() {
                 >
                   <X className="h-4 w-4 mr-2" />
                   Rejected ({stats.rejected})
-                </Button>
-                <Button
-                  variant={filter === 'funded' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter('funded')}
-                  className={filter === 'funded' ? 'bg-cyan-600 hover:bg-cyan-700' : ''}
-                >
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Funded ({stats.funded})
                 </Button>
               </div>
 
@@ -605,11 +683,15 @@ export default function AdminInvoicesPage() {
               Invoices ({filteredInvoices.length})
             </CardTitle>
             <CardDescription className="text-gray-400">
+              {filter === 'all' && 'All invoices across all statuses in the platform'}
               {filter === 'pending' && 'Invoices awaiting admin review and approval'}
               {filter === 'approved' && 'Approved invoices ready for pool inclusion'}
-              {filter === 'rejected' && 'Invoices that have been rejected'}
-              {filter === 'funded' && 'Funded invoices in active investment pools'}
-              {filter === 'all' && 'All registered invoices in the platform'}
+              {filter === 'in_pool' && 'Invoices currently in investment pools'}
+              {filter === 'funded' && 'Invoices that have received funding from pools'}
+              {filter === 'withdrawn' && 'Invoices with funds withdrawn by exporters'}
+              {filter === 'paid' && 'Invoices that have been paid by importers'}
+              {filter === 'completed' && 'Invoices with profits distributed to investors'}
+              {filter === 'rejected' && 'Invoices that have been rejected by admin'}
             </CardDescription>
           </CardHeader>
           <CardContent>
