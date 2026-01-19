@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 export default function InvestorDashboard() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
-  const { getInvestorPools, getPool, getInvestment, checkUserRoles } = useSEATrax();
+  const { getInvestorPools, getPool, getInvestment, checkUserRoles, getPoolFundingPercentage } = useSEATrax();
   const { profile, loading: profileLoading, updateProfile, refetch } = useInvestorProfile();
 
   const [portfolioStats, setPortfolioStats] = useState({
@@ -119,46 +119,94 @@ export default function InvestorDashboard() {
     }
   };
 
-  // Fetch portfolio stats
+  // Fetch portfolio stats from blockchain
   useEffect(() => {
     const fetchPortfolioStats = async () => {
-      if (!activeAccount) return;
+      if (!activeAccount?.address) return;
 
       try {
         setLoading(true);
 
-        // For now, use mock data until full integration
-        // TODO: Implement getInvestorPools() and calculate stats
+        // Get all pools this investor has invested in
+        const poolIds = await getInvestorPools(activeAccount.address);
+
+        if (poolIds.length === 0) {
+          // No investments yet
+          setPortfolioStats({
+            totalInvested: 0,
+            totalValue: 0,
+            totalReturn: 0,
+            activeInvestments: 0
+          });
+          setRecentInvestments([]);
+          return;
+        }
+
+        let totalInvestedWei = 0n;
+        let totalReturnWei = 0n;
+        let activeCount = 0;
+        let completedCount = 0;
+        const investments: any[] = [];
+
+        // Fetch details for each pool
+        for (const poolId of poolIds) {
+          try {
+            const [pool, investment, fundingPercentage] = await Promise.all([
+              getPool(poolId),
+              getInvestment(poolId, activeAccount.address),
+              getPoolFundingPercentage(poolId)
+            ]);
+
+            if (pool && investment && investment.amount > 0n) {
+              totalInvestedWei += investment.amount;
+
+              // Check pool status
+              const isCompleted = pool.status === 2; // COMPLETED
+              const isFunded = pool.status === 1; // FUNDED
+
+              if (isCompleted || isFunded) {
+                if (isCompleted) {
+                  // Calculate 4% yield for completed pools
+                  const yieldAmount = (investment.amount * 4n) / 100n;
+                  totalReturnWei += yieldAmount;
+                  completedCount++;
+                }
+              } else {
+                activeCount++;
+              }
+
+              // Build investment data for recent investments list
+              investments.push({
+                id: Number(poolId),
+                poolName: pool.name || `Pool #${poolId.toString()}`,
+                amount: Number(investment.amount) / 1e18,
+                status: isCompleted ? 'Completed' : (isFunded ? 'Funded' : 'Active'),
+                fundingProgress: fundingPercentage / 100, // From basis points
+                poolId: poolId,
+                timestamp: Number(investment.timestamp)
+              });
+            }
+          } catch (poolError) {
+            console.error(`Failed to fetch pool ${poolId}:`, poolError);
+          }
+        }
+
+        // Sort investments by timestamp (most recent first) and take top 3
+        investments.sort((a, b) => b.timestamp - a.timestamp);
+        const recentThree = investments.slice(0, 3);
+
+        // Convert Wei to ETH for display
+        const totalInvestedETH = Number(totalInvestedWei) / 1e18;
+        const totalReturnETH = Number(totalReturnWei) / 1e18;
+
         setPortfolioStats({
-          totalInvested: 5200,
-          totalValue: 5400,
-          totalReturn: 200,
-          activeInvestments: 3
+          totalInvested: totalInvestedETH,
+          totalValue: totalInvestedETH + totalReturnETH,
+          totalReturn: totalReturnETH,
+          activeInvestments: activeCount + (poolIds.length - activeCount - completedCount)
         });
 
-        setRecentInvestments([
-          {
-            id: 1,
-            poolName: 'Southeast Asia Pool #12',
-            amount: 2100,
-            status: 'Active',
-            fundingProgress: 85
-          },
-          {
-            id: 2,
-            poolName: 'Maritime Trade Pool #8',
-            amount: 1500,
-            status: 'Completed',
-            fundingProgress: 100
-          },
-          {
-            id: 3,
-            poolName: 'Electronics Pool #15',
-            amount: 1600,
-            status: 'Active',
-            fundingProgress: 45
-          }
-        ]);
+        setRecentInvestments(recentThree);
       } catch (error) {
         console.error('Failed to fetch portfolio:', error);
       } finally {
@@ -167,7 +215,7 @@ export default function InvestorDashboard() {
     };
 
     fetchPortfolioStats();
-  }, [activeAccount, getInvestorPools, getPool, getInvestment]);
+  }, [activeAccount, getInvestorPools, getPool, getInvestment, getPoolFundingPercentage]);
 
   if (loading || profileLoading) {
     return (
