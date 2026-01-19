@@ -1,99 +1,146 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, DollarSign, Clock, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
+import { TrendingUp, DollarSign, Clock, CheckCircle, AlertCircle, ArrowRight, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+
+// Return data structure
+interface ReturnData {
+  id: number;
+  poolId: bigint;
+  poolName: string;
+  investmentAmount: string;
+  totalReturn: string;
+  profit: string;
+  yieldRate: string;
+  completedDate: string;
+  status: 'Ready to Claim' | 'Claimed';
+  returnsClaimed: boolean;
+  transactionHash?: string;
+}
 
 export default function ReturnsPage() {
   const router = useRouter();
   const activeAccount = useActiveAccount();
-  const { claimReturns } = useSEATrax();
+  const { claimReturns, getInvestorPools, getInvestment, getPool } = useSEATrax();
+
+  const [claimableReturns, setClaimableReturns] = useState<ReturnData[]>([]);
+  const [claimedReturns, setClaimedReturns] = useState<ReturnData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [claimingReturns, setClaimingReturns] = useState<number | null>(null);
 
-  // Mock data - ready for smart contract integration
-  const claimableReturns = [
-    {
-      id: 1,
-      poolId: 8,
-      poolName: 'Maritime Trade Pool #8',
-      investmentAmount: '1.5',
-      totalReturn: '1.56',
-      profit: '0.06',
-      yieldRate: '4.1%',
-      maturityDate: '2024-03-15',
-      status: 'Ready to Claim',
-      completedDate: '2024-03-20'
-    },
-    {
-      id: 2,
-      poolId: 5,
-      poolName: 'Tech Components Pool #5',
-      investmentAmount: '0.8',
-      totalReturn: '0.83',
-      profit: '0.03',
-      yieldRate: '4.0%',
-      maturityDate: '2024-02-28',
-      status: 'Ready to Claim',
-      completedDate: '2024-03-01'
-    }
-  ];
-
-  const claimedReturns = [
-    {
-      id: 3,
-      poolId: 3,
-      poolName: 'Southeast Trade Pool #3',
-      investmentAmount: '2.0',
-      totalReturn: '2.08',
-      profit: '0.08',
-      yieldRate: '4.2%',
-      claimedDate: '2024-02-15',
-      transactionHash: '0xabc123...'
-    },
-    {
-      id: 4,
-      poolId: 1,
-      poolName: 'Electronics Export Pool #1',
-      investmentAmount: '1.2',
-      totalReturn: '1.25',
-      profit: '0.05',
-      yieldRate: '4.1%',
-      claimedDate: '2024-01-20',
-      transactionHash: '0xdef456...'
-    }
-  ];
-
+  // Calculate stats from real data
   const totalStats = {
-    totalClaimable: claimableReturns.reduce((sum, ret) => sum + parseFloat(ret.totalReturn), 0).toFixed(3),
-    totalClaimed: claimedReturns.reduce((sum, ret) => sum + parseFloat(ret.totalReturn), 0).toFixed(3),
-    totalProfit: [...claimableReturns, ...claimedReturns].reduce((sum, ret) => sum + parseFloat(ret.profit), 0).toFixed(3)
+    totalClaimable: claimableReturns.reduce((sum, ret) => sum + parseFloat(ret.totalReturn), 0).toFixed(4),
+    totalClaimed: claimedReturns.reduce((sum, ret) => sum + parseFloat(ret.totalReturn), 0).toFixed(4),
+    totalProfit: [...claimableReturns, ...claimedReturns].reduce((sum, ret) => sum + parseFloat(ret.profit), 0).toFixed(4)
   };
+
+  // Fetch returns data from blockchain
+  const fetchReturns = useCallback(async (isRefresh = false) => {
+    if (!activeAccount?.address) return;
+
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      // Get all pools this investor has invested in
+      const poolIds = await getInvestorPools(activeAccount.address);
+
+      if (poolIds.length === 0) {
+        setClaimableReturns([]);
+        setClaimedReturns([]);
+        return;
+      }
+
+      const claimable: ReturnData[] = [];
+      const claimed: ReturnData[] = [];
+
+      // Check each pool for returns
+      for (let i = 0; i < poolIds.length; i++) {
+        const poolId = poolIds[i];
+
+        try {
+          const [pool, investment] = await Promise.all([
+            getPool(poolId),
+            getInvestment(poolId, activeAccount.address)
+          ]);
+
+          // Only process completed pools (status === 2)
+          if (pool && investment && investment.amount > 0n && pool.status === 2) {
+            const investmentAmountETH = Number(investment.amount) / 1e18;
+            const yieldRate = 0.04; // 4%
+            const profitETH = investmentAmountETH * yieldRate;
+            const totalReturnETH = investmentAmountETH + profitETH;
+
+            const returnData: ReturnData = {
+              id: i + 1,
+              poolId: poolId,
+              poolName: pool.name || `Pool #${poolId.toString()}`,
+              investmentAmount: investmentAmountETH.toFixed(4),
+              totalReturn: totalReturnETH.toFixed(4),
+              profit: profitETH.toFixed(4),
+              yieldRate: '4.0%',
+              completedDate: pool.endDate
+                ? new Date(Number(pool.endDate) * 1000).toLocaleDateString()
+                : 'Unknown',
+              status: investment.returnsClaimed ? 'Claimed' : 'Ready to Claim',
+              returnsClaimed: investment.returnsClaimed
+            };
+
+            if (investment.returnsClaimed) {
+              claimed.push(returnData);
+            } else {
+              claimable.push(returnData);
+            }
+          }
+        } catch (poolError) {
+          console.error(`Failed to fetch pool ${poolId}:`, poolError);
+        }
+      }
+
+      setClaimableReturns(claimable);
+      setClaimedReturns(claimed);
+    } catch (error) {
+      console.error('Failed to fetch returns:', error);
+      toast.error('Failed to load returns data');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [activeAccount, getInvestorPools, getInvestment, getPool]);
 
   useEffect(() => {
     if (!activeAccount) {
       router.push('/');
       return;
     }
-  }, [activeAccount, router]);
 
-  const handleClaimReturn = async (returnData: any) => {
+    fetchReturns();
+  }, [activeAccount, router, fetchReturns]);
+
+  const handleClaimReturn = async (returnData: ReturnData) => {
     setClaimingReturns(returnData.id);
-    
+
     try {
       // Call smart contract claimReturns function
-      const result = await claimReturns(BigInt(returnData.poolId));
-      
+      const result = await claimReturns(returnData.poolId);
+
       if (result.success) {
         toast.success('Returns claimed successfully! Funds transferred to your wallet.');
-        // In real implementation, refresh data here
+        // Refresh data
         setTimeout(() => {
-          window.location.reload();
+          fetchReturns(true);
         }, 2000);
       } else {
         throw new Error(result.error || 'Claim failed');
@@ -108,22 +155,23 @@ export default function ReturnsPage() {
 
   const handleClaimAll = async () => {
     if (claimableReturns.length === 0) return;
-    
+
     setClaimingReturns(0); // Use 0 for "claim all"
-    
+
     try {
       // Claim returns for each pool
       for (const returnData of claimableReturns) {
-        const result = await claimReturns(BigInt(returnData.poolId));
+        const result = await claimReturns(returnData.poolId);
         if (!result.success) {
           throw new Error(result.error || `Failed to claim pool ${returnData.poolId}`);
         }
       }
-      
+
       toast.success(`All returns claimed! ${totalStats.totalClaimable} ETH transferred to your wallet.`);
-      
+
+      // Refresh data
       setTimeout(() => {
-        window.location.reload();
+        fetchReturns(true);
       }, 2000);
     } catch (error: any) {
       console.error('Claim all failed:', error);
@@ -132,6 +180,17 @@ export default function ReturnsPage() {
       setClaimingReturns(null);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-cyan-400 mx-auto mb-4 animate-spin" />
+          <div className="text-gray-400">Loading returns from blockchain...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -143,25 +202,36 @@ export default function ReturnsPage() {
             Claim your investment returns and track earnings history
           </p>
         </div>
-        {claimableReturns.length > 0 && (
-          <Button 
-            onClick={handleClaimAll}
-            disabled={claimingReturns !== null}
-            className="bg-gradient-to-r from-green-500 to-emerald-400 text-white hover:shadow-lg hover:shadow-green-500/50"
+        <div className="flex gap-2">
+          <Button
+            onClick={() => fetchReturns(true)}
+            disabled={refreshing}
+            variant="outline"
+            className="border-slate-700 text-gray-300 hover:bg-slate-800"
           >
-            {claimingReturns === 0 ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Claiming All...
-              </>
-            ) : (
-              <>
-                <TrendingUp className="w-4 h-4 mr-2" />
-                Claim All Returns
-              </>
-            )}
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
           </Button>
-        )}
+          {claimableReturns.length > 0 && (
+            <Button
+              onClick={handleClaimAll}
+              disabled={claimingReturns !== null}
+              className="bg-gradient-to-r from-green-500 to-emerald-400 text-white hover:shadow-lg hover:shadow-green-500/50"
+            >
+              {claimingReturns === 0 ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Claiming All...
+                </>
+              ) : (
+                <>
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                  Claim All Returns
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -175,7 +245,7 @@ export default function ReturnsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl text-green-400 font-bold">{totalStats.totalClaimable} ETH</div>
-            <p className="text-xs text-gray-400 mt-1">≈ ${(parseFloat(totalStats.totalClaimable) * 2400).toFixed(0)} USD</p>
+            <p className="text-xs text-gray-400 mt-1">≈ ${(parseFloat(totalStats.totalClaimable) * 3000).toFixed(0)} USD</p>
           </CardContent>
         </Card>
 
@@ -188,7 +258,7 @@ export default function ReturnsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl text-cyan-400 font-bold">{totalStats.totalClaimed} ETH</div>
-            <p className="text-xs text-gray-400 mt-1">≈ ${(parseFloat(totalStats.totalClaimed) * 2400).toFixed(0)} USD</p>
+            <p className="text-xs text-gray-400 mt-1">≈ ${(parseFloat(totalStats.totalClaimed) * 3000).toFixed(0)} USD</p>
           </CardContent>
         </Card>
 
@@ -233,7 +303,7 @@ export default function ReturnsPage() {
                             {returnItem.status}
                           </Badge>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                           <div>
                             <div className="text-gray-400">Investment</div>
@@ -255,19 +325,17 @@ export default function ReturnsPage() {
 
                         <div className="flex items-center gap-4 text-xs text-gray-400">
                           <span>Completed: {returnItem.completedDate}</span>
-                          <span>•</span>
-                          <span>Matured: {returnItem.maturityDate}</span>
                         </div>
                       </div>
 
                       <Button
-                        onClick={() => handleClaimReturn(returnItem.id)}
+                        onClick={() => handleClaimReturn(returnItem)}
                         disabled={claimingReturns !== null}
                         className="bg-gradient-to-r from-green-500 to-emerald-400 text-white hover:shadow-lg hover:shadow-green-500/50"
                       >
                         {claimingReturns === returnItem.id ? (
                           <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                             Claiming...
                           </>
                         ) : (
@@ -308,7 +376,7 @@ export default function ReturnsPage() {
                             Claimed
                           </Badge>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                           <div>
                             <div className="text-gray-400">Investment</div>
@@ -329,19 +397,17 @@ export default function ReturnsPage() {
                         </div>
 
                         <div className="flex items-center gap-4 text-xs text-gray-400">
-                          <span>Claimed: {returnItem.claimedDate}</span>
-                          <span>•</span>
-                          <span>TX: {returnItem.transactionHash}</span>
+                          <span>Completed: {returnItem.completedDate}</span>
                         </div>
                       </div>
 
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(`https://sepolia-blockscout.lisk.com/tx/${returnItem.transactionHash}`, '_blank')}
+                        onClick={() => router.push(`/investor/pools/${returnItem.poolId}`)}
                         className="border-slate-600 text-gray-300 hover:bg-slate-700"
                       >
-                        View Transaction
+                        View Pool
                         <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
                     </div>
@@ -353,7 +419,7 @@ export default function ReturnsPage() {
             <div className="text-center py-8">
               <CheckCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <div className="text-gray-400 mb-4">No returns claimed yet</div>
-              <Button 
+              <Button
                 onClick={() => router.push('/investor/investments')}
                 variant="outline"
                 className="border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10"
@@ -372,9 +438,9 @@ export default function ReturnsPage() {
             <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <div className="text-gray-400 mb-4">No returns available yet</div>
             <p className="text-sm text-gray-500 mb-6">
-              Your investment returns will appear here once pools mature and are ready for claim.
+              Your investment returns will appear here once pools are completed and ready for claim.
             </p>
-            <Button 
+            <Button
               onClick={() => router.push('/investor/pools')}
               className="bg-gradient-to-r from-cyan-500 to-teal-400 text-white"
             >
@@ -384,15 +450,15 @@ export default function ReturnsPage() {
         </Card>
       )}
 
-      {/* Smart Contract Integration Note */}
+      {/* Blockchain Status */}
       <Card className="bg-slate-900/50 border-slate-800 border-cyan-500/30">
-        <CardContent className="p-6">
+        <CardContent className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
-            <div className="text-cyan-400 font-medium">Smart Contract Integration Ready</div>
+            <div className="text-cyan-400 font-medium">Live Blockchain Data</div>
           </div>
           <p className="text-gray-400 text-sm mt-2">
-            Returns claiming is ready for smart contract integration via PoolFundingManager.claimInvestorReturns()
+            Returns data is fetched directly from the SEATrax smart contract. Claiming transfers funds to your connected wallet.
           </p>
         </CardContent>
       </Card>
