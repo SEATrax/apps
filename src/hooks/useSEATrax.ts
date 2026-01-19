@@ -508,27 +508,57 @@ export function useSEATrax() {
 
     try {
       const contract = getContractInstance();
+      // Use proper ABI format with components (same pattern as getInvoice)
       const result: any = await readContract({
         contract,
-        method: 'function getPool(uint256) view returns (uint256,string,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint256[],uint256)',
+        method: {
+          name: 'getPool',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [
+            {
+              name: '_poolId',
+              type: 'uint256',
+            }
+          ],
+          outputs: [
+            {
+              name: '',
+              type: 'tuple',
+              components: [
+                { name: 'poolId', type: 'uint256' },
+                { name: 'name', type: 'string' },
+                { name: 'startDate', type: 'uint256' },
+                { name: 'endDate', type: 'uint256' },
+                { name: 'totalLoanAmount', type: 'uint256' },
+                { name: 'totalShippingAmount', type: 'uint256' },
+                { name: 'amountInvested', type: 'uint256' },
+                { name: 'amountDistributed', type: 'uint256' },
+                { name: 'feePaid', type: 'uint256' },
+                { name: 'status', type: 'uint8' },
+                { name: 'invoiceIds', type: 'uint256[]' },
+                { name: 'createdAt', type: 'uint256' },
+              ]
+            }
+          ]
+        },
         params: [poolId],
       });
       
-      const isArray = Array.isArray(result);
-      
+      // Access properties with proper undefined checks
       return {
-        poolId: isArray ? result[0] : (result.poolId ?? result[0]),
-        name: isArray ? result[1] : (result.name ?? result[1]),
-        startDate: isArray ? result[2] : (result.startDate ?? result[2]),
-        endDate: isArray ? result[3] : (result.endDate ?? result[3]),
-        totalLoanAmount: isArray ? result[4] : (result.totalLoanAmount ?? result[4]),
-        totalShippingAmount: isArray ? result[5] : (result.totalShippingAmount ?? result[5]),
-        amountInvested: isArray ? result[6] : (result.amountInvested ?? result[6]),
-        amountDistributed: isArray ? result[7] : (result.amountDistributed ?? result[7]),
-        feePaid: isArray ? result[8] : (result.feePaid ?? result[8]),
-        status: (isArray ? result[9] : (result.status ?? result[9])) as PoolStatus,
-        invoiceIds: isArray ? [...result[10]] : (result.invoiceIds ?? result[10]),
-        createdAt: isArray ? result[11] : (result.createdAt ?? result[11]),
+        poolId: result.poolId ?? result[0],
+        name: result.name ?? result[1],
+        startDate: result.startDate ?? result[2],
+        endDate: result.endDate ?? result[3],
+        totalLoanAmount: result.totalLoanAmount ?? result[4],
+        totalShippingAmount: result.totalShippingAmount ?? result[5],
+        amountInvested: result.amountInvested ?? result[6],
+        amountDistributed: result.amountDistributed ?? result[7],
+        feePaid: result.feePaid ?? result[8],
+        status: (result.status ?? result[9]) as PoolStatus,
+        invoiceIds: result.invoiceIds ? [...result.invoiceIds] : (result[10] ? [...result[10]] : []),
+        createdAt: result.createdAt ?? result[11],
       };
     } catch (err: any) {
       // Log detailed error for debugging
