@@ -8,8 +8,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not configured. Database features will be disabled.');
 }
 
-const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
-  supabaseUrl !== 'https://placeholder.supabase.co' && 
+const isSupabaseConfigured = supabaseUrl && supabaseAnonKey &&
+  supabaseUrl !== 'https://placeholder.supabase.co' &&
   supabaseAnonKey !== 'placeholder-key';
 
 export const supabase = createClient(
@@ -100,6 +100,21 @@ export interface Database {
           importer_name: string;
           importer_license: string | null;
           documents: Record<string, string> | null;
+
+          // Blockchain Cache
+          status: string | null;
+          pool_id: number | null;
+          shipping_amount: number | null;
+          loan_amount: number | null;
+          amount_invested: number | null;
+          amount_withdrawn: number | null;
+          shipping_date: number | null;
+
+          // Provenance
+          contract_address: string | null;
+          block_number: number | null;
+          transaction_hash: string | null;
+
           created_at: string;
         };
         Insert: {
@@ -110,6 +125,21 @@ export interface Database {
           importer_name: string;
           importer_license?: string | null;
           documents?: Record<string, string> | null;
+
+          // Blockchain Cache
+          status?: string | null;
+          pool_id?: number | null;
+          shipping_amount?: number | null;
+          loan_amount?: number | null;
+          amount_invested?: number | null;
+          amount_withdrawn?: number | null;
+          shipping_date?: number | null;
+
+          // Provenance
+          contract_address?: string | null;
+          block_number?: number | null;
+          transaction_hash?: string | null;
+
           created_at?: string;
         };
         Update: {
@@ -120,6 +150,21 @@ export interface Database {
           importer_name?: string;
           importer_license?: string | null;
           documents?: Record<string, string> | null;
+
+          // Blockchain Cache
+          status?: string | null;
+          pool_id?: number | null;
+          shipping_amount?: number | null;
+          loan_amount?: number | null;
+          amount_invested?: number | null;
+          amount_withdrawn?: number | null;
+          shipping_date?: number | null;
+
+          // Provenance
+          contract_address?: string | null;
+          block_number?: number | null;
+          transaction_hash?: string | null;
+
           created_at?: string;
         };
       };
@@ -130,6 +175,20 @@ export interface Database {
           description: string | null;
           risk_category: string | null;
           created_at: string;
+
+          // Blockchain Cache
+          status: string | null;
+          start_date: number | null;
+          end_date: number | null;
+          total_loan_amount: number | null;
+          total_shipping_amount: number | null;
+          amount_invested: number | null;
+          amount_distributed: number | null;
+
+          // Provenance
+          contract_address: string | null;
+          block_number: number | null;
+          transaction_hash: string | null;
         };
         Insert: {
           id?: string;
@@ -137,6 +196,20 @@ export interface Database {
           description?: string | null;
           risk_category?: string | null;
           created_at?: string;
+
+          // Blockchain Cache
+          status?: string | null;
+          start_date?: number | null;
+          end_date?: number | null;
+          total_loan_amount?: number | null;
+          total_shipping_amount?: number | null;
+          amount_invested?: number | null;
+          amount_distributed?: number | null;
+
+          // Provenance
+          contract_address?: string | null;
+          block_number?: number | null;
+          transaction_hash?: string | null;
         };
         Update: {
           id?: string;
@@ -144,6 +217,70 @@ export interface Database {
           description?: string | null;
           risk_category?: string | null;
           created_at?: string;
+
+          // Blockchain Cache
+          status?: string | null;
+          start_date?: number | null;
+          end_date?: number | null;
+          total_loan_amount?: number | null;
+          total_shipping_amount?: number | null;
+          amount_invested?: number | null;
+          amount_distributed?: number | null;
+
+          // Provenance
+          contract_address?: string | null;
+          block_number?: number | null;
+          transaction_hash?: string | null;
+        };
+      };
+      investments: {
+        Row: {
+          id: string;
+          pool_id: number;
+          investor_address: string;
+          amount: number;
+          percentage: number;
+          timestamp: number;
+
+          // Provenance
+          contract_address: string | null;
+          block_number: number | null;
+          transaction_hash: string | null;
+
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          pool_id: number;
+          investor_address: string;
+          amount: number;
+          percentage: number;
+          timestamp: number;
+
+          // Provenance
+          contract_address?: string | null;
+          block_number?: number | null;
+          transaction_hash?: string | null;
+
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          pool_id?: number;
+          investor_address?: string;
+          amount?: number;
+          percentage?: number;
+          timestamp?: number;
+
+          // Provenance
+          contract_address?: string | null;
+          block_number?: number | null;
+          transaction_hash?: string | null;
+
+          created_at?: string;
+          updated_at?: string;
         };
       };
       payments: {
@@ -190,7 +327,7 @@ export async function getExporterByWallet(walletAddress: string) {
     .select('*')
     .eq('wallet_address', walletAddress.toLowerCase())
     .single();
-  
+
   if (error && error.code !== 'PGRST116') throw error;
   return data;
 }
@@ -204,7 +341,7 @@ export async function createExporter(exporter: Database['public']['Tables']['exp
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -215,7 +352,7 @@ export async function getInvestorByWallet(walletAddress: string) {
     .select('*')
     .eq('wallet_address', walletAddress.toLowerCase())
     .single();
-  
+
   if (error && error.code !== 'PGRST116') throw error;
   return data;
 }
@@ -229,29 +366,29 @@ export async function createInvestor(investor: Database['public']['Tables']['inv
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
 
 export async function getUserRole(walletAddress: string): Promise<'admin' | 'exporter' | 'investor' | null> {
   const address = walletAddress.toLowerCase();
-  
+
   const adminAddresses = (process.env.ADMIN_ADDRESSES || '').toLowerCase().split(',');
   if (adminAddresses.includes(address)) {
     return 'admin';
   }
-  
+
   try {
     const exporter = await getExporterByWallet(address);
     if (exporter) return 'exporter';
-    
+
     const investor = await getInvestorByWallet(address);
     if (investor) return 'investor';
   } catch (err: any) {
     console.warn('Supabase tables not found or not accessible:', err.message);
   }
-  
+
   return null;
 }
 
@@ -281,5 +418,73 @@ export async function upsertUserWallet(userId: string, walletAddress: string) {
     .select()
     .single();
   if (error) throw error;
+  return data;
+}
+
+// ============== BLOCKCHAIN CACHING FUNCTIONS ==============
+
+export async function upsertInvoiceCache(
+  tokenId: number,
+  data: Database['public']['Tables']['invoice_metadata']['Update']
+) {
+  const { data: result, error } = await supabase
+    .from('invoice_metadata')
+    .upsert({
+      token_id: tokenId,
+      ...data
+    }, {
+      onConflict: 'token_id',
+      ignoreDuplicates: false
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`Failed to cache invoice ${tokenId}:`, error);
+    // Silent fail for cache - don't block UI
+    return null;
+  }
+  return result;
+}
+
+export async function upsertPoolCache(
+  poolId: number,
+  data: Database['public']['Tables']['pool_metadata']['Update']
+) {
+  const { data: result, error } = await supabase
+    .from('pool_metadata')
+    .upsert({
+      pool_id: poolId,
+      ...data
+    }, {
+      onConflict: 'pool_id',
+      ignoreDuplicates: false
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`Failed to cache pool ${poolId}:`, error);
+    return null;
+  }
+  return result;
+}
+
+export async function createInvestment(
+  investment: Database['public']['Tables']['investments']['Insert']
+) {
+  const { data, error } = await supabase
+    .from('investments')
+    .insert({
+      ...investment,
+      investor_address: investment.investor_address.toLowerCase()
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Failed to record investment:', error);
+    return null;
+  }
   return data;
 }

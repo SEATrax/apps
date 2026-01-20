@@ -183,7 +183,9 @@ export default function InvestorDashboard() {
                 status: isCompleted ? 'Completed' : (isFunded ? 'Funded' : 'Active'),
                 fundingProgress: fundingPercentage / 100, // From basis points
                 poolId: poolId,
-                timestamp: Number(investment.timestamp)
+                timestamp: Number(investment.timestamp),
+                expectedYield: '4.0%', // Default yield for SEATrax pools
+                investedDate: new Date(Number(investment.timestamp) * 1000)
               });
             }
           } catch (poolError) {
@@ -198,11 +200,12 @@ export default function InvestorDashboard() {
         // Convert Wei to ETH for display
         const totalInvestedETH = Number(totalInvestedWei) / 1e18;
         const totalReturnETH = Number(totalReturnWei) / 1e18;
+        const ethPrice = 3000; // Approximate price for testing
 
         setPortfolioStats({
-          totalInvested: totalInvestedETH,
-          totalValue: totalInvestedETH + totalReturnETH,
-          totalReturn: totalReturnETH,
+          totalInvested: totalInvestedETH * ethPrice,
+          totalValue: (totalInvestedETH + totalReturnETH) * ethPrice,
+          totalReturn: totalReturnETH * ethPrice,
           activeInvestments: activeCount + (poolIds.length - activeCount - completedCount)
         });
 
@@ -547,7 +550,7 @@ export default function InvestorDashboard() {
                           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                             <div>
                               <div className="text-gray-400">Investment</div>
-                              <div className="text-cyan-400 font-medium">{formatETH(investment.amount)}</div>
+                              <div className="text-cyan-400 font-medium">{formatUSD(investment.amount, 3000)}</div>
                             </div>
                             <div>
                               <div className="text-gray-400">Expected Yield</div>

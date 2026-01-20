@@ -18,6 +18,7 @@
 import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
 import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment, type PoolStatus, type InvoiceStatus } from '@/lib/contract';
+import { upsertInvoiceCache, upsertPoolCache, createInvestment } from '@/lib/supabase';
 import { liskSepolia } from 'panna-sdk';
 import { prepareContractCall, sendTransaction, readContract, waitForReceipt, prepareEvent, getContractEvents } from 'thirdweb';
 import { getContract } from 'thirdweb';
@@ -52,26 +53,26 @@ export function useSEATrax() {
     if (err?.message) return err.message;
     if (err?.error?.message) return err.error.message;
     if (err?.data?.message) return err.data.message;
-    
+
     // Try to stringify if it's an object
     try {
       const errStr = JSON.stringify(err);
       if (errStr !== '{}' && errStr !== 'null') {
         return `${defaultMsg}: ${errStr}`;
       }
-    } catch {}
-    
+    } catch { }
+
     // Last resort
     return defaultMsg;
   };
 
   // ============== CONTRACT INSTANCE ==============
-  
+
   const getContractInstance = useCallback(() => {
     if (!client) {
       throw new Error('Client not initialized');
     }
-    
+
     return getContract({
       client,
       chain: liskSepolia,
@@ -89,31 +90,31 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Pre-flight checks
       checkWalletReady();
-      
+
       console.log('🚀 Starting exporter registration...');
       console.log('📍 Wallet address:', address);
       console.log('🔗 Contract address:', CONTRACT_ADDRESS);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function registerExporter()',
         params: [],
       });
-      
+
       console.log('📤 Sending transaction...');
       const result = await sendTransaction({
         account: account!,
         transaction: tx,
       });
-      
+
       console.log('⏳ Waiting for confirmation...');
       console.log('📝 Transaction hash:', result.transactionHash);
       await waitForReceipt(result);
-      
+
       console.log('✅ Registration successful!');
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
@@ -125,7 +126,7 @@ export function useSEATrax() {
         code: err?.code,
         data: err?.data
       });
-      
+
       const errorMsg = extractErrorMessage(err, 'Failed to register as exporter on blockchain');
       setError(errorMsg);
       return { success: false, error: errorMsg };
@@ -142,30 +143,30 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Pre-flight checks
       checkWalletReady();
-      
+
       console.log('🚀 Starting investor registration...');
       console.log('📍 Wallet address:', address);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function registerInvestor()',
         params: [],
       });
-      
+
       console.log('📤 Sending transaction...');
       const result = await sendTransaction({
         account: account!,
         transaction: tx,
       });
-      
+
       console.log('⏳ Waiting for confirmation...');
       console.log('📝 Transaction hash:', result.transactionHash);
       await waitForReceipt(result);
-      
+
       console.log('✅ Registration successful!');
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
@@ -197,32 +198,32 @@ export function useSEATrax() {
     if (!account || !client) {
       return { success: false, error: 'Wallet not connected' };
     }
-    
+
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function createInvoice(string exporterCompany, string importerCompany, string importerEmail, uint256 shippingDate, uint256 shippingAmount, uint256 loanAmount, string ipfsHash) returns (uint256)',
         params: [exporterCompany, importerCompany, importerEmail, BigInt(shippingDate), shippingAmount, loanAmount, ipfsHash],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       const receipt = await waitForReceipt(result);
-      
+
       // Parse InvoiceCreated event to get tokenId with retry logic
       let invoiceId: bigint | null = null;
-      
+
       const invoiceCreatedEvent = prepareEvent({
         signature: 'event InvoiceCreated(uint256 indexed tokenId, address indexed exporter, uint256 loanAmount)'
       });
-      
+
       // Retry logic: Try 3 times with 1-second delay
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -232,13 +233,13 @@ export function useSEATrax() {
             fromBlock: receipt.blockNumber > 0n ? receipt.blockNumber - 1n : receipt.blockNumber,
             toBlock: receipt.blockNumber,
           });
-          
+
           if (events.length > 0 && events[0].args) {
             invoiceId = events[0].args.tokenId;
             console.log(`✅ Invoice created with ID: ${invoiceId.toString()} (attempt ${attempt})`);
             break; // Success - exit retry loop
           }
-          
+
           if (attempt < 3) {
             console.log(`⏳ Attempt ${attempt}: No event yet, retrying in 1s...`);
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -250,7 +251,7 @@ export function useSEATrax() {
           }
         }
       }
-      
+
       // Fallback: Query exporter's invoices to get the last one
       if (!invoiceId) {
         try {
@@ -260,7 +261,7 @@ export function useSEATrax() {
             method: 'function getExporterInvoices(address exporter) view returns (uint256[])',
             params: [account.address],
           });
-          
+
           if (exporterInvoices && exporterInvoices.length > 0) {
             invoiceId = exporterInvoices[exporterInvoices.length - 1];
             console.log(`✅ Fallback success: Found invoice ID ${invoiceId.toString()}`);
@@ -269,7 +270,27 @@ export function useSEATrax() {
           console.error('❌ Fallback query failed:', fallbackErr);
         }
       }
-      
+
+      // Cache the new invoice
+      if (invoiceId) {
+        // Convert dates/amounts to cache format
+        // Note: contract address/block/tx from receipt
+        await upsertInvoiceCache(Number(invoiceId), {
+          status: 'PENDING',
+          // Contract input shippingAmount is in Cents (uint256) per doc
+          // User form input likely handles the unit correctness
+          shipping_amount: Number(shippingAmount),
+          loan_amount: Number(loanAmount),
+          shipping_date: shippingDate,
+
+          contract_address: CONTRACT_ADDRESS,
+          block_number: Number(receipt.blockNumber),
+          transaction_hash: receipt.transactionHash,
+
+          created_at: new Date().toISOString()
+        });
+      }
+
       return { success: true, txHash: result.transactionHash, invoiceId };
     } catch (err: any) {
       const errorMsg = err.reason || err.message || 'Failed to create invoice';
@@ -290,25 +311,25 @@ export function useSEATrax() {
     if (!account || !client) {
       return { success: false, error: 'Wallet not connected' };
     }
-    
+
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function withdrawFunds(uint256 invoiceId)',
         params: [invoiceId],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.reason || err.message || 'Failed to withdraw funds';
@@ -326,10 +347,10 @@ export function useSEATrax() {
    */
   const getInvoice = useCallback(async (invoiceId: bigint): Promise<Invoice | null> => {
     if (!client) return null;
-    
+
     try {
       const contract = getContractInstance();
-      
+
       // Use struct format with explicit component names
       const result: any = await readContract({
         contract,
@@ -368,9 +389,9 @@ export function useSEATrax() {
         },
         params: [invoiceId],
       });
-      
+
       console.log('🔍 getInvoice result type:', typeof result, 'isArray:', Array.isArray(result));
-      
+
       // Access properties with proper undefined checks (don't use || for BigInt as 0n is falsy)
       const invoice = {
         tokenId: result.tokenId ?? result[0],
@@ -388,13 +409,13 @@ export function useSEATrax() {
         ipfsHash: result.ipfsHash ?? result[12],
         createdAt: result.createdAt ?? result[13],
       };
-      
+
       console.log('✅ Parsed invoice:', {
         tokenId: invoice.tokenId?.toString(),
         amountInvested: invoice.amountInvested?.toString(),
         amountWithdrawn: invoice.amountWithdrawn?.toString(),
       });
-      
+
       return invoice;
     } catch (err: any) {
       console.error('Failed to get invoice:', err);
@@ -413,7 +434,7 @@ export function useSEATrax() {
    */
   const getExporterInvoices = useCallback(async (exporter: string): Promise<bigint[]> => {
     if (!client) return [];
-    
+
     try {
       const contract = getContractInstance();
       const invoiceIds = await readContract({
@@ -434,7 +455,7 @@ export function useSEATrax() {
    */
   const canWithdraw = useCallback(async (invoiceId: bigint): Promise<{ canWithdraw: boolean; amount: bigint }> => {
     if (!client) return { canWithdraw: false, amount: 0n };
-    
+
     try {
       const contract = getContractInstance();
       const result = await readContract({
@@ -469,26 +490,26 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function createPool(string,uint256[],uint256,uint256)',
         params: [name, invoiceIds, BigInt(startDate), BigInt(endDate)],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       const receipt = await waitForReceipt(result);
-      
+
       // Extract poolId from event logs if needed
       let poolId = null;
       // Note: Event extraction would need additional logic with Thirdweb
       // For now, UI can fetch latest pool or use getAllOpenPools
-      
+
       return { success: true, txHash: result.transactionHash, poolId };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to create pool';
@@ -544,7 +565,7 @@ export function useSEATrax() {
         },
         params: [poolId],
       });
-      
+
       // Access properties with proper undefined checks
       return {
         poolId: result.poolId ?? result[0],
@@ -689,7 +710,7 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
@@ -697,14 +718,50 @@ export function useSEATrax() {
         params: [poolId],
         value: amount, // ETH amount to send
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
+      // Record Investment in Cache
+      // We need to fetch the receipt again or use the one from waitForReceipt to get block info
+      // Thirdweb waitForReceipt returns the receipt structure
+      const receiptData = await waitForReceipt(result);
+
+      await createInvestment({
+        pool_id: Number(poolId),
+        investor_address: account.address,
+        amount: Number(amount), // Wei
+        percentage: 0, // Will be calculated by indexer or updated later. Initial record.
+        timestamp: Math.floor(Date.now() / 1000),
+
+        contract_address: CONTRACT_ADDRESS,
+        block_number: Number(receiptData.blockNumber),
+        transaction_hash: receiptData.transactionHash,
+      });
+
+      // Also update pool cache (invested amount increased)
+      // fetch latest pool data to be accurate
+      try {
+        const updatedPool = await getPool(poolId);
+        if (updatedPool) {
+          await upsertPoolCache(Number(poolId), {
+            amount_invested: Number(updatedPool.amountInvested),
+            amount_distributed: Number(updatedPool.amountDistributed),
+            status: ['OPEN', 'FUNDED', 'COMPLETED', 'CANCELLED'][updatedPool.status] || 'OPEN',
+
+            contract_address: CONTRACT_ADDRESS,
+            block_number: Number(receiptData.blockNumber), // Approximate (read is recent)
+            transaction_hash: receiptData.transactionHash, // Caused by this tx
+          });
+        }
+      } catch (cacheErr) {
+        console.warn('Failed to update pool cache after investment:', cacheErr);
+      }
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to invest';
@@ -727,21 +784,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function claimReturns(uint256)',
         params: [poolId],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to claim returns';
@@ -766,9 +823,9 @@ export function useSEATrax() {
         method: 'function getInvestment(uint256,address) view returns (address,uint256,uint256,uint256,uint256,bool)',
         params: [poolId, investor],
       });
-      
+
       const isArray = Array.isArray(result);
-      
+
       return {
         investor: isArray ? result[0] : (result.investor ?? result[0]),
         poolId: isArray ? result[1] : (result.poolId ?? result[1]),
@@ -817,21 +874,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function verifyExporter(address)',
         params: [exporter],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to verify exporter';
@@ -855,21 +912,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function approveInvoice(uint256)',
         params: [invoiceId],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to approve invoice';
@@ -891,21 +948,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function rejectInvoice(uint256)',
         params: [invoiceId],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to reject invoice';
@@ -929,21 +986,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function markInvoicePaid(uint256)',
         params: [invoiceId],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to mark invoice paid';
@@ -967,21 +1024,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function distributeProfits(uint256)',
         params: [poolId],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to distribute profits';
@@ -1004,21 +1061,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function distributeToInvoice(uint256,uint256,uint256)',
         params: [poolId, invoiceId, amount],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to distribute to invoice';
@@ -1041,21 +1098,21 @@ export function useSEATrax() {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const contract = getContractInstance();
       const tx = prepareContractCall({
         contract,
         method: 'function grantRole(bytes32,address)',
         params: [ROLES.ADMIN, targetAddress],
       });
-      
+
       const result = await sendTransaction({
         account,
         transaction: tx,
       });
-      
+
       await waitForReceipt(result);
-      
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to grant admin role';
@@ -1085,10 +1142,10 @@ export function useSEATrax() {
 
     try {
       const contract = getContractInstance();
-      
+
       console.log('🔍 Checking roles for address:', accountAddress);
       console.log('📋 Using ADMIN_ROLE:', ROLES.ADMIN);
-      
+
       // Check all three role types
       const [isAdmin, isExporter, isInvestor] = await Promise.all([
         readContract({
@@ -1107,9 +1164,9 @@ export function useSEATrax() {
           params: [accountAddress],
         }),
       ]);
-      
+
       console.log('✅ Role check results:', { isAdmin, isExporter, isInvestor });
-      
+
       return {
         isAdmin: isAdmin as boolean,
         isExporter: isExporter as boolean,
@@ -1132,18 +1189,18 @@ export function useSEATrax() {
     isLoading,
     error,
     address,
-    
+
     // Registration (self-service)
     registerExporter,
     registerInvestor,
-    
+
     // Invoice functions
     createInvoice,
     withdrawFunds,
     getInvoice,
     getExporterInvoices,
     canWithdraw,
-    
+
     // Pool functions
     createPool,
     getPool,
@@ -1152,13 +1209,13 @@ export function useSEATrax() {
     getAllApprovedInvoices,
     getPoolFundingPercentage,
     getPoolInvestors,
-    
+
     // Investment functions
     invest,
     claimReturns,
     getInvestment,
     getInvestorPools,
-    
+
     // Admin functions
     verifyExporter,
     approveInvoice,
@@ -1167,7 +1224,7 @@ export function useSEATrax() {
     distributeProfits,
     distributeToInvoice,
     grantAdminRole,
-    
+
     // Role checking
     checkUserRoles,
   };
