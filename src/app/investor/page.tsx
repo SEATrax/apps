@@ -1,5 +1,7 @@
 'use client';
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useActiveAccount } from 'panna-sdk';
@@ -270,16 +272,8 @@ export default function InvestorDashboard() {
     fetchPortfolioStats();
   }, [activeAccount]);
 
-  if (loading || profileLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-          <div className="text-gray-400">Loading dashboard...</div>
-        </div>
-      </div>
-    );
-  }
+  // Removed blocking loader to allow Skeleton UI
+  // if (loading || profileLoading) { return ... }
 
   return (
     <div className="space-y-6">
@@ -369,12 +363,21 @@ export default function InvestorDashboard() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl text-white mb-2">
-            Welcome back, {getUserName()}
-          </h1>
-          <p className="text-gray-300">
-            {profile?.name ? 'Track your investments and discover new opportunities' : 'Complete your profile to get started'}
-          </p>
+          {profileLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64 bg-slate-800" />
+              <Skeleton className="h-4 w-96 bg-slate-800" />
+            </div>
+          ) : (
+            <>
+              <h1 className="text-2xl lg:text-3xl text-white mb-2">
+                Welcome back, {getUserName()}
+              </h1>
+              <p className="text-gray-300">
+                {profile?.name ? 'Track your investments and discover new opportunities' : 'Complete your profile to get started'}
+              </p>
+            </>
+          )}
         </div>
         <Button
           onClick={() => router.push('/investor/pools')}
@@ -386,7 +389,7 @@ export default function InvestorDashboard() {
       </div>
 
       {/* Profile Completion Alert */}
-      {!profile && activeAccount && (
+      {!profileLoading && !profile && activeAccount && (
         <Card className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-yellow-500/30">
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
@@ -411,8 +414,20 @@ export default function InvestorDashboard() {
         </Card>
       )}
 
-      {/* Enhanced Profile Summary for existing users */}
-      {profile && (
+      {/* Enhanced Profile Summary for existing users or Skeleton */}
+      {profileLoading ? (
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-14 w-14 rounded-full bg-slate-800" />
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-5 w-48 bg-slate-800" />
+                <Skeleton className="h-4 w-full max-w-md bg-slate-800" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (profile && (
         <Card className="bg-slate-900/50 border-slate-800">
           <CardContent className="p-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -468,9 +483,9 @@ export default function InvestorDashboard() {
             </div>
           </CardContent>
         </Card>
-      )}
+      ))}
 
-      {/* Portfolio Overview Cards */}
+      {/* Portfolio Overview Cards - With Loading Check */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="bg-slate-900/50 border-slate-800 hover:bg-slate-900/70 transition-all hover:scale-105">
           <CardHeader className="pb-2">
@@ -480,8 +495,14 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-cyan-400 font-bold">${portfolioStats.totalInvested.toLocaleString()}</div>
-            <p className="text-xs text-gray-400 mt-1">Across {portfolioStats.activeInvestments} pools</p>
+            {loading ? (
+              <Skeleton className="h-8 w-24 bg-slate-800 mb-1" />
+            ) : (
+              <div className="text-2xl text-cyan-400 font-bold">${portfolioStats.totalInvested.toLocaleString()}</div>
+            )}
+            <p className="text-xs text-gray-400 mt-1">
+              {loading ? <Skeleton className="h-3 w-32 bg-slate-800" /> : `Across ${portfolioStats.activeInvestments} pools`}
+            </p>
           </CardContent>
         </Card>
 
@@ -493,7 +514,9 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-white font-bold">{portfolioStats.activeInvestments}</div>
+            {loading ? <Skeleton className="h-8 w-12 bg-slate-800 mb-1" /> : (
+              <div className="text-2xl text-white font-bold">{portfolioStats.activeInvestments}</div>
+            )}
             <p className="text-xs text-gray-400 mt-1">ongoing pools</p>
           </CardContent>
         </Card>
@@ -506,8 +529,16 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-green-400 font-bold">${portfolioStats.totalReturn.toLocaleString()}</div>
-            <p className="text-xs text-gray-400 mt-1">{((portfolioStats.totalReturn / portfolioStats.totalInvested) * 100).toFixed(2)}% return</p>
+            {loading ? <Skeleton className="h-8 w-24 bg-slate-800 mb-1" /> : (
+              <div className="text-2xl text-green-400 font-bold">${portfolioStats.totalReturn.toLocaleString()}</div>
+            )}
+            <p className="text-xs text-gray-400 mt-1">
+              {loading ? <Skeleton className="h-3 w-16 bg-slate-800" /> : (
+                portfolioStats.totalInvested > 0 ?
+                  `${((portfolioStats.totalReturn / portfolioStats.totalInvested) * 100).toFixed(2)}% return` :
+                  "0.00% return"
+              )}
+            </p>
           </CardContent>
         </Card>
 
@@ -519,8 +550,12 @@ export default function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-white font-bold">${portfolioStats.totalValue.toLocaleString()}</div>
-            <p className="text-xs text-green-400 mt-1">+${portfolioStats.totalReturn.toLocaleString()} profit</p>
+            {loading ? <Skeleton className="h-8 w-32 bg-slate-800 mb-1" /> : (
+              <div className="text-2xl text-white font-bold">${portfolioStats.totalValue.toLocaleString()}</div>
+            )}
+            <p className="text-xs text-green-400 mt-1">
+              {loading ? <Skeleton className="h-3 w-24 bg-slate-800" /> : `+$${portfolioStats.totalReturn.toLocaleString()} profit`}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -585,7 +620,26 @@ export default function InvestorDashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {recentInvestments.length > 0 ? (
+            {loading ? (
+              // Skeleton List
+              Array(3).fill(0).map((_, i) => (
+                <Card key={i} className="bg-slate-800/50 border-slate-700">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex justify-between">
+                        <Skeleton className="h-5 w-48 bg-slate-700" />
+                        <Skeleton className="h-5 w-20 bg-slate-700" />
+                      </div>
+                      <div className="flex justify-between mt-2">
+                        <Skeleton className="h-4 w-24 bg-slate-700" />
+                        <Skeleton className="h-4 w-24 bg-slate-700" />
+                        <Skeleton className="h-4 w-24 bg-slate-700" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : recentInvestments.length > 0 ? (
               recentInvestments.map((investment) => {
                 const statusColorClass = getStatusColor(investment.status);
                 return (
@@ -643,15 +697,19 @@ export default function InvestorDashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Average Yield</span>
-                <span className="text-green-400 font-medium">4.0%</span>
+                {loading ? <Skeleton className="h-5 w-16 bg-slate-800" /> : <span className="text-green-400 font-medium">4.0%</span>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Total Return</span>
-                <span className="text-cyan-400 font-medium">{((portfolioStats.totalReturn / portfolioStats.totalInvested) * 100).toFixed(2)}%</span>
+                {loading ? <Skeleton className="h-5 w-16 bg-slate-800" /> : (
+                  <span className="text-cyan-400 font-medium">
+                    {portfolioStats.totalInvested > 0 ? ((portfolioStats.totalReturn / portfolioStats.totalInvested) * 100).toFixed(2) : "0.00"}%
+                  </span>
+                )}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Claimable Returns</span>
-                <span className="text-yellow-400 font-medium">${portfolioStats.totalReturn.toLocaleString()}</span>
+                {loading ? <Skeleton className="h-5 w-24 bg-slate-800" /> : <span className="text-yellow-400 font-medium">${portfolioStats.totalReturn.toLocaleString()}</span>}
               </div>
             </div>
           </CardContent>
@@ -665,15 +723,15 @@ export default function InvestorDashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Total Pools Invested</span>
-                <span className="text-white font-medium">{portfolioStats.activeInvestments}</span>
+                {loading ? <Skeleton className="h-5 w-8 bg-slate-800" /> : <span className="text-white font-medium">{portfolioStats.activeInvestments}</span>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Active Investments</span>
-                <span className="text-cyan-400 font-medium">{portfolioStats.activeInvestments}</span>
+                {loading ? <Skeleton className="h-5 w-8 bg-slate-800" /> : <span className="text-cyan-400 font-medium">{portfolioStats.activeInvestments}</span>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400">Portfolio Value</span>
-                <span className="text-white font-medium">${portfolioStats.totalValue.toLocaleString()}</span>
+                {loading ? <Skeleton className="h-5 w-32 bg-slate-800" /> : <span className="text-white font-medium">${portfolioStats.totalValue.toLocaleString()}</span>}
               </div>
             </div>
           </CardContent>

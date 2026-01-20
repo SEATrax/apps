@@ -30,7 +30,8 @@
 - **Logic**: 
     1. Calls contract to withdraw funds.
     2. **Missing Cache Update**: The `returns_claimed` status is tracked on-chain but not yet mirrored to a database column.
-- **Action Item**: Add `returns_claimed` boolean to `investments` table in next migration.
+    3. **Impact**: The "Claimable Returns" metric currently shows **Lifetime Earnings** (total profit ever generated) rather than just the unclaimed amount.
+- **Action Item**: Add `returns_claimed` boolean to `investments` table in next migration to distinguish Unclaimed vs Claimed.
 
 ### 4. View Portfolio (100%)
 - **Function**: `getInvestment`, `getInvestorPools`
