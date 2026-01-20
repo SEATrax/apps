@@ -10,8 +10,16 @@
 | **Pool Creation** | ✅ Implemented | `createPool` moves invoices to IN_POOL. | Validates invoice status properly. |
 | **Fund Distribution** | ✅ Implemented | `distributeToInvoice` and `_autoDistributePool`. | **Gap**: For funding between 70-99%, Admin must manually call `distributeToInvoice` to enable Exporter withdrawal. 100% is automatic. |
 | **Profit Distribution** | ✅ Implemented | `distributeProfits`. | Hardcoded 1% fee, 4% yield. Checks all invoices PAID. |
-| **Platform Analytics** | ❌ Missing | No `updatePlatformMetrics` or dedicated storage. | Analytics must be derived from Events or `getAll...` view functions (inefficient). |
-| **Oracle Management** | ❌ Missing | No `authorizeOracle` function. | Payment confirmation relies entirely on `markInvoicePaid` (manual Admin). |
+| **Platform Analytics** | ✅ Implemented | Data cached in Supabase (`invoice_metadata`, `pool_metadata`). | Analytics are now derived efficiently from the database cache, mirroring on-chain state. |
+| **Oracle Management** | ✅ Manual | Admin manually calls `markInvoicePaid`. | Automated Oracle skipped for MVP in favor of Admin control. |
+
+## Blockchain Caching Strategy
+All Admin write actions now automatically update the Supabase cache to ensure zero-latency reads:
+- `verifyExporter`: Updates `exporters` table.
+- `approveInvoice` / `rejectInvoice`: Updates `invoice_metadata` status.
+- `createPool`: Creates `pool_metadata` and updates associated invoices to `IN_POOL`.
+- `markInvoicePaid`: Updates invoice status to `COMPLETED` (paid).
+- `distributeProfits`: Updates pool status to `COMPLETED`.
 
 ## Action Items
 1.  Consider adding `updatePlatformMetrics` or moving analytics off-chain (Database).
