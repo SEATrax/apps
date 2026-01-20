@@ -172,6 +172,7 @@ export interface Database {
         Row: {
           id: string;
           pool_id: number;
+          name: string | null;  // Added name field
           description: string | null;
           risk_category: string | null;
           created_at: string;
@@ -193,6 +194,7 @@ export interface Database {
         Insert: {
           id?: string;
           pool_id: number;
+          name?: string | null;
           description?: string | null;
           risk_category?: string | null;
           created_at?: string;
@@ -214,6 +216,7 @@ export interface Database {
         Update: {
           id?: string;
           pool_id?: number;
+          name?: string | null;
           description?: string | null;
           risk_category?: string | null;
           created_at?: string;
@@ -555,4 +558,23 @@ export async function getInvestorPortfolio(investorAddress: string) {
     ...inv,
     pool_metadata: poolMap.get(inv.pool_id) || null
   }));
+}
+
+export async function getMarketplacePools() {
+  // Fetch all pools with their metadata and related invoices count
+  // Note: For now we fetch plain metadata. In a real scenario we'd join with invoices to get the count.
+  // Since our 'invoice_metadata' has 'pool_id', we can fetch them or just assume the UI needs other data.
+  // For the 'Invoices: X' count, let's try to fetch invoice metadata IDs per pool.
+
+  const { data: pools, error } = await supabase
+    .from('pool_metadata')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Failed to fetch marketplace pools:', error);
+    return [];
+  }
+
+  return pools || [];
 }
