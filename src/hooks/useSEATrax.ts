@@ -18,7 +18,7 @@
 import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
 import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment, type PoolStatus, type InvoiceStatus } from '@/lib/contract';
-import { upsertInvoiceCache, upsertPoolCache, createInvestment } from '@/lib/supabase';
+import { upsertInvoiceCache, upsertPoolCache, createInvestment, createExporter, createInvestor } from '@/lib/supabase';
 import { liskSepolia } from 'panna-sdk';
 import { prepareContractCall, sendTransaction, readContract, waitForReceipt, prepareEvent, getContractEvents } from 'thirdweb';
 import { getContract } from 'thirdweb';
@@ -116,6 +116,20 @@ export function useSEATrax() {
       await waitForReceipt(result);
 
       console.log('✅ Registration successful!');
+
+      // Cache Exporter Profile
+      if (address) {
+        await createExporter({
+          wallet_address: address,
+          company_name: 'Pending Setup', // Default
+          tax_id: 'Pending',
+          country: 'Pending',
+          export_license: 'Pending',
+          is_verified: false,
+          created_at: new Date().toISOString()
+        });
+      }
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       console.error('❌ Registration error:', err);
@@ -168,6 +182,17 @@ export function useSEATrax() {
       await waitForReceipt(result);
 
       console.log('✅ Registration successful!');
+
+      // Cache Investor Profile
+      if (address) {
+        await createInvestor({
+          wallet_address: address,
+          name: 'Pending Setup',
+          address: 'Pending',
+          created_at: new Date().toISOString()
+        });
+      }
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       console.error('❌ Registration error:', err);
@@ -329,6 +354,22 @@ export function useSEATrax() {
       });
 
       await waitForReceipt(result);
+
+      // Update Invoice Cache (Status: WITHDRAWN, Amount)
+      const receiptData = await waitForReceipt(result);
+      // Fetch latest invoice state to get new amountWithdrawn
+      const updatedInvoice = await getInvoice(invoiceId);
+
+      if (updatedInvoice) {
+        await upsertInvoiceCache(Number(invoiceId), {
+          status: 'WITHDRAWN',
+          amount_withdrawn: Number(updatedInvoice.amountWithdrawn),
+
+          contract_address: CONTRACT_ADDRESS,
+          block_number: Number(receiptData.blockNumber),
+          transaction_hash: receiptData.transactionHash
+        });
+      }
 
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
@@ -506,9 +547,53 @@ export function useSEATrax() {
       const receipt = await waitForReceipt(result);
 
       // Extract poolId from event logs if needed
+      // Note: For now we can assume it was created or fetch latest.
+      // Ideally we event parse, but for MVP let's look at `getAllOpenPools` or similar logic?
+      // Or we can just create the cache with 'PENDING' ID? No, we need the real ID.
+      // Let's try to parse the log "PoolCreated(uint256 indexed poolId, ...)"
+
+      const poolCreatedEvent = prepareEvent({
+        signature: 'event PoolCreated(uint256 indexed poolId, string name, uint256 totalLoanAmount)'
+      });
+
+      const events = await getContractEvents({
+        contract: getContractInstance(),
+        events: [poolCreatedEvent],
+        fromBlock: receipt.blockNumber,
+        toBlock: receipt.blockNumber,
+      });
+
       let poolId = null;
-      // Note: Event extraction would need additional logic with Thirdweb
-      // For now, UI can fetch latest pool or use getAllOpenPools
+      if (events.length > 0 && events[0].args) {
+        poolId = events[0].args.poolId;
+
+        // Cache the new Pool
+        await upsertPoolCache(Number(poolId), {
+          status: 'OPEN', // Enum PoolStatus 0
+          start_date: startDate,
+          end_date: endDate,
+          // We might need to calc totals from invoices, or trust inputs
+          // Let's just update the main metadata we have.
+
+          contract_address: CONTRACT_ADDRESS,
+          block_number: Number(receipt.blockNumber),
+          transaction_hash: receipt.transactionHash,
+
+          created_at: new Date().toISOString()
+        });
+
+        // Also update all invoices to IN_POOL
+        for (const invId of invoiceIds) {
+          await upsertInvoiceCache(Number(invId), {
+            status: 'IN_POOL',
+            pool_id: Number(poolId),
+
+            contract_address: CONTRACT_ADDRESS,
+            block_number: Number(receipt.blockNumber),
+            transaction_hash: receipt.transactionHash
+          });
+        }
+      }
 
       return { success: true, txHash: result.transactionHash, poolId };
     } catch (err: any) {
@@ -927,6 +1012,17 @@ export function useSEATrax() {
 
       await waitForReceipt(result);
 
+      // Cache Invoice Approval (Status: APPROVED)
+      // Re-fetch receipt to get block info if needed, but result hash is enough if we trust block number from event or just use retry
+      const receiptData = await waitForReceipt(result);
+
+      await upsertInvoiceCache(Number(invoiceId), {
+        status: 'APPROVED',
+        contract_address: CONTRACT_ADDRESS,
+        block_number: Number(receiptData.blockNumber),
+        transaction_hash: receiptData.transactionHash
+      });
+
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to approve invoice';
@@ -962,6 +1058,15 @@ export function useSEATrax() {
       });
 
       await waitForReceipt(result);
+
+      // Cache Invoice Rejection (Status: REJECTED)
+      const receiptData = await waitForReceipt(result);
+      await upsertInvoiceCache(Number(invoiceId), {
+        status: 'REJECTED',
+        contract_address: CONTRACT_ADDRESS,
+        block_number: Number(receiptData.blockNumber),
+        transaction_hash: receiptData.transactionHash
+      });
 
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
@@ -1000,6 +1105,15 @@ export function useSEATrax() {
       });
 
       await waitForReceipt(result);
+
+      // Cache Invoice Paid (Status: COMPLETED)
+      const receiptData = await waitForReceipt(result);
+      await upsertInvoiceCache(Number(invoiceId), {
+        status: 'COMPLETED',
+        contract_address: CONTRACT_ADDRESS,
+        block_number: Number(receiptData.blockNumber),
+        transaction_hash: receiptData.transactionHash
+      });
 
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
