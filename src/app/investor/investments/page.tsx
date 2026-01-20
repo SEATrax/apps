@@ -67,7 +67,7 @@ export default function InvestmentsPage() {
     completedInvestments: investments.filter(inv => inv.status === 'Completed' || inv.status === 'Claimed').length
   };
 
-  // Fetch investments from blockchain
+  // Fetch investments from Supabase (Cached Data)
   const fetchInvestments = async (isRefresh = false) => {
     if (!activeAccount?.address) return;
 
@@ -79,59 +79,56 @@ export default function InvestmentsPage() {
       }
       setError(null);
 
-      // Get all pools this investor has invested in
-      const poolIds = await getInvestorPools(activeAccount.address);
+      // Import the helper dynamically to avoid server/client issues if any, implies strict client side
+      // but we can just import at top level if not for this tool limitation, let's assume top level import available or use this block
+      const { getInvestorPortfolio } = await import('@/lib/supabase');
 
-      if (poolIds.length === 0) {
+      const portfolio = await getInvestorPortfolio(activeAccount.address);
+
+      if (!portfolio || portfolio.length === 0) {
         setInvestments([]);
         return;
       }
 
-      // Fetch details for each pool
-      const investmentData: InvestmentData[] = [];
+      const investmentData: InvestmentData[] = portfolio.map((inv: any, index: number) => {
+        const pool = inv.pool_metadata;
+        const status = getInvestmentStatus(
+          ['OPEN', 'FUNDED', 'COMPLETED', 'CANCELLED'].indexOf(pool?.status || 'OPEN'),
+          false // returnsClaimed not yet tracked in DB
+        );
 
-      for (let i = 0; i < poolIds.length; i++) {
-        const poolId = poolIds[i];
+        const investmentAmountETH = Number(inv.amount) / 1e18;
+        const expectedYield = investmentAmountETH * 0.04; // 4% yield
 
-        try {
-          // Fetch pool info and investment info in parallel
-          const [pool, investment, fundingPercentage] = await Promise.all([
-            getPool(poolId),
-            getInvestment(poolId, activeAccount.address),
-            getPoolFundingPercentage(poolId)
-          ]);
+        // Calculate progress from cached metadata
+        const totalLoanStart = Number(pool?.total_loan_amount || 0);
+        // Note: pool.amount_invested is in Wei, loan is in USD Cents. 
+        // We can't easily calc % without conversion. 
+        // Fallback: Use 0 or try to estimate if we had rates. 
+        // Actually, let's rely on status. If FUNDED/COMPLETED -> 100%.
+        let progress = 0;
+        if (pool?.status === 'FUNDED' || pool?.status === 'COMPLETED') progress = 1;
+        // precise progress is hard without live price feed in this view, 
+        // but we can trust the cache eventually. For now, showing status is safer.
 
-          if (pool && investment && investment.amount > 0n) {
-            const status = getInvestmentStatus(pool.status, investment.returnsClaimed);
-            const investmentAmountETH = Number(investment.amount) / 1e18;
-            const expectedYield = investmentAmountETH * 0.04; // 4% yield
-
-            investmentData.push({
-              id: i + 1,
-              poolId: poolId,
-              poolName: pool.name || `Pool #${poolId.toString()}`,
-              investmentAmount: investment.amount,
-              investmentDate: new Date(Number(investment.timestamp) * 1000),
-              status: status,
-              expectedReturn: (investmentAmountETH + expectedYield).toFixed(4),
-              currentValue: investmentAmountETH.toFixed(4),
-              profitLoss: status === 'Completed' || status === 'Claimed'
-                ? `+${expectedYield.toFixed(4)}`
-                : '0.00',
-              fundingProgress: fundingPercentage / 100, // Convert from basis points
-              maturityDate: pool.endDate ? new Date(Number(pool.endDate) * 1000) : null,
-              yield: '4.0%',
-              returnsClaimed: investment.returnsClaimed
-            });
-          }
-        } catch (poolError) {
-          console.error(`Failed to fetch pool ${poolId}:`, poolError);
-          // Continue with other pools
-        }
-      }
-
-      // Sort by date, most recent first
-      investmentData.sort((a, b) => b.investmentDate.getTime() - a.investmentDate.getTime());
+        return {
+          id: index + 1,
+          poolId: BigInt(inv.pool_id),
+          poolName: pool?.name || `Pool #${inv.pool_id}`,
+          investmentAmount: BigInt(inv.amount),
+          investmentDate: new Date(Number(inv.timestamp) * 1000),
+          status: status,
+          expectedReturn: (investmentAmountETH + expectedYield).toFixed(4),
+          currentValue: investmentAmountETH.toFixed(4),
+          profitLoss: status === 'Completed' || status === 'Claimed'
+            ? `+${expectedYield.toFixed(4)}`
+            : '0.00',
+          fundingProgress: progress,
+          maturityDate: pool?.end_date ? new Date(Number(pool.end_date) * 1000) : null,
+          yield: '4.0%',
+          returnsClaimed: false // Pending DB update
+        };
+      });
 
       setInvestments(investmentData);
     } catch (err: any) {

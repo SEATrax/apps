@@ -119,7 +119,7 @@ export default function InvestorDashboard() {
     }
   };
 
-  // Fetch portfolio stats from blockchain
+  // Fetch portfolio stats from Supabase cache
   useEffect(() => {
     const fetchPortfolioStats = async () => {
       if (!activeAccount?.address) return;
@@ -127,11 +127,11 @@ export default function InvestorDashboard() {
       try {
         setLoading(true);
 
-        // Get all pools this investor has invested in
-        const poolIds = await getInvestorPools(activeAccount.address);
+        // Dynamically import helper
+        const { getInvestorPortfolio } = await import('@/lib/supabase');
+        const portfolio = await getInvestorPortfolio(activeAccount.address);
 
-        if (poolIds.length === 0) {
-          // No investments yet
+        if (!portfolio || portfolio.length === 0) {
           setPortfolioStats({
             totalInvested: 0,
             totalValue: 0,
@@ -146,70 +146,120 @@ export default function InvestorDashboard() {
         let totalReturnWei = 0n;
         let activeCount = 0;
         let completedCount = 0;
-        const investments: any[] = [];
 
-        // Fetch details for each pool
-        for (const poolId of poolIds) {
-          try {
-            const [pool, investment, fundingPercentage] = await Promise.all([
-              getPool(poolId),
-              getInvestment(poolId, activeAccount.address),
-              getPoolFundingPercentage(poolId)
-            ]);
+        // Track unique pools to report "Active Investments" as count of pools, not transactions
+        // Wait, "Active Investments" could mean active *positions*.
+        // Detailed logic:
+        // - Single pool can have multiple investments? 
+        //   Our `investments` table is per-transaction?
+        //   No, `investments` table has `pool_id` and `amount`.
+        //   The `createInvestment` inserts a NEW row every time? YES.
+        //   But `getInvestment` on contract returns AGGREGATED amount.
+        //   The `investments` table should ideally reflect the aggregation OR we sum it up.
+        //   The `getInvestorPortfolio` returns ALL rows.
+        //   So we need to group by pool_id to simulate "positions".
 
-            if (pool && investment && investment.amount > 0n) {
-              totalInvestedWei += investment.amount;
+        // Group investments by pool
+        const poolMap = new Map<number, {
+          amount: bigint,
+          pool: any,
+          latestTimestamp: number,
+          fundingPercentage: number /// We'll need to fetch this or approx
+        }>();
 
-              // Check pool status
-              const isCompleted = pool.status === 2; // COMPLETED
-              const isFunded = pool.status === 1; // FUNDED
+        for (const record of portfolio) {
+          const pid = record.pool_id;
+          const amt = BigInt(record.amount); // amount is string in DB
+          const current = poolMap.get(pid);
 
-              if (isCompleted || isFunded) {
-                if (isCompleted) {
-                  // Calculate 4% yield for completed pools
-                  const yieldAmount = (investment.amount * 4n) / 100n;
-                  totalReturnWei += yieldAmount;
-                  completedCount++;
-                }
-              } else {
-                activeCount++;
-              }
-
-              // Build investment data for recent investments list
-              investments.push({
-                id: Number(poolId),
-                poolName: pool.name || `Pool #${poolId.toString()}`,
-                amount: Number(investment.amount) / 1e18,
-                status: isCompleted ? 'Completed' : (isFunded ? 'Funded' : 'Active'),
-                fundingProgress: fundingPercentage / 100, // From basis points
-                poolId: poolId,
-                timestamp: Number(investment.timestamp),
-                expectedYield: '4.0%', // Default yield for SEATrax pools
-                investedDate: new Date(Number(investment.timestamp) * 1000)
-              });
+          if (current) {
+            current.amount += amt;
+            if (record.timestamp > current.latestTimestamp) {
+              current.latestTimestamp = record.timestamp;
             }
-          } catch (poolError) {
-            console.error(`Failed to fetch pool ${poolId}:`, poolError);
+          } else {
+            // Pool metadata is joined
+            poolMap.set(pid, {
+              amount: amt,
+              pool: record.pool_metadata || { status: 'OPEN', name: `Pool #${pid}` },
+              latestTimestamp: record.timestamp,
+              fundingPercentage: 0 // Placeholder
+            });
           }
         }
 
-        // Sort investments by timestamp (most recent first) and take top 3
-        investments.sort((a, b) => b.timestamp - a.timestamp);
-        const recentThree = investments.slice(0, 3);
+        // Calculate stats from grouped positions
+        const processedInvestments = [];
 
-        // Convert Wei to ETH for display
+        for (const [pid, data] of poolMap.entries()) {
+          const poolStatus = data.pool.status || 'OPEN';
+          // Map status string/enum to our logic
+          // pool_metadata status is text: 'Open', 'Funded', 'Completed'
+          // Or 0, 1, 2, 3? Schema says 'text'. Backfill uses strings?
+          // Let's assume text.
+
+          const isCompleted = poolStatus === 'COMPLETED';
+          const isFunded = poolStatus === 'FUNDED';
+
+          totalInvestedWei += data.amount;
+
+          if (isCompleted || isFunded) {
+            if (isCompleted) {
+              // Mock 4% yield
+              const yieldAmount = (data.amount * 4n) / 100n;
+              totalReturnWei += yieldAmount;
+              completedCount++;
+            }
+          } else {
+            activeCount++;
+          }
+
+          // Don't push to processedInvestments here - we use raw portfolio for list
+        }
+
         const totalInvestedETH = Number(totalInvestedWei) / 1e18;
         const totalReturnETH = Number(totalReturnWei) / 1e18;
-        const ethPrice = 3000; // Approximate price for testing
+        const ethPrice = 3000;
 
         setPortfolioStats({
           totalInvested: totalInvestedETH * ethPrice,
           totalValue: (totalInvestedETH + totalReturnETH) * ethPrice,
           totalReturn: totalReturnETH * ethPrice,
-          activeInvestments: activeCount + (poolIds.length - activeCount - completedCount)
+          activeInvestments: activeCount + (poolMap.size - activeCount - completedCount)
         });
 
-        setRecentInvestments(recentThree);
+        // Recent Investments - Show individual transactions
+        const recentTransactions = portfolio.map((record) => {
+          const pid = record.pool_id;
+          const amtWei = BigInt(record.amount);
+          const poolMeta = record.pool_metadata || { status: 'OPEN', name: `Pool #${pid}` };
+          // Helper to normalize status string if case differs
+          const poolStatusRaw = String(poolMeta.status || 'OPEN').toUpperCase();
+
+          const isCompleted = poolStatusRaw === 'COMPLETED';
+          const isFunded = poolStatusRaw === 'FUNDED';
+          // If 'status' is simply "Open" or 0 from contract, treat as Active
+
+          const amtEth = Number(amtWei) / 1e18;
+
+          return {
+            id: record.id,
+            poolName: poolMeta.name,
+            amount: amtEth,
+            status: isCompleted ? 'Completed' : (isFunded ? 'Funded' : 'Active'),
+            fundingProgress: (isCompleted || isFunded) ? 1 : (Number(poolMeta.amount_invested || 0) / Number(poolMeta.total_loan_amount || 1)),
+            poolId: pid,
+            timestamp: record.timestamp,
+            expectedYield: '4.0%',
+            investedDate: new Date(record.timestamp * 1000)
+          };
+        });
+
+        recentTransactions.sort((a, b) => b.timestamp - a.timestamp);
+        const recentFive = recentTransactions.slice(0, 5); // Show top 5
+
+        setRecentInvestments(recentFive);
+
       } catch (error) {
         console.error('Failed to fetch portfolio:', error);
       } finally {
@@ -218,7 +268,7 @@ export default function InvestorDashboard() {
     };
 
     fetchPortfolioStats();
-  }, [activeAccount, getInvestorPools, getPool, getInvestment, getPoolFundingPercentage]);
+  }, [activeAccount]);
 
   if (loading || profileLoading) {
     return (

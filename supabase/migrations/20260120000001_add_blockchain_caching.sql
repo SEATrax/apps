@@ -58,14 +58,17 @@ CREATE TABLE IF NOT EXISTS investments (
 ALTER TABLE investments ENABLE ROW LEVEL SECURITY;
 
 -- Policies for investments
+DROP POLICY IF EXISTS "Anyone can read investments" ON investments;
 CREATE POLICY "Anyone can read investments"
 ON investments FOR SELECT
 USING (true);
 
--- Allow authenticated users to insert (backend/indexer logic might need service role, but for MVP frontend writing):
-CREATE POLICY "Authenticated users can insert investments"
+-- Allow authenticated users or anon (wallet users) to insert
+DROP POLICY IF EXISTS "Anyone can insert investments" ON investments;
+DROP POLICY IF EXISTS "Authenticated users can insert investments" ON investments; -- Cleanup old name just in case
+CREATE POLICY "Anyone can insert investments"
 ON investments FOR INSERT
-WITH CHECK (auth.role() = 'authenticated');
+WITH CHECK (true);
 
 -- Create indexes for investments
 CREATE INDEX IF NOT EXISTS idx_investments_pool_id ON investments(pool_id);

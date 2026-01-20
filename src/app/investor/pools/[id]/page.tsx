@@ -121,8 +121,15 @@ export default function PoolDetailPage() {
 
     try {
       // Convert USD to Wei (assuming 1 ETH = $3000)
-      const ethAmount = parseFloat(investmentAmount) / 3000;
-      const amountInWei = parseEther(ethAmount.toString());
+      // Use integer math: USD * 10^18 / 3000 = USD * 10^15 / 3
+      // We process cents to avoid float: USD * 100
+      // Wei = (Cents * 10^18) / (3000 * 100) = Cents * 10^18 / 300000 = Cents * 10^13 / 3
+      // But let's just use string parsing for the input to be safe
+      const amountUSD = parseFloat(investmentAmount);
+      // Fallback to integer math logic:
+      // (amountUSD * 1e18) / 3000
+      const ethRate = 3000;
+      const amountInWei = parseEther((amountUSD / ethRate).toFixed(18)); // Limit decimals to avoid underflow
 
       // Call invest function with value in transaction options
       const result = await invest(BigInt(pool.id), amountInWei);

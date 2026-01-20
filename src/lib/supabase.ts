@@ -254,7 +254,7 @@ export interface Database {
           id?: string;
           pool_id: number;
           investor_address: string;
-          amount: number;
+          amount: number | string;
           percentage: number;
           timestamp: number;
 
@@ -487,4 +487,72 @@ export async function createInvestment(
     return null;
   }
   return data;
+}
+
+export async function upsertInvestmentCache(
+  poolId: number,
+  investorAddress: string,
+  data: Partial<Database['public']['Tables']['investments']['Update']>
+) {
+  // First find the ID - composite key update
+  const { data: existing } = await supabase
+    .from('investments')
+    .select('id')
+    .eq('pool_id', poolId)
+    .eq('investor_address', investorAddress.toLowerCase())
+    .single();
+
+  if (existing) {
+    const { data: result, error } = await supabase
+      .from('investments')
+      .update(data)
+      .eq('id', existing.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to update investment cache:', error);
+      return null;
+    }
+    return result;
+  }
+  return null;
+}
+
+export async function getInvestorPortfolio(investorAddress: string) {
+  // 1. Fetch investments
+  const { data: investments, error: investError } = await supabase
+    .from('investments')
+    .select('*')
+    .eq('investor_address', investorAddress.toLowerCase())
+    .order('timestamp', { ascending: false });
+
+  if (investError) {
+    console.error('Failed to fetch investor portfolio:', investError);
+    return [];
+  }
+
+  if (!investments || investments.length === 0) return [];
+
+  // 2. Fetch related pool metadata
+  const poolIds = [...new Set(investments.map(i => i.pool_id))];
+
+  const { data: pools, error: poolError } = await supabase
+    .from('pool_metadata')
+    .select('pool_id, name, status, end_date, total_loan_amount, amount_invested')
+    .in('pool_id', poolIds);
+
+  if (poolError) {
+    console.error('Failed to fetch pool metadata for portfolio:', poolError);
+    // Return investments without pool data if pool fetch fails (graceful degradation)
+    return investments.map(inv => ({ ...inv, pool_metadata: null }));
+  }
+
+  // 3. Merge data
+  const poolMap = new Map(pools?.map(p => [p.pool_id, p]));
+
+  return investments.map(inv => ({
+    ...inv,
+    pool_metadata: poolMap.get(inv.pool_id) || null
+  }));
 }

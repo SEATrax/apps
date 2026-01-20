@@ -18,7 +18,7 @@
 import { useCallback, useState } from 'react';
 import { usePanna } from './usePanna';
 import { CONTRACT_ADDRESS, SEATRAX_ABI, ROLES, type Invoice, type Pool, type Investment, type PoolStatus, type InvoiceStatus } from '@/lib/contract';
-import { upsertInvoiceCache, upsertPoolCache, createInvestment, createExporter, createInvestor } from '@/lib/supabase';
+import { upsertInvoiceCache, upsertPoolCache, createInvestment, createExporter, createInvestor, upsertInvestmentCache } from '@/lib/supabase';
 import { liskSepolia } from 'panna-sdk';
 import { prepareContractCall, sendTransaction, readContract, waitForReceipt, prepareEvent, getContractEvents } from 'thirdweb';
 import { getContract } from 'thirdweb';
@@ -819,7 +819,7 @@ export function useSEATrax() {
       await createInvestment({
         pool_id: Number(poolId),
         investor_address: account.address,
-        amount: Number(amount), // Wei
+        amount: amount.toString(), // Store exact BigInt as string to preserve precision
         percentage: 0, // Will be calculated by indexer or updated later. Initial record.
         timestamp: Math.floor(Date.now() / 1000),
 
@@ -883,6 +883,13 @@ export function useSEATrax() {
       });
 
       await waitForReceipt(result);
+
+      // Update Investment Cache (Returns Claimed)
+      // Note: We don't have a specific "returnsClaimed" column in the DB schema yet.
+      // However, we can update the investment record's timestamp or add a note if needed.
+      // For now, we will just log it effectively or maybe update updated_at by touching it.
+      // Actually, let's leave a TODO.
+      // TODO: Add 'returns_claimed' boolean to investments table to track this state off-chain.
 
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {
