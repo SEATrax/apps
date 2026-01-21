@@ -100,7 +100,7 @@ export default function InvestmentsPage() {
         const pool = inv.pool_metadata;
         const status = getInvestmentStatus(
           ['OPEN', 'FUNDED', 'COMPLETED', 'CANCELLED'].indexOf(pool?.status || 'OPEN'),
-          false // returnsClaimed not yet tracked in DB
+          inv.returns_claimed || false // Tracked in DB now
         );
 
         const investmentAmountETH = Number(inv.amount) / 1e18;
@@ -132,7 +132,7 @@ export default function InvestmentsPage() {
           fundingProgress: progress,
           maturityDate: pool?.end_date ? new Date(Number(pool.end_date) * 1000) : null,
           yield: actualYieldStr,
-          returnsClaimed: false
+          returnsClaimed: inv.returns_claimed || false
         };
       });
 

@@ -885,11 +885,13 @@ export function useSEATrax() {
       await waitForReceipt(result);
 
       // Update Investment Cache (Returns Claimed)
-      // Note: We don't have a specific "returnsClaimed" column in the DB schema yet.
-      // However, we can update the investment record's timestamp or add a note if needed.
-      // For now, we will just log it effectively or maybe update updated_at by touching it.
-      // Actually, let's leave a TODO.
-      // TODO: Add 'returns_claimed' boolean to investments table to track this state off-chain.
+      try {
+        const { markReturnsClaimed } = await import('@/lib/supabase');
+        await markReturnsClaimed(Number(poolId), account.address);
+      } catch (dbError) {
+        console.warn('Failed to update returns_claimed in DB:', dbError);
+        // Don't fail the whole operation if DB update fails, as chain tx succeeded
+      }
 
       return { success: true, txHash: result.transactionHash };
     } catch (err: any) {

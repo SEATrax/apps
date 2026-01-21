@@ -526,7 +526,7 @@ export async function getInvestorPortfolio(investorAddress: string) {
   // 1. Fetch investments
   const { data: investments, error: investError } = await supabase
     .from('investments')
-    .select('*')
+    .select('*, returns_claimed') // Ensure returns_claimed is fetched
     .eq('investor_address', investorAddress.toLowerCase())
     .order('timestamp', { ascending: false });
 
@@ -558,6 +558,26 @@ export async function getInvestorPortfolio(investorAddress: string) {
     ...inv,
     pool_metadata: poolMap.get(inv.pool_id) || null
   }));
+}
+
+/**
+ * Mark an investment's returns as claimed
+ */
+export async function markReturnsClaimed(poolId: number | string, investorAddress: string) {
+  const { error } = await supabase
+    .from('investments')
+    .update({ returns_claimed: true })
+    .match({
+      pool_id: poolId,
+      investor_address: investorAddress.toLowerCase()
+    });
+
+  if (error) {
+    console.error('Failed to mark returns as claimed:', error);
+    throw error;
+  }
+
+  return true;
 }
 
 export async function getMarketplacePools() {

@@ -6,7 +6,7 @@
 | :--- | :--- | :--- | :--- |
 | **Registration** | ✅ 100% Implemented | ✅ Cached | `registerInvestor` -> `investors` table. |
 | **Investment** | ✅ 100% Implemented | ✅ Cached | `invest` -> `investments` table & `pool_metadata` update. |
-| **Claim Returns** | ⚠️ 90% Implemented | ❌ Partial | `claimReturns` works on-chain. Cache update for `returns_claimed` flag pending DB schema update. |
+| **Claim Returns** | ✅ 100% Implemented | ✅ Cached | `claimReturns` -> DB update `returns_claimed`. |
 | **View Portfolio** | ✅ 100% Implemented | ✅ Cached | Served via Supabase `investments` table. |
 
 ## Feature Implementation Details
@@ -25,13 +25,12 @@
     4. Updates `amount_invested` in `pool_metadata`.
 - **Verification**: Verified in `useSEATrax.ts` lines 790-858.
 
-### 3. Claim Returns (90%)
+### 3. Claim Returns (100%)
 - **Function**: `claimReturns(poolId)`
 - **Logic**: 
     1. Calls contract to withdraw funds.
-    2. **Missing Cache Update**: The `returns_claimed` status is tracked on-chain but not yet mirrored to a database column.
-    3. **Impact**: The "Claimable Returns" metric currently shows **Lifetime Earnings** (total profit ever generated) rather than just the unclaimed amount.
-- **Action Item**: Add `returns_claimed` boolean to `investments` table in next migration to distinguish Unclaimed vs Claimed.
+    2. Updates `returns_claimed` flag in `investments` table via `markReturnsClaimed`.
+    3. UI refreshes to show "Claimed" status.
 
 ### 4. View Portfolio (100%)
 - **Function**: `getInvestment`, `getInvestorPools`
