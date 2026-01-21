@@ -542,7 +542,7 @@ export async function getInvestorPortfolio(investorAddress: string) {
 
   const { data: pools, error: poolError } = await supabase
     .from('pool_metadata')
-    .select('pool_id, name, status, end_date, total_loan_amount, amount_invested')
+    .select('pool_id, name, status, end_date, total_loan_amount, amount_invested, target_yield')
     .in('pool_id', poolIds);
 
   if (poolError) {
