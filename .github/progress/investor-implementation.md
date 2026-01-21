@@ -7,7 +7,7 @@
 | **Registration** | ✅ 100% Implemented | ✅ Cached | `registerInvestor` -> `investors` table. |
 | **Investment** | ✅ 100% Implemented | ✅ Cached | `invest` -> `investments` table & `pool_metadata` update. |
 | **Claim Returns** | ✅ 100% Implemented | ✅ Cached | `claimReturns` -> DB update `returns_claimed`. |
-| **View Portfolio** | ✅ 100% Implemented | ✅ Cached | Served via Supabase `investments` table. |
+| **UI/UX & Polish** | ✅ 100% Implemented | N/A | Dashboard, Pools, Investments, and Returns pages fully polished with Skeletons & USD formatting. |
 
 ## Feature Implementation Details
 
@@ -31,12 +31,13 @@
     1. Calls contract to withdraw funds.
     2. Updates `returns_claimed` flag in `investments` table via `markReturnsClaimed`.
     3. UI refreshes to show "Claimed" status.
+- **UI Status**: Refactored to show USD primary values and Skeleton loaders.
 
 ### 4. View Portfolio (100%)
 - **Function**: `getInvestment`, `getInvestorPools`
 - **Logic**: Frontend reads directly from Supabase for fast loading.
+- **Visuals**: Primary USD values, Secondary ETH values, "Ready to Claim" simulation mode.
 
 ## Action Items
-1.  **Database Migration**: Add `returns_claimed` column to `investments` table.
-2.  **Yield Parametrization**: Discuss if 4% yield should be dynamic.
-3.  **Investment Limits**: Enforce min/max limits in Frontend validation (Backend/Contract enforcement is optional for MVP).
+1.  **Yield Parametrization**: Discuss if 4% yield should be dynamic.
+2.  **Investment Limits**: Enforce min/max limits in Frontend validation (Backend/Contract enforcement is optional for MVP).
