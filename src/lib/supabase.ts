@@ -561,20 +561,36 @@ export async function getInvestorPortfolio(investorAddress: string) {
 }
 
 export async function getMarketplacePools() {
-  // Fetch all pools with their metadata and related invoices count
-  // Note: For now we fetch plain metadata. In a real scenario we'd join with invoices to get the count.
-  // Since our 'invoice_metadata' has 'pool_id', we can fetch them or just assume the UI needs other data.
-  // For the 'Invoices: X' count, let's try to fetch invoice metadata IDs per pool.
-
-  const { data: pools, error } = await supabase
+  // 1. Fetch all pools
+  const { data: pools, error: poolError } = await supabase
     .from('pool_metadata')
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Failed to fetch marketplace pools:', error);
+  if (poolError) {
+    console.error('Failed to fetch marketplace pools:', poolError);
     return [];
   }
 
-  return pools || [];
+  if (!pools || pools.length === 0) return [];
+
+  // 2. Fetch related invoices map manually (to avoid FK issues)
+  const poolIds = pools.map(p => p.pool_id);
+  const { data: invoices, error: invError } = await supabase
+    .from('invoice_metadata')
+    .select('id, pool_id, amount_invested, loan_amount')
+    .in('pool_id', poolIds);
+
+  if (invError) {
+    console.warn('Failed to fetch invoices for pools (non-critical):', invError);
+  }
+
+  // 3. Attach invoices to pools
+  return pools.map(pool => {
+    const poolInvoices = invoices?.filter(inv => Number(inv.pool_id) === Number(pool.pool_id)) || [];
+    return {
+      ...pool,
+      invoice_metadata: poolInvoices
+    };
+  });
 }

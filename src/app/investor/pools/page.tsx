@@ -82,7 +82,7 @@ export default function PoolsPage() {
           endDate: p.end_date || Math.floor(Date.now() / 1000) + 86400 * 30,
           totalLoanAmount: p.total_loan_amount || 0,
           amountInvested: p.amount_invested || 0,
-          expectedYield: '12-15%', // Placeholder
+          expectedYield: p.target_yield ? `${p.target_yield}%` : '12-15%',
           invoiceIds: p.invoice_metadata?.map((inv: any) => inv.id) || [],
           riskCategory: p.risk_category || 'Low',
           fundingProgress: calculateProgress(p.amount_invested || 0, p.total_loan_amount || 1),
@@ -210,65 +210,76 @@ export default function PoolsPage() {
       </div>
 
       {/* Filters */}
+      {/* Filters */}
       <Card className="bg-slate-900/50 border-slate-800">
         <CardContent className="p-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-6">
+            {/* Row 1: Search */}
+            <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search pools..."
+                placeholder="Search pools by name or description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 text-white rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                className="w-full pl-10 pr-4 py-3 bg-slate-800/50 border border-slate-700 text-white rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all shadow-sm"
               />
             </div>
 
-            {/* Status Filter */}
-            <div className="flex gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 overflow-x-auto">
-              {['all', 'open', 'fundraising', 'funded'].map((filter) => (
-                <button
-                  key={filter}
-                  onClick={() => setSelectedFilter(filter)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${selectedFilter === filter
-                    ? 'bg-cyan-500/10 text-cyan-400 shadow-sm'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}
-                >
-                  {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                </button>
-              ))}
-            </div>
+            {/* Row 2: Filters & Sort */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
 
-            {/* Risk Filter */}
-            <div className="flex items-center space-x-2">
-              <select
-                title="Risk Level"
-                value={riskFilter}
-                onChange={(e) => setRiskFilter(e.target.value)}
-                className="h-10 px-3 rounded-md bg-slate-900/50 border border-slate-800 text-sm focus:ring-cyan-500/20 focus:border-cyan-500 text-gray-300"
-              >
-                <option value="all">Risk: All</option>
-                <option value="Low">Low Risk</option>
-                <option value="Medium">Medium Risk</option>
-                <option value="High">High Risk</option>
-              </select>
-            </div>
+              {/* Status Filter (Tabs) */}
+              <div className="flex gap-1 bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 overflow-x-auto w-full md:w-auto no-scrollbar">
+                {['all', 'open', 'fundraising', 'funded'].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setSelectedFilter(filter)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${selectedFilter === filter
+                        ? 'bg-slate-700/80 text-white shadow-sm ring-1 ring-white/10'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                  >
+                    {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  </button>
+                ))}
+              </div>
 
-            {/* Sort By */}
-            <div className="flex items-center space-x-2">
-              <select
-                title="Sort By"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="h-10 px-3 rounded-md bg-slate-900/50 border border-slate-800 text-sm focus:ring-cyan-500/20 focus:border-cyan-500 text-gray-300"
-              >
-                <option value="newest">Newest First</option>
-                <option value="yield_high">Yield: High to Low</option>
-                <option value="yield_low">Yield: Low to High</option>
-                <option value="progress_high">Progress: High to Low</option>
-              </select>
+              {/* Right Side: Dropdowns */}
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                {/* Risk Filter */}
+                <div className="relative flex-1 md:w-40">
+                  <Target className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+                  <select
+                    title="Risk Level"
+                    value={riskFilter}
+                    onChange={(e) => setRiskFilter(e.target.value)}
+                    className="w-full h-10 pl-9 pr-3 rounded-lg bg-slate-800/50 border border-slate-700 text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-gray-300 appearance-none cursor-pointer hover:bg-slate-800 transition-colors"
+                  >
+                    <option value="all">All Risks</option>
+                    <option value="Low">Low Risk</option>
+                    <option value="Medium">Medium Risk</option>
+                    <option value="High">High Risk</option>
+                  </select>
+                </div>
+
+                {/* Sort By */}
+                <div className="relative flex-1 md:w-48">
+                  <TrendingUp className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+                  <select
+                    title="Sort By"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full h-10 pl-9 pr-3 rounded-lg bg-slate-800/50 border border-slate-700 text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-gray-300 appearance-none cursor-pointer hover:bg-slate-800 transition-colors"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="yield_high">Highest Yield</option>
+                    <option value="yield_low">Lowest Yield</option>
+                    <option value="progress_high">Most Funded</option>
+                  </select>
+                </div>
+              </div>
+
             </div>
           </div>
         </CardContent>
