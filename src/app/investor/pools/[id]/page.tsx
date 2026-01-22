@@ -19,7 +19,7 @@ export default function PoolDetailPage() {
   const params = useParams();
   const activeAccount = useActiveAccount();
   const { getPool, invest, getInvoice } = useSEATrax();
-  
+
   const [pool, setPool] = useState<any>(null);
   const [poolInvoices, setPoolInvoices] = useState<any[]>([]);
   const [investmentAmount, setInvestmentAmount] = useState('');
@@ -32,23 +32,23 @@ export default function PoolDetailPage() {
   useEffect(() => {
     const fetchPoolData = async () => {
       if (!poolId || !activeAccount) return;
-      
+
       try {
         setLoading(true);
-        
+
         // Fetch pool data from contract
         const poolData = await getPool(BigInt(poolId as string));
-        
+
         if (poolData) {
           // Calculate funding progress
           const fundingProgress = Number(poolData.totalLoanAmount) > 0
             ? Math.min(100, Math.round((Number(poolData.amountInvested) / Number(poolData.totalLoanAmount)) * 100))
             : 0;
-          
+
           // Convert Wei to USD for display (1 ETH = $3000 approx)
           const totalLoanUSD = Number(poolData.totalLoanAmount) / 1e18 * 3000;
           const amountInvestedUSD = Number(poolData.amountInvested) / 1e18 * 3000;
-          
+
           setPool({
             id: poolData.poolId,
             name: poolData.name,
@@ -62,10 +62,10 @@ export default function PoolDetailPage() {
             riskCategory: 'Medium',
             status: poolData.status === 0 ? 'Open' : poolData.status === 3 ? 'Funded' : 'Fundraising',
             fundingProgress,
-            minimumInvestment: '1000', // $1000 USD minimum
-            maximumInvestment: '100000' // $100k USD maximum
+            minimumInvestment: '0.30', // ~0.0001 ETH @ $3000/ETH (for testing)
+            maximumInvestment: '3000' // ~1 ETH @ $3000/ETH (for testing)
           });
-          
+
           // Fetch invoice details
           const invoices = [];
           for (const invoiceId of poolData.invoiceIds) {
@@ -106,7 +106,7 @@ export default function PoolDetailPage() {
 
   const handleInvest = async () => {
     if (!pool) return;
-    
+
     if (!investmentAmount || parseFloat(investmentAmount) < parseFloat(pool.minimumInvestment)) {
       toast.error(`Minimum investment is $${Number(pool.minimumInvestment).toLocaleString()}`);
       return;
@@ -118,18 +118,25 @@ export default function PoolDetailPage() {
     }
 
     setIsInvesting(true);
-    
+
     try {
       // Convert USD to Wei (assuming 1 ETH = $3000)
-      const ethAmount = parseFloat(investmentAmount) / 3000;
-      const amountInWei = parseEther(ethAmount.toString());
-      
+      // Use integer math: USD * 10^18 / 3000 = USD * 10^15 / 3
+      // We process cents to avoid float: USD * 100
+      // Wei = (Cents * 10^18) / (3000 * 100) = Cents * 10^18 / 300000 = Cents * 10^13 / 3
+      // But let's just use string parsing for the input to be safe
+      const amountUSD = parseFloat(investmentAmount);
+      // Fallback to integer math logic:
+      // (amountUSD * 1e18) / 3000
+      const ethRate = 3000;
+      const amountInWei = parseEther((amountUSD / ethRate).toFixed(18)); // Limit decimals to avoid underflow
+
       // Call invest function with value in transaction options
       const result = await invest(BigInt(pool.id), amountInWei);
-      
+
       if (result.success) {
         toast.success(`Successfully invested $${investmentAmount} in ${pool.name}`);
-        
+
         // Refresh pool data
         setTimeout(() => {
           window.location.reload();
@@ -163,12 +170,55 @@ export default function PoolDetailPage() {
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+          <div className="text-gray-400">Loading pool details...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Pool not found state
+  if (!pool) {
+    return (
+      <div className="space-y-6">
+        <Button
+          onClick={() => router.push('/investor/pools')}
+          variant="ghost"
+          className="text-gray-400 hover:text-white"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Pools
+        </Button>
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="text-center py-12">
+            <AlertTriangle className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
+            <div className="text-white text-xl mb-2">Pool Not Found</div>
+            <p className="text-gray-400 mb-6">
+              The pool you're looking for doesn't exist or has been removed.
+            </p>
+            <Button
+              onClick={() => router.push('/investor/pools')}
+              className="bg-gradient-to-r from-cyan-500 to-teal-400 text-white"
+            >
+              Browse Available Pools
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Back Button */}
-      <Button 
+      <Button
         onClick={() => router.push('/investor/pools')}
-        variant="ghost" 
+        variant="ghost"
         className="text-gray-400 hover:text-white"
       >
         <ArrowLeft className="w-4 h-4 mr-2" />
@@ -194,7 +244,7 @@ export default function PoolDetailPage() {
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent className="space-y-6">
           {/* Funding Progress */}
           <div>
@@ -247,7 +297,7 @@ export default function PoolDetailPage() {
                 <Input
                   id="amount"
                   type="number"
-                  step="100"
+                  step="0.01"
                   min={pool.minimumInvestment}
                   max={pool.maximumInvestment}
                   value={investmentAmount}
@@ -292,7 +342,7 @@ export default function PoolDetailPage() {
                 </div>
               </div>
 
-              <Button 
+              <Button
                 onClick={handleInvest}
                 disabled={!investmentAmount || parseFloat(investmentAmount) < parseFloat(pool.minimumInvestment) || isInvesting}
                 className="w-full bg-gradient-to-r from-cyan-500 to-teal-400 text-white hover:shadow-lg hover:shadow-cyan-500/50"
@@ -367,7 +417,7 @@ export default function PoolDetailPage() {
                         {invoice.status}
                       </Badge>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                       <div>
                         <div className="text-gray-400">Shipping Value</div>

@@ -195,15 +195,38 @@ exporters (id, wallet_address, company_name, tax_id, country, export_license, is
 -- Investor profiles
 investors (id, wallet_address, name, address, created_at)
 
--- Invoice metadata (off-chain)
-invoice_metadata (id, token_id, invoice_number, goods_description, importer_name, importer_license, documents, created_at)
+-- Invoice metadata (off-chain + cache)
+invoice_metadata (
+  id, token_id, invoice_number, goods_description, importer_name, importer_license, documents, created_at,
+  -- CACHE COLUMNS
+  status, pool_id, shipping_amount, loan_amount, amount_invested, amount_withdrawn,
+  contract_address, block_number, transaction_hash
+)
 
 -- Pool metadata
-pool_metadata (id, pool_id, description, risk_category, created_at)
+pool_metadata (
+  id, pool_id, description, risk_category, created_at,
+  -- CACHE COLUMNS
+  status, start_date, end_date, total_loan_amount, total_shipping_amount, amount_invested, amount_distributed,
+  contract_address, block_number, transaction_hash
+)
+
+-- Investments (NEW)
+investments (
+  id, pool_id, investor_address, amount, percentage, timestamp,
+  contract_address, block_number, transaction_hash
+)
 
 -- Payment tracking
 payments (id, invoice_id, amount_usd, payment_link, status, sent_at, paid_at, created_at)
 ```
+
+### Blockchain Caching Strategy (Read-Through/Write-Behind)
+The application uses a **Write-Behind** strategy to ensure the database is always in sync with the blockchain:
+1.  **Write to Blockchain**: User signs transaction (e.g., `createInvoice`).
+2.  **Wait for Receipt**: Application waits for transaction confirmation.
+3.  **Write to Database**: Application immediately calls `upsertInvoiceCache` (or similar) to update the database with the new state, transaction hash, and block number.
+4.  **Read from Database**: Frontend queries the database for lists and details to ensure <100ms response times.
 
 ---
 
