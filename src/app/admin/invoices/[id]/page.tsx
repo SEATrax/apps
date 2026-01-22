@@ -92,6 +92,9 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [expandedDocs, setExpandedDocs] = useState<Record<string, boolean>>({});
+  const [documentData, setDocumentData] = useState<Record<string, { filename: string; fileUrl: string; ipfsHash: string }>>({});
+  const [loadingDocs, setLoadingDocs] = useState(true);
 
   // Get invoice ID from params
   useEffect(() => {
@@ -106,6 +109,118 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
       fetchInvoiceData();
     }
   }, [isConnected, address, invoiceId]);
+
+  // Load documents when metadata changes
+  useEffect(() => {
+    const loadDocuments = async () => {
+      if (!metadata?.documents || Object.keys(metadata.documents).length === 0) {
+        setLoadingDocs(false);
+        return;
+      }
+
+      console.log('📄 Loading documents from metadata:', metadata.documents);
+      setLoadingDocs(true);
+      const docs: Record<string, { filename: string; fileUrl: string; ipfsHash: string }> = {};
+
+      for (const [key, value] of Object.entries(metadata.documents)) {
+        console.log(`Processing document [${key}]:`, value);
+        
+        let filename = key;
+        let fileUrl = '';
+        let ipfsHash = '';
+
+        if (typeof value === 'string') {
+          // String format - this is metadata hash, need to fetch and extract actual file
+          console.log(`  String format (metadata hash): ${value}`);
+          const metadataUrl = `https://gateway.pinata.cloud/ipfs/${value}`;
+          console.log(`  Fetching metadata from: ${metadataUrl}`);
+          
+          try {
+            const response = await fetch(metadataUrl);
+            const metadataJson = await response.json();
+            console.log(`  Metadata JSON:`, metadataJson);
+            
+            if (metadataJson.image) {
+              // Extract actual file URL from metadata
+              const imageUri = metadataJson.image;
+              console.log(`  Image field from metadata: ${imageUri}`);
+              
+              // Convert to gateway URL if needed
+              if (imageUri.startsWith('ipfs://')) {
+                ipfsHash = imageUri.replace('ipfs://', '');
+                fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+              } else if (imageUri.startsWith('Qm') || imageUri.startsWith('baf')) {
+                ipfsHash = imageUri;
+                fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+              } else if (imageUri.includes('/ipfs/')) {
+                fileUrl = imageUri;
+                const match = imageUri.match(/\/ipfs\/([^/?#]+)/);
+                ipfsHash = match ? match[1] : '';
+              } else {
+                ipfsHash = imageUri;
+                fileUrl = `https://gateway.pinata.cloud/ipfs/${imageUri}`;
+              }
+              
+              // Use original_name from metadata if available
+              filename = metadataJson.original_name || metadataJson.name || key;
+              console.log(`  Extracted filename: ${filename}`);
+              console.log(`  Extracted file URL: ${fileUrl}`);
+              console.log(`  Extracted IPFS hash: ${ipfsHash}`);
+            } else {
+              console.error(`  ❌ No 'image' field in metadata JSON`);
+              // Fallback: use metadata URL as file URL
+              fileUrl = metadataUrl;
+              ipfsHash = value;
+            }
+          } catch (error) {
+            console.error(`  ❌ Failed to fetch metadata:`, error);
+            // Fallback: use hash directly
+            fileUrl = metadataUrl;
+            ipfsHash = value;
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          // Object format - NFT metadata already parsed
+          const val = value as any;
+          filename = val.original_name || val.name || key;
+          console.log(`  Object format, filename: ${filename}`);
+          
+          if (val.image) {
+            const imageUri = val.image;
+            console.log(`  Image URI: ${imageUri}`);
+            
+            if (imageUri.startsWith('ipfs://')) {
+              ipfsHash = imageUri.replace('ipfs://', '');
+              fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+            } else if (imageUri.startsWith('Qm') || imageUri.startsWith('baf')) {
+              ipfsHash = imageUri;
+              fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+            } else if (imageUri.includes('/ipfs/')) {
+              fileUrl = imageUri;
+              const match = imageUri.match(/\/ipfs\/([^/?#]+)/);
+              ipfsHash = match ? match[1] : '';
+            } else {
+              ipfsHash = imageUri;
+              fileUrl = `https://gateway.pinata.cloud/ipfs/${imageUri}`;
+            }
+            console.log(`  Final URL: ${fileUrl}`);
+          }
+        }
+
+        if (fileUrl) {
+          docs[key] = { filename, fileUrl, ipfsHash };
+          console.log(`  ✅ Added to docs:`, docs[key]);
+        } else {
+          console.error(`  ❌ Failed to extract file URL for ${key}`);
+        }
+      }
+
+      console.log('📦 Final documentData:', docs);
+      setDocumentData(docs);
+      setLoadingDocs(false);
+    };
+
+    loadDocuments();
+  }, [metadata?.documents]);
 
   const fetchInvoiceData = async () => {
     try {
@@ -231,48 +346,206 @@ export default function InvoiceDetailPage({ params }: InvoiceDetailProps) {
       );
     }
 
+    // Helper function to get file type icon
+    const getFileTypeIcon = (filename: string) => {
+      const ext = filename.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') return '📄';
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) return '🖼️';
+      if (['doc', 'docx'].includes(ext || '')) return '📝';
+      if (['xls', 'xlsx', 'csv'].includes(ext || '')) return '📊';
+      return '📎';
+    };
+
+    // Helper function to determine file type for preview
+    const getFileType = (filename: string): 'pdf' | 'image' | 'other' => {
+      const ext = filename.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') return 'pdf';
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) return 'image';
+      return 'other';
+    };
+
+    // Helper function to handle downloads with correct filename
+    const handleDownload = (fileUrl: string, filename: string) => {
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = filename;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    // Parse document metadata (handles both NFT format and simple hash format)
+    const parseDocument = async (key: string, value: any) => {
+      let filename = key;
+      let fileUrl = '';
+      let ipfsHash = '';
+
+      // Check if value is NFT metadata object
+      if (typeof value === 'object' && value !== null) {
+        // Use original_name if available, otherwise use name field
+        filename = value.original_name || value.name || key;
+        
+        // NFT metadata format - value.image contains IPFS reference
+        if (value.image) {
+          const imageUri = value.image;
+          
+          // Convert various IPFS formats to gateway URL
+          if (imageUri.startsWith('ipfs://')) {
+            // Format: ipfs://QmHash...
+            ipfsHash = imageUri.replace('ipfs://', '');
+            fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+          } else if (imageUri.startsWith('Qm') || imageUri.startsWith('baf')) {
+            // Format: QmHash... or bafyHash...
+            ipfsHash = imageUri;
+            fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+          } else if (imageUri.includes('/ipfs/')) {
+            // Format: https://gateway.pinata.cloud/ipfs/QmHash...
+            const match = imageUri.match(/\/ipfs\/([^/?#]+)/);
+            if (match) {
+              ipfsHash = match[1];
+              fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+            } else {
+              fileUrl = imageUri;
+            }
+          } else {
+            // Already full URL or unknown format
+            fileUrl = imageUri;
+          }
+        }
+      } else if (typeof value === 'string') {
+        // Simple IPFS hash format
+        if (value.startsWith('ipfs://')) {
+          ipfsHash = value.replace('ipfs://', '');
+          fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+        } else if (value.startsWith('Qm') || value.startsWith('baf')) {
+          ipfsHash = value;
+          fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+        } else {
+          ipfsHash = value;
+          fileUrl = `https://gateway.pinata.cloud/ipfs/${value}`;
+        }
+        filename = key;
+      }
+
+      return { filename, fileUrl, ipfsHash };
+    };
+
+    const toggleDoc = (key: string) => {
+      setExpandedDocs(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    if (loadingDocs) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 mx-auto mb-2"></div>
+          <p>Loading documents...</p>
+        </div>
+      );
+    }
+
+    if (Object.keys(documentData).length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <FileText className="mx-auto h-12 w-12 text-gray-600 mb-2" />
+          <p>No documents available</p>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
-        {Object.entries(metadata.documents).map(([key, value]: [string, any]) => (
-          <div key={key} className="border border-slate-600 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-cyan-400" />
-                <div>
-                  <p className="font-medium text-white">{value.name || key}</p>
-                  <p className="text-sm text-gray-400">
-                    {value.description || 'No description'}
-                  </p>
+        {Object.entries(documentData).map(([key, doc]) => {
+          const fileType = getFileType(doc.filename);
+          const fileIcon = getFileTypeIcon(doc.filename);
+          const isExpanded = expandedDocs[key] || false;
+
+          return (
+            <div key={key} className="border border-slate-600 rounded-lg overflow-hidden bg-slate-800">
+              {/* File Header - Clickable to expand/collapse */}
+              <div 
+                className="bg-slate-700 p-4 flex items-center justify-between cursor-pointer hover:bg-slate-650"
+                onClick={() => toggleDoc(key)}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{fileIcon}</span>
+                  <div>
+                    <p className="font-medium text-white">{doc.filename}</p>
+                    {doc.ipfsHash && (
+                      <p className="text-sm text-gray-400">
+                        IPFS: {doc.ipfsHash.substring(0, 8)}...{doc.ipfsHash.substring(doc.ipfsHash.length - 6)}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-              {value.ipfsHash && (
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(`${appConfig.pinata.gateway}/${value.ipfsHash}`, '_blank')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(doc.fileUrl, '_blank');
+                    }}
+                    className="border-slate-500 text-slate-200 hover:bg-slate-600"
                   >
                     <ExternalLink className="h-4 w-4 mr-1" />
-                    View
+                    Open
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      const link = document.createElement('a');
-                      link.href = `${appConfig.pinata.gateway}/${value.ipfsHash}`;
-                      link.download = value.name || 'document';
-                      link.click();
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownload(doc.fileUrl, doc.filename);
                     }}
+                    className="border-slate-500 text-slate-200 hover:bg-slate-600"
                   >
                     <Download className="h-4 w-4 mr-1" />
                     Download
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-400"
+                  >
+                    {isExpanded ? '▼' : '▶'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* File Preview - Collapsible */}
+              {isExpanded && (
+                <div className="bg-slate-900">
+                  {fileType === 'pdf' && (
+                    <iframe
+                      src={`${doc.fileUrl}#view=FitH`}
+                      className="w-full border-0"
+                      style={{ height: '600px' }}
+                      title={doc.filename}
+                    />
+                  )}
+                  {fileType === 'image' && (
+                    <div className="p-4 flex justify-center">
+                      <img
+                        src={doc.fileUrl}
+                        alt={doc.filename}
+                        className="max-w-full rounded"
+                        style={{ maxHeight: '500px' }}
+                      />
+                    </div>
+                  )}
+                  {fileType === 'other' && (
+                    <div className="p-8 text-center text-gray-400">
+                      <FileText className="h-16 w-16 mx-auto mb-4 text-gray-500" />
+                      <p className="text-lg mb-2">Preview not available for this file type</p>
+                      <p className="text-sm">Click <strong>Download</strong> to view the file</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };

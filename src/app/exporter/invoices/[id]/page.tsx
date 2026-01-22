@@ -48,7 +48,7 @@ interface Invoice {
   shippingDate: string;
   createdAt: string;
   fundedPercentage: number;
-  documents: Array<{
+  documents: Record<string, any> | Array<{
     name: string;
     hash: string;
     size: number;
@@ -72,12 +72,137 @@ export default function InvoiceDetail() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [availableToWithdraw, setAvailableToWithdraw] = useState<number>(0);
   const [error, setError] = useState('');
+  const [expandedDocs, setExpandedDocs] = useState<Record<string, boolean>>({});
+  const [documentData, setDocumentData] = useState<Record<string, { filename: string; fileUrl: string; ipfsHash: string }>>({});
+  const [loadingDocs, setLoadingDocs] = useState(true);
 
   useEffect(() => {
     if (isConnected && address && invoiceId) {
       loadInvoiceData();
     }
   }, [isConnected, address, invoiceId]);
+
+  // Load documents when invoice changes
+  useEffect(() => {
+    const loadDocuments = async () => {
+      if (!invoice?.documents) {
+        setLoadingDocs(false);
+        return;
+      }
+
+      // Handle both empty array and empty object
+      const isEmptyArray = Array.isArray(invoice.documents) && invoice.documents.length === 0;
+      const isEmptyObject = typeof invoice.documents === 'object' && !Array.isArray(invoice.documents) && Object.keys(invoice.documents).length === 0;
+      
+      if (isEmptyArray || isEmptyObject) {
+        setLoadingDocs(false);
+        return;
+      }
+
+      console.log('📄 [Exporter] Loading documents from invoice:', invoice.documents);
+      setLoadingDocs(true);
+      const docs: Record<string, { filename: string; fileUrl: string; ipfsHash: string }> = {};
+
+      // Convert array format to object format if needed
+      const documentsToProcess = Array.isArray(invoice.documents) 
+        ? invoice.documents.reduce((acc: any, doc: any) => {
+            if (doc.ipfsHash || doc.image) {
+              acc[doc.name || 'document'] = doc;
+            }
+            return acc;
+          }, {})
+        : invoice.documents;
+
+      for (const [key, value] of Object.entries(documentsToProcess)) {
+        console.log(`Processing document [${key}]:`, value);
+        
+        let filename = key;
+        let fileUrl = '';
+        let ipfsHash = '';
+
+        if (typeof value === 'string') {
+          // String format - this is metadata hash, need to fetch and extract actual file
+          console.log(`  String format (metadata hash): ${value}`);
+          const metadataUrl = `https://gateway.pinata.cloud/ipfs/${value}`;
+          console.log(`  Fetching metadata from: ${metadataUrl}`);
+          
+          try {
+            const response = await fetch(metadataUrl);
+            const metadataJson = await response.json();
+            console.log(`  Metadata JSON:`, metadataJson);
+            
+            if (metadataJson.image) {
+              const imageUri = metadataJson.image;
+              console.log(`  Image field from metadata: ${imageUri}`);
+              
+              if (imageUri.startsWith('ipfs://')) {
+                ipfsHash = imageUri.replace('ipfs://', '');
+                fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+              } else if (imageUri.startsWith('Qm') || imageUri.startsWith('baf')) {
+                ipfsHash = imageUri;
+                fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+              } else if (imageUri.includes('/ipfs/')) {
+                fileUrl = imageUri;
+                const match = imageUri.match(/\/ipfs\/([^/?#]+)/);
+                ipfsHash = match ? match[1] : '';
+              } else {
+                ipfsHash = imageUri;
+                fileUrl = `https://gateway.pinata.cloud/ipfs/${imageUri}`;
+              }
+              
+              filename = metadataJson.original_name || metadataJson.name || key;
+              console.log(`  Extracted filename: ${filename}`);
+              console.log(`  Extracted file URL: ${fileUrl}`);
+            } else {
+              console.error(`  ❌ No 'image' field in metadata JSON`);
+              fileUrl = metadataUrl;
+              ipfsHash = value;
+            }
+          } catch (error) {
+            console.error(`  ❌ Failed to fetch metadata:`, error);
+            fileUrl = metadataUrl;
+            ipfsHash = value;
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          const val = value as any;
+          filename = val.original_name || val.name || key;
+          console.log(`  Object format, filename: ${filename}`);
+          
+          if (val.image) {
+            const imageUri = val.image;
+            console.log(`  Image URI: ${imageUri}`);
+            
+            if (imageUri.startsWith('ipfs://')) {
+              ipfsHash = imageUri.replace('ipfs://', '');
+              fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+            } else if (imageUri.startsWith('Qm') || imageUri.startsWith('baf')) {
+              ipfsHash = imageUri;
+              fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+            } else if (imageUri.includes('/ipfs/')) {
+              fileUrl = imageUri;
+              const match = imageUri.match(/\/ipfs\/([^/?#]+)/);
+              ipfsHash = match ? match[1] : '';
+            } else {
+              ipfsHash = imageUri;
+              fileUrl = `https://gateway.pinata.cloud/ipfs/${imageUri}`;
+            }
+            console.log(`  Final URL: ${fileUrl}`);
+          }
+        }
+
+        if (fileUrl) {
+          docs[key] = { filename, fileUrl, ipfsHash };
+          console.log(`  ✅ Added to docs:`, docs[key]);
+        }
+      }
+
+      console.log('📦 [Exporter] Final documentData:', docs);
+      setDocumentData(docs);
+      setLoadingDocs(false);
+    };
+
+    loadDocuments();
+  }, [invoice?.documents]);
 
   const loadInvoiceData = async () => {
     try {
@@ -157,7 +282,7 @@ export default function InvoiceDetail() {
         shippingDate: new Date(Number(contractInvoice.shippingDate) * 1000).toISOString().split('T')[0],
         createdAt: new Date(Number(contractInvoice.createdAt) * 1000).toISOString(),
         fundedPercentage,
-        documents: Array.isArray(metadata?.documents) ? metadata.documents : [],
+        documents: metadata?.documents || {},
         withdrawalHistory: [], // TODO: Get from events
         paymentLink, // From Supabase payments table
       };
@@ -241,6 +366,177 @@ export default function InvoiceDetail() {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const renderDocumentViewer = () => {
+    if (!invoice?.documents) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <FileText className="mx-auto h-12 w-12 text-gray-600 mb-2" />
+          <p>No documents uploaded</p>
+        </div>
+      );
+    }
+
+    // Handle both empty array and empty object
+    const isEmptyArray = Array.isArray(invoice.documents) && invoice.documents.length === 0;
+    const isEmptyObject = typeof invoice.documents === 'object' && !Array.isArray(invoice.documents) && Object.keys(invoice.documents).length === 0;
+    
+    if (isEmptyArray || isEmptyObject) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <FileText className="mx-auto h-12 w-12 text-gray-600 mb-2" />
+          <p>No documents uploaded</p>
+        </div>
+      );
+    }
+
+    if (loadingDocs) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 mx-auto mb-2"></div>
+          <p>Loading documents...</p>
+        </div>
+      );
+    }
+
+    // Helper function to get file type icon
+    const getFileTypeIcon = (filename: string) => {
+      const ext = filename.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') return '📄';
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) return '🖼️';
+      if (['doc', 'docx'].includes(ext || '')) return '📝';
+      if (['xls', 'xlsx', 'csv'].includes(ext || '')) return '📊';
+      return '📎';
+    };
+
+    // Helper function to determine file type for preview
+    const getFileType = (filename: string): 'pdf' | 'image' | 'other' => {
+      const ext = filename.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') return 'pdf';
+      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) return 'image';
+      return 'other';
+    };
+
+    // Helper function to handle downloads with correct filename
+    const handleDownload = (fileUrl: string, filename: string) => {
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = filename;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    if (Object.keys(documentData).length === 0) {
+      return (
+        <div className="text-center py-8 text-gray-500">
+          <FileText className="mx-auto h-12 w-12 text-gray-600 mb-2" />
+          <p>No documents available</p>
+        </div>
+      );
+    }
+
+    const toggleDoc = (key: string) => {
+      setExpandedDocs(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    return (
+      <div className="space-y-4">
+        {Object.entries(documentData).map(([key, doc]) => {
+          const fileType = getFileType(doc.filename);
+          const fileIcon = getFileTypeIcon(doc.filename);
+          const isExpanded = expandedDocs[key] || false;
+
+          return (
+            <div key={key} className="border border-slate-600 rounded-lg overflow-hidden bg-slate-800">
+              {/* File Header - Clickable to expand/collapse */}
+              <div 
+                className="bg-slate-700 p-4 flex items-center justify-between cursor-pointer hover:bg-slate-650"
+                onClick={() => toggleDoc(key)}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{fileIcon}</span>
+                  <div>
+                    <p className="font-medium text-white">{doc.filename}</p>
+                    {doc.ipfsHash && (
+                      <p className="text-sm text-gray-400">
+                        IPFS: {doc.ipfsHash.substring(0, 8)}...{doc.ipfsHash.substring(doc.ipfsHash.length - 6)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(doc.fileUrl, '_blank');
+                    }}
+                    className="border-slate-500 text-slate-200 hover:bg-slate-600"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    Open
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownload(doc.fileUrl, doc.filename);
+                    }}
+                    className="border-slate-500 text-slate-200 hover:bg-slate-600"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Download
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-400"
+                  >
+                    {isExpanded ? '▼' : '▶'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* File Preview - Collapsible */}
+              {isExpanded && (
+                <div className="bg-slate-900">
+                  {fileType === 'pdf' && (
+                    <iframe
+                      src={`${doc.fileUrl}#view=FitH`}
+                      className="w-full border-0"
+                      style={{ height: '600px' }}
+                      title={doc.filename}
+                    />
+                  )}
+                  {fileType === 'image' && (
+                    <div className="p-4 flex justify-center">
+                      <img
+                        src={doc.fileUrl}
+                        alt={doc.filename}
+                        className="max-w-full rounded"
+                        style={{ maxHeight: '500px' }}
+                      />
+                    </div>
+                  )}
+                  {fileType === 'other' && (
+                    <div className="p-8 text-center text-gray-400">
+                      <FileText className="h-16 w-16 mx-auto mb-4 text-gray-500" />
+                      <p className="text-lg mb-2">Preview not available for this file type</p>
+                      <p className="text-sm">Click <strong>Download</strong> to view the file</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   if (!isConnected) {
@@ -446,38 +742,19 @@ export default function InvoiceDetail() {
               </CardContent>
             </Card>
 
-            {/* Documents */}
+            {/* Supporting Documents */}
             <Card className="bg-slate-900 border-slate-800">
               <CardHeader>
-                <CardTitle className="text-slate-100">Supporting Documents</CardTitle>
+                <CardTitle className="text-slate-100 flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Supporting Documents
+                </CardTitle>
                 <CardDescription className="text-slate-400">
-                  Documents uploaded for this invoice
+                  View and download invoice documents
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {invoice.documents && Array.isArray(invoice.documents) && invoice.documents.length > 0 ? (
-                    invoice.documents.map((doc, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-slate-800 rounded-md">
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-4 w-4 text-slate-400" />
-                          <div>
-                            <p className="text-sm font-medium text-slate-100">{doc.name}</p>
-                            <p className="text-xs text-slate-400">{formatFileSize(doc.size)}</p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <FileText className="mx-auto h-12 w-12 text-slate-600 mb-3" />
-                      <p className="text-slate-400 text-sm">No documents uploaded</p>
-                    </div>
-                  )}
-                </div>
+                {renderDocumentViewer()}
               </CardContent>
             </Card>
           </div>
