@@ -100,6 +100,8 @@ export interface Database {
           goods_description: string | null;
           importer_name: string;
           importer_license: string | null;
+          importer_address: string | null;
+          importer_country: string | null;
           documents: Record<string, string> | null;
 
           // Blockchain Cache
@@ -126,6 +128,8 @@ export interface Database {
           goods_description?: string | null;
           importer_name: string;
           importer_license?: string | null;
+          importer_address?: string | null;
+          importer_country?: string | null;
           documents?: Record<string, string> | null;
 
           // Blockchain Cache
@@ -152,6 +156,8 @@ export interface Database {
           goods_description?: string | null;
           importer_name?: string;
           importer_license?: string | null;
+          importer_address?: string | null;
+          importer_country?: string | null;
           documents?: Record<string, string> | null;
 
           // Blockchain Cache
