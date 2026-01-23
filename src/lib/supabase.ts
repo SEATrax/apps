@@ -624,21 +624,29 @@ export async function getMarketplacePools() {
   });
 }
 
-export async function getExporterInvoicesFromCache(walletAddress: string) {
+export async function getExporterInvoicesFromCache(
+  walletAddress: string,
+  page: number = 1,
+  pageSize: number = 10
+) {
   const normalizedWallet = walletAddress.toLowerCase().trim();
-  console.log('Fetching invoices for wallet:', normalizedWallet);
+  console.log('Fetching invoices for wallet:', normalizedWallet, 'Page:', page);
 
-  const { data, error } = await supabase
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, count, error } = await supabase
     .from('invoice_metadata')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('exporter_wallet', normalizedWallet)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .range(from, to);
 
   if (error) {
     console.error('Failed to fetch exporter invoices from cache:', error);
-    return [];
+    return { data: [], count: 0 };
   }
 
-  console.log('Fetched invoices count:', data?.length);
-  return data || [];
+  console.log('Fetched invoices count:', data?.length, 'Total:', count);
+  return { data: data || [], count: count || 0 };
 }

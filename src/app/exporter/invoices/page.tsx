@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
 import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, getExporterInvoicesFromCache } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Filter, FileText, Calendar, DollarSign, CheckCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -34,7 +35,7 @@ interface Invoice {
 export default function InvoiceList() {
   const { isLoaded, isConnected, address } = useWalletSession();
   const { profile, loading: profileLoading } = useExporterProfile();
-  const { getExporterInvoices, getInvoice } = useSEATrax();
+  const { getExporterInvoices, getInvoice } = useSEATrax(); // Keep for fallback if needed, or remove if confident
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
@@ -42,6 +43,11 @@ export default function InvoiceList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 5;
 
   // Check for success parameter
   useEffect(() => {
@@ -73,7 +79,7 @@ export default function InvoiceList() {
     if (isConnected && address) {
       loadInvoices();
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, page]); // Reload when page changes
 
   useEffect(() => {
     filterInvoices();
@@ -88,80 +94,62 @@ export default function InvoiceList() {
         return;
       }
 
-      // Get invoice token IDs from smart contract
-      const tokenIds = await getExporterInvoices(address);
+      // 1. Fetch from Supabase Cache (Pagination Supported)
+      if (isSupabaseConfigured) {
+        console.log('Fetching invoices from cache for:', address, 'Page:', page);
+        const { data: cachedInvoices, count } = await getExporterInvoicesFromCache(address, page, itemsPerPage);
 
-      if (tokenIds.length === 0) {
-        setInvoices([]);
-        return;
+        // Update pagination state
+        if (count !== null) {
+          setTotalPages(Math.ceil(count / itemsPerPage));
+        }
+
+        // Helper to safely convert potential Wei values to USD
+        const safeCurrency = (val: any) => {
+          const num = Number(val || 0);
+          if (num > 1_000_000_000) {
+            return (num / 1e18) * 3000;
+          }
+          return num;
+        };
+
+        if (cachedInvoices && cachedInvoices.length > 0) {
+          const formattedInvoices = cachedInvoices.map((inv: any) => {
+            const amountInvested = safeCurrency(inv.amount_invested);
+            const loanAmount = Number(inv.loan_amount || 0);
+
+            return {
+              id: inv.token_id,
+              tokenId: inv.token_id,
+              invoiceNumber: inv.invoice_number,
+              importerCompany: inv.importer_name,
+              exporterCompany: profile?.company_name || 'My Company',
+              shippingAmount: inv.shipping_amount || 0,
+              loanAmount,
+              amountInvested,
+              amountWithdrawn: safeCurrency(inv.amount_withdrawn),
+              status: (inv.status || 'pending').toLowerCase() as Invoice['status'],
+              shippingDate: inv.shipping_date ? new Date(inv.shipping_date * 1000).toISOString() : new Date().toISOString(),
+              createdAt: inv.created_at,
+              fundedPercentage: (loanAmount > 0) ? Math.round((amountInvested / loanAmount) * 100) : 0
+            };
+          });
+
+          setInvoices(formattedInvoices);
+          setIsLoading(false);
+          return;
+        } else {
+          // If empty and page 1, show empty state. If page > 1, maybe out of bounds?
+          setInvoices([]);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      // Fetch invoice data from smart contract and metadata from Supabase
-      const invoicePromises = tokenIds.map(async (tokenId) => {
-        try {
-          const contractInvoice = await getInvoice(tokenId);
-          if (!contractInvoice) return null;
-
-          // Get metadata from Supabase (if configured)
-          let metadata = null;
-          if (isSupabaseConfigured) {
-            try {
-              const { data } = await supabase
-                .from('invoice_metadata')
-                .select('*')
-                .eq('token_id', tokenId)
-                .single();
-              metadata = data;
-            } catch (error) {
-              console.warn('Failed to fetch metadata for token', tokenId, error);
-            }
-          }
-
-          // Convert status number to string
-          const statusMap: Record<number, 'pending' | 'approved' | 'in_pool' | 'funded' | 'withdrawn' | 'paid' | 'completed' | 'rejected'> = {
-            [INVOICE_STATUS.PENDING]: 'pending',
-            [INVOICE_STATUS.APPROVED]: 'approved',
-            [INVOICE_STATUS.IN_POOL]: 'in_pool',
-            [INVOICE_STATUS.FUNDED]: 'funded',
-            [INVOICE_STATUS.WITHDRAWN]: 'withdrawn',
-            [INVOICE_STATUS.PAID]: 'paid',
-            [INVOICE_STATUS.COMPLETED]: 'completed',
-            [INVOICE_STATUS.REJECTED]: 'rejected',
-          };
-
-          const invoiceValue = Number(contractInvoice.shippingAmount) / 100; // Convert cents to USD
-          const loanAmount = Number(contractInvoice.loanAmount) / 100;
-          const amountInvested = Number(contractInvoice.amountInvested) / 1e18 * 3000; // Convert Wei to USD
-          const amountWithdrawn = Number(contractInvoice.amountWithdrawn) / 1e18 * 3000;
-
-          return {
-            id: tokenId,
-            tokenId,
-            invoiceNumber: metadata?.invoice_number || `INV-${tokenId}`,
-            importerCompany: metadata?.importer_name || 'Unknown Importer',
-            exporterCompany: contractInvoice.exporter || 'Unknown Exporter',
-            shippingAmount: invoiceValue,
-            loanAmount,
-            amountInvested,
-            amountWithdrawn,
-            status: statusMap[Number(contractInvoice.status)] || 'pending',
-            shippingDate: new Date(Number(contractInvoice.shippingDate) * 1000).toISOString().split('T')[0],
-            createdAt: new Date(Number(contractInvoice.createdAt) * 1000).toISOString().split('T')[0],
-            fundedPercentage: loanAmount > 0 ? Math.round((amountInvested / loanAmount) * 100) : 0,
-          };
-        } catch (error) {
-          console.error(`Error loading invoice ${tokenId}:`, error);
-          return null;
-        }
-      });
-
-      const invoiceResults = await Promise.all(invoicePromises);
-      const validInvoices = invoiceResults.filter(Boolean) as Invoice[];
-
-      setInvoices(validInvoices);
+      // Fallback removed for pagination simplicity - Cache is source of truth for lists.
+      setIsLoading(false);
     } catch (error) {
       console.error('Error loading invoices:', error);
-      // Fallback to empty array on error
       setInvoices([]);
     } finally {
       setIsLoading(false);
@@ -198,7 +186,7 @@ export default function InvoiceList() {
       rejected: { variant: 'destructive' as const, label: 'Rejected', color: 'bg-red-600' },
     };
 
-    const { variant, label, color } = config[status];
+    const { variant, label, color } = config[status] || config.pending;
 
     return (
       <Badge variant={variant} className={`text-xs text-white ${color}`}>
@@ -216,32 +204,19 @@ export default function InvoiceList() {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    if (!dateStr) return 'N/A';
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch (e) { return dateStr }
   };
 
-  // Show loading while wallet is initializing or redirecting
-  if (!isLoaded || !isConnected || (isLoaded && isConnected && !profileLoading && !profile)) {
-    return (
-      <div className="min-h-screen bg-slate-950">
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-            <CardHeader className="text-center">
-              <CardTitle className="text-slate-100">Loading...</CardTitle>
-              <CardDescription className="text-slate-400">
-                {!isLoaded ? 'Initializing wallet connection...' :
-                  !isConnected ? 'Redirecting to home...' :
-                    !profile ? 'Redirecting to role selection...' : 'Loading...'}
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  // Consolidate loading state for UI
+  const isPageLoading = isLoading || !isLoaded || (isConnected && profileLoading);
+
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -301,11 +276,11 @@ export default function InvoiceList() {
                   <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
                     <SelectItem value="all" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">All Status</SelectItem>
                     <SelectItem value="pending" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Pending Review</SelectItem>
-                    <SelectItem value="finalized" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Approved</SelectItem>
-                    <SelectItem value="fundraising" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Fundraising</SelectItem>
+                    <SelectItem value="approved" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Approved</SelectItem>
+                    <SelectItem value="in_pool" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Fundraising</SelectItem>
                     <SelectItem value="funded" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Funded</SelectItem>
                     <SelectItem value="paid" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Paid</SelectItem>
-                    <SelectItem value="cancelled" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Cancelled</SelectItem>
+                    <SelectItem value="rejected" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Rejected</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -324,95 +299,134 @@ export default function InvoiceList() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isPageLoading ? (
               <div className="space-y-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-20 bg-slate-700 rounded mb-4"></div>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-6 rounded-lg bg-slate-800 border border-slate-700">
+                    <div className="flex justify-between mb-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-6 w-32 bg-slate-700" />
+                        <Skeleton className="h-4 w-48 bg-slate-700" />
+                      </div>
+                      <Skeleton className="h-9 w-24 bg-slate-700" />
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <Skeleton className="h-10 w-full bg-slate-700" />
+                      <Skeleton className="h-10 w-full bg-slate-700" />
+                      <Skeleton className="h-10 w-full bg-slate-700" />
+                      <Skeleton className="h-10 w-full bg-slate-700" />
+                    </div>
                   </div>
                 ))}
               </div>
             ) : filteredInvoices.length > 0 ? (
-              <div className="space-y-4">
-                {filteredInvoices.map((invoice) => (
-                  <div
-                    key={invoice.id}
-                    className="p-6 rounded-lg bg-slate-800 border border-slate-700 hover:border-slate-600 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-slate-100 text-lg">
-                            {invoice.invoiceNumber}
-                          </h3>
-                          {getStatusBadge(invoice.status)}
-                          {invoice.tokenId ? (
-                            <Badge variant="outline" className="text-xs">
-                              NFT #{invoice.tokenId}
-                            </Badge>
+              <>
+                <div className="space-y-4">
+                  {filteredInvoices.map((invoice) => (
+                    <div
+                      key={invoice.id.toString()}
+                      className="p-6 rounded-lg bg-slate-800 border border-slate-700 hover:border-slate-600 transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-semibold text-slate-100 text-lg">
+                              {invoice.invoiceNumber}
+                            </h3>
+                            {getStatusBadge(invoice.status)}
+                            {invoice.tokenId ? (
+                              <Badge variant="outline" className="text-xs text-slate-300 border-slate-700 bg-slate-900/50">
+                                NFT #{invoice.tokenId.toString()}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-slate-300 font-medium">{invoice.importerCompany}</p>
+                          <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              Ship: {formatDate(invoice.shippingDate)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <FileText className="h-3 w-3" />
+                              Created: {formatDate(invoice.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Link href={`/exporter/invoices/${invoice.id}`}>
+                            <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-700">
+                              View Details
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Shipping Amount</p>
+                          <p className="font-semibold text-slate-100">
+                            {formatCurrency(invoice.shippingAmount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Loan Requested</p>
+                          <p className="font-semibold text-slate-100">
+                            {formatCurrency(invoice.loanAmount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Amount Invested</p>
+                          <p className="font-semibold text-cyan-400">
+                            {formatCurrency(invoice.amountInvested)}
+                          </p>
+                          {invoice.status === 'in_pool' || invoice.status === 'funded' ? (
+                            <div className="w-full bg-slate-700 rounded-full h-2 mt-1">
+                              <div
+                                className="bg-cyan-600 h-2 rounded-full"
+                                style={{ width: `${Math.min(invoice.fundedPercentage, 100)}%` }}
+                              ></div>
+                            </div>
                           ) : null}
                         </div>
-                        <p className="text-slate-300 font-medium">{invoice.importerCompany}</p>
-                        <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Ship: {formatDate(invoice.shippingDate)}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <FileText className="h-3 w-3" />
-                            Created: {formatDate(invoice.createdAt)}
-                          </span>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Withdrawn</p>
+                          <p className="font-semibold text-green-400">
+                            {formatCurrency(invoice.amountWithdrawn)}
+                          </p>
+                          {invoice.status === 'funded' && invoice.fundedPercentage >= 70 && invoice.amountWithdrawn < invoice.amountInvested ? (
+                            <p className="text-xs text-yellow-400 mt-1">Available to withdraw</p>
+                          ) : null}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <Link href={`/exporter/invoices/${invoice.id}`}>
-                          <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-700">
-                            View Details
-                          </Button>
-                        </Link>
-                      </div>
                     </div>
+                  ))}
+                </div>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Shipping Amount</p>
-                        <p className="font-semibold text-slate-100">
-                          {formatCurrency(invoice.shippingAmount)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Loan Requested</p>
-                        <p className="font-semibold text-slate-100">
-                          {formatCurrency(invoice.loanAmount)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Amount Invested</p>
-                        <p className="font-semibold text-cyan-400">
-                          {formatCurrency(invoice.amountInvested)}
-                        </p>
-                        {invoice.status === 'in_pool' || invoice.status === 'funded' ? (
-                          <div className="w-full bg-slate-700 rounded-full h-2 mt-1">
-                            <div
-                              className="bg-cyan-600 h-2 rounded-full"
-                              style={{ width: `${Math.min(invoice.fundedPercentage, 100)}%` }}
-                            ></div>
-                          </div>
-                        ) : null}
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Withdrawn</p>
-                        <p className="font-semibold text-green-400">
-                          {formatCurrency(invoice.amountWithdrawn)}
-                        </p>
-                        {invoice.status === 'funded' && invoice.fundedPercentage >= 70 && invoice.amountWithdrawn < invoice.amountInvested ? (
-                          <p className="text-xs text-yellow-400 mt-1">Available to withdraw</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-800">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1 || isLoading}
+                    className="border-slate-700 text-slate-300"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-slate-400">
+                    Page {page} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages || isLoading}
+                    className="border-slate-700 text-slate-300"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </>
             ) : (
               <div className="text-center py-12">
                 <FileText className="mx-auto h-16 w-16 text-slate-600 mb-4" />
@@ -438,6 +452,6 @@ export default function InvoiceList() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div >
   );
 }
