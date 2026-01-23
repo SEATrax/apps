@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 interface Invoice {
   id: number | bigint;
@@ -174,25 +175,20 @@ export default function InvoiceList() {
     setFilteredInvoices(filtered);
   };
 
+  // Standardized Badge for Exporter Pages (Matches Details & Dashboard Page)
   const getStatusBadge = (status: Invoice['status']) => {
     const config = {
-      pending: { variant: 'secondary' as const, label: 'Pending Review', color: 'bg-yellow-600' },
-      approved: { variant: 'outline' as const, label: 'Approved', color: 'bg-blue-600' },
-      in_pool: { variant: 'default' as const, label: 'In Pool', color: 'bg-cyan-600' },
-      funded: { variant: 'default' as const, label: 'Funded', color: 'bg-green-600' },
-      withdrawn: { variant: 'default' as const, label: 'Withdrawn', color: 'bg-purple-600' },
-      paid: { variant: 'default' as const, label: 'Paid', color: 'bg-emerald-600' },
-      completed: { variant: 'default' as const, label: 'Completed', color: 'bg-teal-600' },
-      rejected: { variant: 'destructive' as const, label: 'Rejected', color: 'bg-red-600' },
+      pending: { label: 'Pending Review', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/50' },
+      approved: { label: 'Approved', color: 'bg-blue-500/10 text-blue-400 border-blue-500/50' },
+      in_pool: { label: 'In Pool', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/50' },
+      funded: { label: 'Funded', color: 'bg-green-500/10 text-green-400 border-green-500/50' },
+      withdrawn: { label: 'Withdrawn', color: 'bg-purple-500/10 text-purple-400 border-purple-500/50' },
+      paid: { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/50' },
+      completed: { label: 'Completed', color: 'bg-teal-500/10 text-teal-400 border-teal-500/50' },
+      rejected: { label: 'Rejected', color: 'bg-red-500/10 text-red-400 border-red-500/50' },
     };
-
-    const { variant, label, color } = config[status] || config.pending;
-
-    return (
-      <Badge variant={variant} className={`text-xs text-white ${color}`}>
-        {label}
-      </Badge>
-    );
+    const { label, color } = config[status] || config['pending'];
+    return <Badge variant="outline" className={cn("px-3 py-1 font-medium capitalize border", color)}>{label}</Badge>;
   };
 
   const formatCurrency = (amount: number) => {
