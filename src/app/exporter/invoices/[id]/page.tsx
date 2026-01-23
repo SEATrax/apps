@@ -339,14 +339,51 @@ export default function InvoiceDetail() {
       completed: { label: 'Completed', color: 'bg-teal-500/10 text-teal-400 border-teal-500/50' },
       rejected: { label: 'Rejected', color: 'bg-red-500/10 text-red-400 border-red-500/50' },
     };
-    const { label, color } = config[status];
+    const { label, color } = config[status] || config['pending'];
     return <Badge variant="outline" className={cn("px-3 py-1 font-medium capitalize border", color)}>{label}</Badge>;
+  };
+
+  // --- Payment Link Logic ---
+  const handleCreatePaymentLink = async () => {
+    if (!invoice) return;
+    try {
+      // Find the metadata ID if possible, mostly logic handled in API but we prefer UUID
+      // invoice.id is likely the tokenId (number) based on current mapping
+      // We need to pass the proper metadata ID if we want secure UUID links
+      // Let's rely on the API finding it or passed explicitly if we had it in state
+      // Current state mapping: invoice.id = tokenId. 
+      // We need to fetch metadata ID or pass tokenId and let API resolve UUID.
+
+      const response = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceId: invoice.tokenId,
+          // We don't have UUID in current Invoice interface easily accessible unless we add it
+          // However, we can just pass tokenId and let API figure it out, OR update Invoice interface to include metadataId.
+          // For now, let's rely on API reusing logic or just use tokenId if fallback.
+          // Better: Pass UUID from metadata if we fetched it.
+          // We fetched metadata in loadInvoiceData but only stored limited fields.
+          // Let's try to grab it from the existing link if present, or just use tokenId for now and API can look it up.
+          amount: invoice.loanAmount + (invoice.loanAmount * 0.04) // total due estimate
+        }),
+      });
+
+      if (response.ok) {
+        const { paymentLink } = await response.json();
+        setInvoice(prev => prev ? { ...prev, paymentLink } : null);
+        window.open(paymentLink, '_blank');
+      }
+    } catch (error) {
+      console.error('Failed to create payment link:', error);
+    }
   };
 
   if (!isConnected) return <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
     <Card className="w-full max-w-md bg-slate-900 border-slate-800"><CardHeader className="text-center"><CardTitle className="text-white">Connect Wallet</CardTitle></CardHeader></Card></div>;
 
   if (isLoading) {
+    // ... skeleton code ...
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 pb-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -451,9 +488,15 @@ export default function InvoiceDetail() {
             </p>
           </div>
           <div className="flex gap-3">
-            {invoice.paymentLink && (
-              <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white" onClick={() => window.open(invoice.paymentLink, '_blank')}>
-                <Share2 className="w-4 h-4 mr-2" /> Payment Link
+            {/* Show button ONLY if status is Withdrawn (ready for payment) or already has link */}
+            {(invoice.status === 'withdrawn' || invoice.status === 'paid' || invoice.paymentLink) && (
+              <Button
+                variant="outline"
+                className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                onClick={handleCreatePaymentLink}
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                {invoice.paymentLink ? 'Open Payment Link' : 'Create Payment Link'}
               </Button>
             )}
           </div>

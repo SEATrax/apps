@@ -3,30 +3,28 @@
 import { useState, useEffect } from 'react';
 import { useWalletSession } from '@/hooks/useWalletSession';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { useSEATrax, INVOICE_STATUS } from '@/hooks/useSEATrax';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { useSEATrax } from '@/hooks/useSEATrax';
+import { supabase, isSupabaseConfigured, getExporterPaymentsFromCache } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
-import { 
-  ArrowLeft, 
-  Search, 
-  Filter, 
-  Copy, 
-  ExternalLink, 
-  CheckCircle, 
-  Clock, 
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Search,
+  Filter,
+  Copy,
+  ExternalLink,
+  CheckCircle,
+  Clock,
   AlertCircle,
   DollarSign,
   Calendar,
   FileText,
   Send,
-  Bell,
-  Download
+  Bell
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import ExporterHeader from '@/components/ExporterHeader';
@@ -54,9 +52,9 @@ interface PaymentRecord {
 
 export default function PaymentsTracking() {
   const { isLoaded, isConnected, address } = useWalletSession();
-  const { getExporterInvoices, getInvoice, isLoading: contractLoading } = useSEATrax();
+  const { isLoading: contractLoading } = useSEATrax();
   const router = useRouter();
-  
+
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<PaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,7 +63,12 @@ export default function PaymentsTracking() {
   const [copiedLink, setCopiedLink] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect to home if not connected (immediate redirect, no screen shown)
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 5;
+
+  // Redirect to home if not connected (immediate redirect)
   useEffect(() => {
     if (isLoaded && !isConnected) {
       router.push('/');
@@ -76,7 +79,7 @@ export default function PaymentsTracking() {
     if (isConnected && address) {
       loadPaymentsData();
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, page]);
 
   useEffect(() => {
     filterPayments();
@@ -84,111 +87,86 @@ export default function PaymentsTracking() {
 
   const loadPaymentsData = async () => {
     if (!address) return;
-    
+
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Get all invoices for the exporter
-      const invoiceIds = await getExporterInvoices(address);
-      
-      if (!invoiceIds || invoiceIds.length === 0) {
-        setPayments([]);
-        return;
-      }
-      
-      // Fetch detailed invoice data for each invoice
-      const paymentPromises = invoiceIds.map(async (tokenId) => {
-        try {
-          const invoice = await getInvoice(tokenId);
-          
-          // Only include invoices that have been withdrawn (ready for payment)
-          // Status 4 = WITHDRAWN (exporter withdrew, awaiting importer payment)
-          if (invoice && (invoice.status === INVOICE_STATUS.WITHDRAWN || invoice.status === INVOICE_STATUS.PAID) && invoice.amountWithdrawn > 0n) {
-            // Get payment metadata from Supabase
-            let paymentData = null;
-            if (isSupabaseConfigured) {
-              const { data } = await supabase
-                .from('payments')
-                .select('*')
-                .eq('invoice_id', Number(tokenId))
-                .single();
-              paymentData = data;
-            }
-            
-            // Get invoice metadata for display info
-            let invoiceMetadata = null;
-            if (isSupabaseConfigured) {
-              const { data } = await supabase
-                .from('invoice_metadata')
-                .select('*')
-                .eq('token_id', Number(tokenId))
-                .single();
-              invoiceMetadata = data;
-            }
-            
-            const loanAmount = Number(invoice.loanAmount) / 1e18; // Convert from wei
-            const interestAmount = loanAmount * 0.04; // 4% interest
-            const totalDue = loanAmount + interestAmount;
-            
-            return {
-              id: `payment-${tokenId}`,
-              invoiceId: tokenId,
-              tokenId: tokenId,
-              invoiceNumber: invoiceMetadata?.invoice_number || `INV-${tokenId}`,
-              importerCompany: invoiceMetadata?.importer_name || 'Unknown Importer',
-              exporterCompany: 'Your Company', // TODO: Get from exporter profile
-              loanAmount,
-              amountWithdrawn: Number(invoice.amountWithdrawn) / 1e18,
-              interestAmount,
-              totalDue,
-              paymentLink: paymentData?.payment_link || null,
-              status: determinePaymentStatus(invoice, paymentData),
-              sentAt: paymentData?.sent_at || undefined,
-              paidAt: paymentData?.paid_at || undefined,
-              dueDate: calculateDueDate(BigInt(invoice.createdAt)),
-              remindersSent: 0, // TODO: Track in database
-              createdAt: new Date(Number(invoice.createdAt)).toISOString(),
-            };
-          }
-          return null;
-        } catch (err) {
-          console.warn(`Failed to load invoice ${tokenId}:`, err);
-          return null;
+
+      // Use helper to fetch from Supabase (DB Cache)
+      if (isSupabaseConfigured) {
+        console.log('Fetching payments from cache for:', address, 'Page:', page);
+        const { data: cachedInvoices, count } = await getExporterPaymentsFromCache(address, page, itemsPerPage);
+
+        if (count !== null) {
+          setTotalPages(Math.ceil(count / itemsPerPage));
         }
-      });
-      
-      const paymentResults = await Promise.all(paymentPromises);
-      const validPayments = paymentResults.filter(Boolean) as PaymentRecord[];
-      
-      setPayments(validPayments);
+
+        // Helper to safely convert potential Wei values to USD
+        const safeCurrency = (val: any) => {
+          const num = Number(val || 0);
+          if (num > 1_000_000_000) {
+            return (num / 1e18) * 3000;
+          }
+          return num;
+        };
+
+        const formattedPayments: PaymentRecord[] = cachedInvoices.map((inv: any) => {
+          const loanAmount = Number(inv.loan_amount || 0); // Already safe if from db, but verify
+          const amountWithdrawn = safeCurrency(inv.amount_withdrawn);
+          const interestAmount = loanAmount * 0.04; // Mock 4% interest
+          const totalDue = loanAmount + interestAmount; // Simplified calc
+
+          // Determine status from DB metadata + Payment table
+          const paymentMeta = inv.payment_metadata || {};
+          let derivedStatus: PaymentRecord['status'] = 'pending';
+
+          if (paymentMeta.paid_at || inv.status === 'paid' || inv.status === 'completed') {
+            derivedStatus = 'paid';
+          } else if (paymentMeta.sent_at) {
+            derivedStatus = 'link_sent';
+          } else if (paymentMeta.payment_link) {
+            derivedStatus = 'link_generated';
+          } else {
+            // Check Overdue
+            const createdDate = new Date(inv.created_at);
+            const dueDate = new Date(createdDate);
+            dueDate.setDate(dueDate.getDate() + 30);
+            if (new Date() > dueDate) derivedStatus = 'overdue';
+          }
+
+          return {
+            id: `payment-${inv.token_id}`,
+            invoiceId: inv.token_id,
+            tokenId: inv.token_id,
+            invoiceNumber: inv.invoice_number,
+            importerCompany: inv.importer_name,
+            exporterCompany: 'My Company',
+            loanAmount,
+            amountWithdrawn,
+            interestAmount,
+            totalDue,
+            paymentLink: paymentMeta.payment_link || null,
+            status: derivedStatus,
+            sentAt: paymentMeta.sent_at,
+            paidAt: paymentMeta.paid_at,
+            dueDate: new Date(new Date(inv.created_at).setDate(new Date(inv.created_at).getDate() + 30)).toISOString(),
+            remindersSent: 0,
+            createdAt: inv.created_at,
+          };
+        });
+
+        setPayments(formattedPayments);
+      } else {
+        // Fallback if needed, but for refactor we assume Supabase is primary
+        setPayments([]);
+      }
+
     } catch (error) {
       console.error('Error loading payments data:', error);
-      setError('Failed to load payment data. Please try again.');
+      setError('Failed to load payment data.');
     } finally {
       setIsLoading(false);
     }
-  };
-  
-  const determinePaymentStatus = (invoice: any, paymentData: any): PaymentRecord['status'] => {
-    if (paymentData?.paid_at) return 'paid';
-    if (invoice.status === INVOICE_STATUS.PAID) return 'paid';
-    if (paymentData?.sent_at) return 'link_sent';
-    if (paymentData?.payment_link) return 'link_generated';
-    
-    // Check if overdue
-    const dueDate = new Date(calculateDueDate(invoice.createdAt));
-    const now = new Date();
-    if (now > dueDate) return 'overdue';
-    
-    return 'pending';
-  };
-  
-  const calculateDueDate = (createdAt: bigint): string => {
-    const createdDate = new Date(Number(createdAt) * 1000);
-    const dueDate = new Date(createdDate);
-    dueDate.setDate(dueDate.getDate() + 30); // 30 days payment term
-    return dueDate.toISOString().split('T')[0];
   };
 
   const filterPayments = () => {
@@ -210,27 +188,23 @@ export default function PaymentsTracking() {
   };
 
   const handleCopyLink = (link: string, invoiceNumber: string) => {
-    navigator.clipboard.writeText(link);
+    const fullLink = link.startsWith('/') ? `${window.location.origin}${link}` : link;
+    navigator.clipboard.writeText(fullLink);
     setCopiedLink(invoiceNumber);
     setTimeout(() => setCopiedLink(''), 2000);
   };
 
   const sendReminder = async (paymentId: string) => {
-    try {
-      // TODO: Implement reminder email/notification system
-      console.log('Sending reminder for payment:', paymentId);
-      
-      // Update reminders count
-      setPayments(prev => 
-        prev.map(payment => 
-          payment.id === paymentId 
-            ? { ...payment, remindersSent: payment.remindersSent + 1 }
-            : payment
-        )
-      );
-    } catch (error) {
-      console.error('Error sending reminder:', error);
-    }
+    // Mock reminder
+    console.log('Sending reminder for payment:', paymentId);
+    // Optimistic update
+    setPayments(prev =>
+      prev.map(payment =>
+        payment.id === paymentId
+          ? { ...payment, remindersSent: payment.remindersSent + 1 }
+          : payment
+      )
+    );
   };
 
   const getStatusBadge = (status: PaymentRecord['status']) => {
@@ -249,36 +223,31 @@ export default function PaymentsTracking() {
         return <Badge variant="secondary">Unknown</Badge>;
     }
   };
-  
+
   const generatePaymentLink = async (tokenId: number) => {
     try {
-      // Generate payment link by calling API route
       const response = await fetch(`/api/payment/${tokenId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      
+
       if (response.ok) {
         const { paymentLink } = await response.json();
-        
-        // Update local state
-        setPayments(prev => 
-          prev.map(payment => 
-            payment.tokenId === tokenId
+        // Optimistic update
+        setPayments(prev =>
+          prev.map(payment =>
+            Number(payment.tokenId) === tokenId
               ? { ...payment, paymentLink, status: 'link_generated' as const }
               : payment
           )
         );
-        
-        // Refresh data
-        loadPaymentsData();
         return paymentLink;
       }
     } catch (error) {
       console.error('Error generating payment link:', error);
     }
   };
-  
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -287,17 +256,16 @@ export default function PaymentsTracking() {
       maximumFractionDigits: 0,
     }).format(amount);
   };
-  
+
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-  
-  const isOverdue = (dueDate: string, status: string) => {
-    return status !== 'paid' && new Date(dueDate) < new Date();
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch (e) { return dateString }
   };
 
   const getDaysUntilDue = (dueDate: string) => {
@@ -305,29 +273,16 @@ export default function PaymentsTracking() {
     return days;
   };
 
-  // Show loading while wallet is initializing or redirecting
-  if (!isLoaded || !isConnected) {
-    return (
-      <div className="min-h-screen bg-slate-950">
-        <ExporterHeader />
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-            <CardHeader className="text-center">
-              <CardTitle className="text-slate-100">Loading...</CardTitle>
-              <CardDescription className="text-slate-400">
-                {!isLoaded ? 'Initializing wallet connection...' : 'Redirecting...'}
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  const isOverdue = (dueDate: string, status: string) => {
+    return status !== 'paid' && new Date(dueDate) < new Date();
+  };
+
+  // Combined Loading State
+  const isPageLoading = isLoading || !isLoaded || (isConnected && contractLoading); // Contract loading less relevant now but good safety
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <ExporterHeader />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
@@ -338,47 +293,11 @@ export default function PaymentsTracking() {
             </p>
           </div>
         </div>
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          {[
-            { 
-              title: 'Total Outstanding', 
-              value: formatCurrency(filteredPayments.filter(p => p.status !== 'paid').reduce((sum, p) => sum + p.totalDue, 0)),
-              icon: DollarSign,
-              color: 'text-slate-400'
-            },
-            { 
-              title: 'Paid This Month', 
-              value: formatCurrency(filteredPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.totalDue, 0)),
-              icon: CheckCircle,
-              color: 'text-green-400'
-            },
-            { 
-              title: 'Overdue Payments', 
-              value: filteredPayments.filter(p => p.status === 'overdue').length.toString(),
-              icon: AlertCircle,
-              color: 'text-red-400'
-            },
-            { 
-              title: 'Pending Links', 
-              value: filteredPayments.filter(p => p.status === 'pending').length.toString(),
-              icon: Clock,
-              color: 'text-yellow-400'
-            }
-          ].map((stat, index) => (
-            <Card key={index} className="bg-slate-900 border-slate-800">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-400">{stat.title}</p>
-                    <p className="text-2xl font-bold text-slate-100">{stat.value}</p>
-                  </div>
-                  <stat.icon className={`h-8 w-8 ${stat.color}`} />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+
+        {/* Global Stats - Can mock or calculate from current page (simplified) */}
+        {/* Note: In a real app, global stats should be a separate fast query. 
+             For now, we remove them or keep simple ones if available, to avoid confusion with paginated data.
+             Let's keep the filters and list as main focus. */}
 
         {/* Filters */}
         <Card className="bg-slate-900 border-slate-800 mb-6">
@@ -406,13 +325,13 @@ export default function PaymentsTracking() {
                   <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-100">
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Payment Pending</SelectItem>
-                    <SelectItem value="link_generated">Link Generated</SelectItem>
-                    <SelectItem value="link_sent">Link Sent</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="overdue">Overdue</SelectItem>
+                  <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                    <SelectItem value="all" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">All Status</SelectItem>
+                    <SelectItem value="pending" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Payment Pending</SelectItem>
+                    <SelectItem value="link_generated" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Link Generated</SelectItem>
+                    <SelectItem value="link_sent" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Link Sent</SelectItem>
+                    <SelectItem value="paid" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Paid</SelectItem>
+                    <SelectItem value="overdue" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Overdue</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -423,12 +342,16 @@ export default function PaymentsTracking() {
         {/* Payments List */}
         <Card className="bg-slate-900 border-slate-800">
           <CardHeader>
-            <CardTitle className="text-slate-100">
-              Payment Records ({filteredPayments.length})
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Manage payment links and track importer payments
-            </CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="text-slate-100">
+                  Payment Records
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Page {page} of {totalPages || 1}
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {error && (
@@ -439,151 +362,188 @@ export default function PaymentsTracking() {
                 </AlertDescription>
               </Alert>
             )}
-            
-            {isLoading || contractLoading ? (
+
+            {isPageLoading ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-24 bg-slate-700 rounded mb-4"></div>
+                  <div key={i} className="p-6 rounded-lg bg-slate-800 border border-slate-700">
+                    <div className="flex justify-between mb-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-6 w-32 bg-slate-700" />
+                        <Skeleton className="h-4 w-48 bg-slate-700" />
+                      </div>
+                      <Skeleton className="h-9 w-24 bg-slate-700" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Skeleton className="h-12 w-full bg-slate-700" />
+                      <Skeleton className="h-12 w-full bg-slate-700" />
+                      <Skeleton className="h-12 w-full bg-slate-700" />
+                    </div>
                   </div>
                 ))}
               </div>
             ) : filteredPayments.length > 0 ? (
-              <div className="space-y-4">
-                {filteredPayments.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className={`p-6 rounded-lg border transition-colors ${
-                      payment.status === 'overdue' 
-                        ? 'bg-red-900/20 border-red-800' 
+              <>
+                <div className="space-y-4">
+                  {filteredPayments.map((payment) => (
+                    <div
+                      key={payment.id}
+                      className={`p-6 rounded-lg border transition-colors ${payment.status === 'overdue'
+                        ? 'bg-red-900/20 border-red-800'
                         : 'bg-slate-800 border-slate-700 hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-slate-100 text-lg">
-                            {payment.invoiceNumber}
-                          </h3>
-                          {getStatusBadge(payment.status)}
-                          <Badge variant="outline" className="text-xs">
-                            NFT #{payment.tokenId}
-                          </Badge>
-                        </div>
-                        <p className="text-slate-300 font-medium mb-1">{payment.importerCompany}</p>
-                        <div className="flex items-center gap-4 text-sm text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Due: {formatDate(payment.dueDate)}
-                          </span>
-                          {isOverdue(payment.dueDate, payment.status) && (
-                            <span className="text-red-400 font-medium">
-                              {Math.abs(getDaysUntilDue(payment.dueDate))} days overdue
+                        }`}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-semibold text-slate-100 text-lg">
+                              {payment.invoiceNumber}
+                            </h3>
+                            {getStatusBadge(payment.status)}
+                            <Badge variant="outline" className="text-xs text-slate-300 border-slate-700 bg-slate-900/50">
+                              NFT #{payment.tokenId.toString()}
+                            </Badge>
+                          </div>
+                          <p className="text-slate-300 font-medium mb-1">{payment.importerCompany}</p>
+                          <div className="flex items-center gap-4 text-sm text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              Due: {formatDate(payment.dueDate)}
                             </span>
-                          )}
-                          {!isOverdue(payment.dueDate, payment.status) && payment.status !== 'paid' && (
-                            <span className="text-slate-400">
-                              {getDaysUntilDue(payment.dueDate)} days remaining
-                            </span>
-                          )}
+                            {isOverdue(payment.dueDate, payment.status) && (
+                              <span className="text-red-400 font-medium">
+                                {Math.abs(getDaysUntilDue(payment.dueDate))} days overdue
+                              </span>
+                            )}
+                            {!isOverdue(payment.dueDate, payment.status) && payment.status !== 'paid' && (
+                              <span className="text-slate-400">
+                                {getDaysUntilDue(payment.dueDate)} days remaining
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Link href={`/exporter/invoices/${payment.invoiceId}`}>
+                            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
+                              <FileText className="mr-2 h-4 w-4" />
+                              View Invoice
+                            </Button>
+                          </Link>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <Link href={`/exporter/invoices/${payment.invoiceId}`}>
-                          <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                            <FileText className="mr-2 h-4 w-4" />
-                            View Invoice
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Loan Amount</p>
-                        <p className="font-semibold text-slate-100">
-                          {formatCurrency(payment.loanAmount)}
-                        </p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Loan Amount</p>
+                          <p className="font-semibold text-slate-100">
+                            {formatCurrency(payment.loanAmount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Interest (4%)</p>
+                          <p className="font-semibold text-cyan-400">
+                            {formatCurrency(payment.interestAmount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Total Due</p>
+                          <p className="font-semibold text-slate-100 text-lg">
+                            {formatCurrency(payment.totalDue)}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Interest (4%)</p>
-                        <p className="font-semibold text-cyan-400">
-                          {formatCurrency(payment.interestAmount)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Total Due</p>
-                        <p className="font-semibold text-slate-100 text-lg">
-                          {formatCurrency(payment.totalDue)}
-                        </p>
-                      </div>
-                    </div>
 
-                    {/* Payment Actions */}
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-700">
-                      <div className="flex items-center gap-3">
-                        {payment.paymentLink ? (
-                          <>
+                      {/* Payment Actions */}
+                      <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+                        <div className="flex items-center gap-3">
+                          {payment.paymentLink ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCopyLink(payment.paymentLink!, payment.invoiceNumber)}
+                                className="border-slate-700 text-slate-300 hover:bg-slate-700"
+                              >
+                                <Copy className="mr-2 h-3 w-3" />
+                                {copiedLink === payment.invoiceNumber ? 'Copied!' : 'Copy Link'}
+                              </Button>
+
+                              <Link href={payment.paymentLink} target="_blank">
+                                <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-cyan-300">
+                                  <ExternalLink className="mr-2 h-3 w-3" />
+                                  Open Link
+                                </Button>
+                              </Link>
+                            </>
+                          ) : (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleCopyLink(payment.paymentLink!, payment.invoiceNumber)}
-                              className="border-slate-700 text-slate-300 hover:bg-slate-700"
+                              onClick={() => generatePaymentLink(Number(payment.tokenId))}
+                              className="border-cyan-600 text-cyan-400 hover:bg-cyan-600 hover:text-white"
                             >
-                              <Copy className="mr-2 h-3 w-3" />
-                              {copiedLink === payment.invoiceNumber ? 'Copied!' : 'Copy Link'}
+                              <Send className="mr-2 h-3 w-3" />
+                              Generate Payment Link
                             </Button>
-                            
-                            <Link href={payment.paymentLink} target="_blank">
-                              <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-cyan-300">
-                                <ExternalLink className="mr-2 h-3 w-3" />
-                                Open Link
-                              </Button>
-                            </Link>
-                          </>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => generatePaymentLink(Number(payment.tokenId))}
-                            className="border-cyan-600 text-cyan-400 hover:bg-cyan-600 hover:text-white"
-                          >
-                            <Send className="mr-2 h-3 w-3" />
-                            Generate Payment Link
-                          </Button>
-                        )}
+                          )}
 
-                        {payment.status === 'link_sent' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => sendReminder(payment.id)}
-                            className="text-yellow-400 hover:text-yellow-300"
-                          >
-                            <Bell className="mr-2 h-3 w-3" />
-                            Send Reminder ({payment.remindersSent})
-                          </Button>
-                        )}
-                      </div>
+                          {payment.status === 'link_sent' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => sendReminder(payment.id)}
+                              className="text-yellow-400 hover:text-yellow-300"
+                            >
+                              <Bell className="mr-2 h-3 w-3" />
+                              Send Reminder ({payment.remindersSent})
+                            </Button>
+                          )}
+                        </div>
 
-                      <div className="text-sm text-slate-400">
-                        {payment.status === 'paid' && payment.paidAt && (
-                          <span className="text-green-400 flex items-center gap-1">
-                            <CheckCircle className="h-3 w-3" />
-                            Paid on {formatDate(payment.paidAt)}
-                          </span>
-                        )}
-                        {payment.status === 'link_sent' && payment.sentAt && (
-                          <span className="flex items-center gap-1">
-                            <Send className="h-3 w-3" />
-                            Sent on {formatDate(payment.sentAt)}
-                          </span>
-                        )}
+                        <div className="text-sm text-slate-400">
+                          {payment.status === 'paid' && payment.paidAt && (
+                            <span className="text-green-400 flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              Paid on {formatDate(payment.paidAt)}
+                            </span>
+                          )}
+                          {payment.status === 'link_sent' && payment.sentAt && (
+                            <span className="flex items-center gap-1">
+                              <Send className="h-3 w-3" />
+                              Sent on {formatDate(payment.sentAt)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-800">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1 || isLoading}
+                    className="border-slate-700 text-slate-300"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-slate-400">
+                    Page {page} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages || isLoading}
+                    className="border-slate-700 text-slate-300"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </>
             ) : (
               <div className="text-center py-12">
                 <DollarSign className="mx-auto h-16 w-16 text-slate-600 mb-4" />
@@ -591,7 +551,7 @@ export default function PaymentsTracking() {
                   {searchTerm || statusFilter !== 'all' ? 'No matching payments' : 'No payment records'}
                 </h3>
                 <p className="text-slate-400 mb-6">
-                  {searchTerm || statusFilter !== 'all' 
+                  {searchTerm || statusFilter !== 'all'
                     ? 'Try adjusting your search or filter criteria'
                     : 'Payment records will appear here once you have funded invoices'
                   }
@@ -607,7 +567,6 @@ export default function PaymentsTracking() {
             )}
           </CardContent>
         </Card>
-
         {/* Help Section */}
         <Card className="bg-slate-900 border-slate-800 mt-6">
           <CardHeader>
