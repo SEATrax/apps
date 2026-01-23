@@ -95,6 +95,7 @@ export interface Database {
         Row: {
           id: string;
           token_id: number;
+          exporter_wallet: string;
           invoice_number: string;
           goods_description: string | null;
           importer_name: string;
@@ -120,6 +121,7 @@ export interface Database {
         Insert: {
           id?: string;
           token_id: number;
+          exporter_wallet: string;
           invoice_number: string;
           goods_description?: string | null;
           importer_name: string;
@@ -145,6 +147,7 @@ export interface Database {
         Update: {
           id?: string;
           token_id?: number;
+          exporter_wallet?: string;
           invoice_number?: string;
           goods_description?: string | null;
           importer_name?: string;
@@ -613,4 +616,23 @@ export async function getMarketplacePools() {
       invoice_metadata: poolInvoices
     };
   });
+}
+
+export async function getExporterInvoicesFromCache(walletAddress: string) {
+  const normalizedWallet = walletAddress.toLowerCase().trim();
+  console.log('Fetching invoices for wallet:', normalizedWallet);
+
+  const { data, error } = await supabase
+    .from('invoice_metadata')
+    .select('*')
+    .eq('exporter_wallet', normalizedWallet)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Failed to fetch exporter invoices from cache:', error);
+    return [];
+  }
+
+  console.log('Fetched invoices count:', data?.length);
+  return data || [];
 }
