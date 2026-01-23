@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Search, Filter, FileText, Calendar, DollarSign, CheckCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
-import ExporterHeader from '@/components/ExporterHeader';
 import Link from 'next/link';
 
 interface Invoice {
@@ -83,26 +82,26 @@ export default function InvoiceList() {
   const loadInvoices = async () => {
     try {
       setIsLoading(true);
-      
+
       if (!address) {
         setInvoices([]);
         return;
       }
-      
+
       // Get invoice token IDs from smart contract
       const tokenIds = await getExporterInvoices(address);
-      
+
       if (tokenIds.length === 0) {
         setInvoices([]);
         return;
       }
-      
+
       // Fetch invoice data from smart contract and metadata from Supabase
       const invoicePromises = tokenIds.map(async (tokenId) => {
         try {
           const contractInvoice = await getInvoice(tokenId);
           if (!contractInvoice) return null;
-          
+
           // Get metadata from Supabase (if configured)
           let metadata = null;
           if (isSupabaseConfigured) {
@@ -117,7 +116,7 @@ export default function InvoiceList() {
               console.warn('Failed to fetch metadata for token', tokenId, error);
             }
           }
-          
+
           // Convert status number to string
           const statusMap: Record<number, 'pending' | 'approved' | 'in_pool' | 'funded' | 'withdrawn' | 'paid' | 'completed' | 'rejected'> = {
             [INVOICE_STATUS.PENDING]: 'pending',
@@ -129,12 +128,12 @@ export default function InvoiceList() {
             [INVOICE_STATUS.COMPLETED]: 'completed',
             [INVOICE_STATUS.REJECTED]: 'rejected',
           };
-          
+
           const invoiceValue = Number(contractInvoice.shippingAmount) / 100; // Convert cents to USD
           const loanAmount = Number(contractInvoice.loanAmount) / 100;
           const amountInvested = Number(contractInvoice.amountInvested) / 1e18 * 3000; // Convert Wei to USD
           const amountWithdrawn = Number(contractInvoice.amountWithdrawn) / 1e18 * 3000;
-          
+
           return {
             id: tokenId,
             tokenId,
@@ -155,10 +154,10 @@ export default function InvoiceList() {
           return null;
         }
       });
-      
+
       const invoiceResults = await Promise.all(invoicePromises);
       const validInvoices = invoiceResults.filter(Boolean) as Invoice[];
-      
+
       setInvoices(validInvoices);
     } catch (error) {
       console.error('Error loading invoices:', error);
@@ -200,7 +199,7 @@ export default function InvoiceList() {
     };
 
     const { variant, label, color } = config[status];
-    
+
     return (
       <Badge variant={variant} className={`text-xs text-white ${color}`}>
         {label}
@@ -228,15 +227,14 @@ export default function InvoiceList() {
   if (!isLoaded || !isConnected || (isLoaded && isConnected && !profileLoading && !profile)) {
     return (
       <div className="min-h-screen bg-slate-950">
-        <ExporterHeader />
         <div className="flex items-center justify-center min-h-[50vh]">
           <Card className="w-full max-w-md bg-slate-900 border-slate-800">
             <CardHeader className="text-center">
               <CardTitle className="text-slate-100">Loading...</CardTitle>
               <CardDescription className="text-slate-400">
                 {!isLoaded ? 'Initializing wallet connection...' :
-                 !isConnected ? 'Redirecting to home...' :
-                 !profile ? 'Redirecting to role selection...' : 'Loading...'}
+                  !isConnected ? 'Redirecting to home...' :
+                    !profile ? 'Redirecting to role selection...' : 'Loading...'}
               </CardDescription>
             </CardHeader>
           </Card>
@@ -247,8 +245,7 @@ export default function InvoiceList() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <ExporterHeader />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
@@ -396,8 +393,8 @@ export default function InvoiceList() {
                         </p>
                         {invoice.status === 'in_pool' || invoice.status === 'funded' ? (
                           <div className="w-full bg-slate-700 rounded-full h-2 mt-1">
-                            <div 
-                              className="bg-cyan-600 h-2 rounded-full" 
+                            <div
+                              className="bg-cyan-600 h-2 rounded-full"
                               style={{ width: `${Math.min(invoice.fundedPercentage, 100)}%` }}
                             ></div>
                           </div>
@@ -423,7 +420,7 @@ export default function InvoiceList() {
                   {searchTerm || statusFilter !== 'all' ? 'No matching invoices' : 'No invoices yet'}
                 </h3>
                 <p className="text-slate-400 mb-6">
-                  {searchTerm || statusFilter !== 'all' 
+                  {searchTerm || statusFilter !== 'all'
                     ? 'Try adjusting your search or filter criteria'
                     : 'Create your first invoice to start getting funded by investors'
                   }

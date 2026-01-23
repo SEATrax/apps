@@ -4,9 +4,8 @@ import { useState, useEffect } from 'react';
 import { useActiveAccount } from 'panna-sdk';
 import { useSEATrax } from '@/hooks/useSEATrax';
 import { useExporterProfile } from '@/hooks/useExporterProfile';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import ExporterHeader from '@/components/ExporterHeader';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,10 +14,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Upload, Calendar as CalendarIcon, AlertCircle, CheckCircle, Loader2, Sparkles } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import {
+  ArrowLeft, Upload, Calendar as CalendarIcon, AlertCircle, CheckCircle,
+  Loader2, Sparkles, User, Box, DollarSign, FileText, Check, ChevronRight, ChevronLeft
+} from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
 interface InvoiceFormData {
   exporterCompany: string;
@@ -39,42 +43,27 @@ const sampleImporters = [
   { name: 'Global Trade Solutions Inc', email: 'procurement@globaltradesolutions.com', address: '789 Market St, San Francisco, CA 94103', country: 'United States' },
   { name: 'European Import Hub GmbH', email: 'orders@euimports.de', address: 'Friedrichstraße 123, 10117 Berlin', country: 'Germany' },
   { name: 'Asia Pacific Trading Pte Ltd', email: 'trading@apacific.sg', address: '45 Marina Boulevard, Singapore 018987', country: 'Singapore' },
-  { name: 'Canadian Distribution Co Ltd', email: 'logistics@candistro.ca', address: '1500 Rue McGill, Montreal, QC H3A 3H6', country: 'Canada' },
-  { name: 'UK Premium Imports Ltd', email: 'imports@ukpremium.co.uk', address: '123 Oxford Street, London W1D 2HG', country: 'United Kingdom' },
-  { name: 'Australian Trade Partners Pty', email: 'partners@aussiepartners.au', address: '456 Collins Street, Melbourne VIC 3000', country: 'Australia' },
   { name: 'Japanese Import Corporation', email: 'info@jpimportcorp.jp', address: '2-8-1 Nishi-Shinjuku, Tokyo 163-0820', country: 'Japan' },
-  { name: 'Nordic Trade Solutions AS', email: 'contact@nordictrade.no', address: 'Storgata 15, 0155 Oslo', country: 'Norway' }
 ];
 
 const sampleProducts = [
   { desc: 'Premium Coffee Beans - Single Origin Arabica, 1200kg', basePrice: 95000 },
   { desc: 'Handcrafted Batik Textiles - Traditional Indonesian Patterns, 800 pieces', basePrice: 120000 },
-  { desc: 'Electronic Components - Semiconductors and Microprocessors, 500 units', basePrice: 280000 },
-  { desc: 'Indonesian Spices Mix - Nutmeg, Cloves, Cinnamon, 600kg premium grade', basePrice: 75000 },
-  { desc: 'Rattan Furniture Set - Eco-friendly outdoor dining collection, 45 pieces', basePrice: 165000 },
-  { desc: 'Traditional Wood Carvings - Handmade decorative art pieces, 120 items', basePrice: 88000 },
-  { desc: 'Organic Coconut Products - Oil, flour, and dried coconut, 2000kg', basePrice: 55000 },
-  { desc: 'Smartphone Accessories - Cases, chargers, and screen protectors, 3000 units', basePrice: 145000 },
-  { desc: 'Premium Sarongs and Scarves - Silk blend traditional wear, 600 pieces', basePrice: 92000 },
-  { desc: 'Medical Grade Latex Gloves - ISO certified, 50,000 pieces', basePrice: 210000 },
-  { desc: 'Bamboo Kitchenware Set - Sustainable utensils and containers, 800 sets', basePrice: 67000 },
-  { desc: 'Traditional Jewelry Collection - Silver with precious stones, 200 pieces', basePrice: 195000 }
+  { desc: 'Electronic Components - Semiconductors, 500 units', basePrice: 280000 },
 ];
 
 const generateRandomInvoiceData = (exporterCompany: string) => {
   const importer = sampleImporters[Math.floor(Math.random() * sampleImporters.length)];
   const product = sampleProducts[Math.floor(Math.random() * sampleProducts.length)];
-  const varianceMultiplier = 0.8 + (Math.random() * 0.4); // 80-120% of base price
+  const varianceMultiplier = 0.8 + (Math.random() * 0.4);
   const shippingAmount = Math.round(product.basePrice * varianceMultiplier);
-  const loanAmount = Math.floor(shippingAmount * 0.8); // Always use floor to ensure it's within limit
-  
-  // Generate future shipping date (5-30 days from now)
+  const loanAmount = Math.floor(shippingAmount * 0.8);
+
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + 5 + Math.floor(Math.random() * 25));
-  
-  // Generate invoice number
+
   const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-  
+
   return {
     invoiceNumber,
     importerCompany: importer.name,
@@ -88,14 +77,24 @@ const generateRandomInvoiceData = (exporterCompany: string) => {
   };
 };
 
+// Wizard Steps Configuration
+const STEPS = [
+  { id: 1, title: "Importer Info", description: "Who are you billing?", icon: User },
+  { id: 2, title: "Shipment Details", description: "What are you sending?", icon: Box },
+  { id: 3, title: "Financials", description: "Funding requirements", icon: DollarSign },
+  { id: 4, title: "Documents", description: "Proof of shipment", icon: FileText },
+  { id: 5, title: "Review", description: "Summary & Submit", icon: Check },
+];
+
 export default function CreateInvoice() {
   const activeAccount = useActiveAccount();
   const { createInvoice, isLoading: isContractLoading } = useSEATrax();
   const { profile } = useExporterProfile();
   const router = useRouter();
-  
+
+  const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<InvoiceFormData>({
-    exporterCompany: '', // Will be filled from profile
+    exporterCompany: '',
     importerCompany: '',
     importerEmail: '',
     importerAddress: '',
@@ -117,9 +116,9 @@ export default function CreateInvoice() {
       }));
     }
   }, [profile]);
-  
+
   const isConnected = !!activeAccount;
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingDocs, setIsUploadingDocs] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -135,6 +134,7 @@ export default function CreateInvoice() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     setFormData(prev => ({ ...prev, documents: [...prev.documents, ...files] }));
+    if (errors.documents) setErrors(prev => ({ ...prev, documents: '' }));
   };
 
   const removeDocument = (index: number) => {
@@ -144,59 +144,46 @@ export default function CreateInvoice() {
     }));
   };
 
-  const validateForm = (): boolean => {
+  const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.importerCompany.trim()) {
-      newErrors.importerCompany = 'Importer company name is required';
+    if (step === 1) {
+      if (!formData.importerCompany.trim()) newErrors.importerCompany = 'Importer company is required';
+      if (!formData.importerEmail.trim()) newErrors.importerEmail = 'Importer email is required';
+      else if (!/\S+@\S+\.\S+/.test(formData.importerEmail)) newErrors.importerEmail = 'Invalid email';
+      if (!formData.importerAddress.trim()) newErrors.importerAddress = 'Address is required';
+      if (!formData.importerCountry) newErrors.importerCountry = 'Country is required';
     }
 
-    if (!formData.importerEmail.trim()) {
-      newErrors.importerEmail = 'Importer email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.importerEmail)) {
-      newErrors.importerEmail = 'Please enter a valid email address';
+    if (step === 2) {
+      if (!formData.invoiceNumber.trim()) newErrors.invoiceNumber = 'Invoice number is required';
+      if (!formData.goodsDescription.trim()) newErrors.goodsDescription = 'Description is required';
+      if (!formData.shippingDate) newErrors.shippingDate = 'Shipping date is required';
+      else if (formData.shippingDate <= new Date()) newErrors.shippingDate = 'Date must be in future';
     }
 
-    if (!formData.importerAddress.trim()) {
-      newErrors.importerAddress = 'Importer address is required';
+    if (step === 3) {
+      if (!formData.shippingAmount || parseFloat(formData.shippingAmount) <= 0) newErrors.shippingAmount = 'Required';
+      if (!formData.loanAmount || parseFloat(formData.loanAmount) <= 0) newErrors.loanAmount = 'Required';
+      if (parseFloat(formData.loanAmount) > parseFloat(formData.shippingAmount)) newErrors.loanAmount = 'Cannot exceed shipping amount';
     }
 
-    if (!formData.importerCountry) {
-      newErrors.importerCountry = 'Importer country is required';
-    }
-
-    if (!formData.invoiceNumber.trim()) {
-      newErrors.invoiceNumber = 'Invoice number is required';
-    }
-
-    if (!formData.goodsDescription.trim()) {
-      newErrors.goodsDescription = 'Goods description is required';
-    }
-
-    if (!formData.shippingAmount || parseFloat(formData.shippingAmount) <= 0) {
-      newErrors.shippingAmount = 'Valid shipping amount is required';
-    }
-
-    if (!formData.loanAmount || parseFloat(formData.loanAmount) <= 0) {
-      newErrors.loanAmount = 'Valid loan amount is required';
-    }
-
-    if (parseFloat(formData.loanAmount) > parseFloat(formData.shippingAmount)) {
-      newErrors.loanAmount = 'Loan amount cannot exceed shipping amount';
-    }
-
-    if (!formData.shippingDate) {
-      newErrors.shippingDate = 'Shipping date is required';
-    } else if (formData.shippingDate <= new Date()) {
-      newErrors.shippingDate = 'Shipping date must be in the future';
-    }
-
-    if (formData.documents.length === 0) {
-      newErrors.documents = 'At least one supporting document is required';
+    if (step === 4) {
+      if (formData.documents.length === 0) newErrors.documents = 'At least one document is required';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const nextStep = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
+    }
+  };
+
+  const prevStep = () => {
+    setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
   const handleAutoFill = () => {
@@ -205,28 +192,25 @@ export default function CreateInvoice() {
       ...prev,
       ...randomData
     }));
-    
-    // Clear any errors
     setErrors({});
   };
 
   const uploadDocuments = async (): Promise<string[]> => {
+    // ... Copy implementation from previous file ...
     const ipfsHashes: string[] = [];
-    
+
     for (let i = 0; i < formData.documents.length; i++) {
       const file = formData.documents[i];
       setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
-      
+
       try {
-        // Create FormData for each file
         const uploadFormData = new FormData();
         uploadFormData.append('file', file);
         uploadFormData.append('name', `invoice-${formData.invoiceNumber}-doc-${i + 1}`);
         uploadFormData.append('description', `Supporting document for invoice ${formData.invoiceNumber}`);
         uploadFormData.append('invoice_number', formData.invoiceNumber);
         uploadFormData.append('exporter_company', formData.exporterCompany);
-        
-        // Add attributes for document metadata
+
         const attributes = [
           { trait_type: 'Document Type', value: file.type },
           { trait_type: 'Invoice Number', value: formData.invoiceNumber },
@@ -235,53 +219,33 @@ export default function CreateInvoice() {
         ];
         uploadFormData.append('attributes', JSON.stringify(attributes));
         uploadFormData.append('created_at', new Date().toISOString());
-        
-        // Upload to IPFS via API route
+
         const uploadResponse = await fetch('/api/invoice/upload', {
           method: 'POST',
           body: uploadFormData,
         });
-        
-        if (!uploadResponse.ok) {
-          throw new Error(`Failed to upload ${file.name}`);
-        }
-        
+
+        if (!uploadResponse.ok) throw new Error(`Failed to upload ${file.name}`);
         const result = await uploadResponse.json();
-        
-        if (!result.success || !result.data?.metadata_cid) {
-          throw new Error(`Upload failed for ${file.name}`);
-        }
-        
-        // Update progress
+        if (!result.success || !result.data?.metadata_cid) throw new Error(`Upload failed for ${file.name}`);
+
         setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
-        
-        // Store the IPFS hash
         ipfsHashes.push(result.data.metadata_cid);
-        
-        console.log(`✅ Uploaded ${file.name}:`, result.data.metadata_cid);
-        
+
       } catch (error: any) {
         console.error(`Error uploading ${file.name}:`, error);
         throw new Error(`Failed to upload ${file.name}: ${error.message}`);
       }
     }
-    
     return ipfsHashes;
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
+  const handleSubmit = async () => {
+    if (!validateStep(4)) return; // Final verification
 
     setIsSubmitting(true);
-    
-    // Import compensation utilities
     const { compensationService, checkSystemHealth } = await import('@/lib/compensation');
-    
-    // Initialize transaction state for tracking
+
     const state = {
       warnings: [] as string[],
       contractTxHash: undefined as string | undefined,
@@ -292,60 +256,43 @@ export default function CreateInvoice() {
     };
 
     try {
-      // Check system health before starting
       const health = await checkSystemHealth();
-      console.log('🏥 System Health:', health);
-      
-      if (health.consensusStatus === 'critical') {
-        throw new Error('System is experiencing critical issues. Please try again later.');
-      }
+      if (health.consensusStatus === 'critical') throw new Error('System critical. Try later.');
 
-      // === PHASE 1: IRREVERSIBLE OPERATIONS (Smart Contract) ===
-      console.log('🔄 Phase 1: Starting blockchain operations...');
-      
-      // Upload documents to IPFS
+      // Phase 1: Upload Docs
       setIsUploadingDocs(true);
       const documentHashes = await uploadDocuments();
       state.ipfsHashes = documentHashes;
       setIsUploadingDocs(false);
-      console.log('📄 Documents uploaded to IPFS:', documentHashes.length);
 
-      // Create invoice NFT on blockchain (PRIMARY OPERATION)
+      // Phase 2: Create NFT
       const contractResult = await createInvoice(
         formData.exporterCompany,
         formData.importerCompany,
-        formData.importerEmail, // NEW: Email required
-        Math.floor(formData.shippingDate!.getTime() / 1000), // Shipping date timestamp
-        BigInt(Math.floor(parseFloat(formData.shippingAmount) * 100)), // Convert to cents
-        BigInt(Math.floor(parseFloat(formData.loanAmount) * 100)), // Convert to cents
-        documentHashes[0] || 'QmPlaceholder' // IPFS hash of primary document
+        formData.importerEmail,
+        Math.floor(formData.shippingDate!.getTime() / 1000),
+        BigInt(Math.floor(parseFloat(formData.shippingAmount) * 100)),
+        BigInt(Math.floor(parseFloat(formData.loanAmount) * 100)),
+        documentHashes[0] || 'QmPlaceholder'
       );
 
-      if (!contractResult.success) {
-        throw new Error(contractResult.error || 'Failed to create invoice NFT - contract transaction failed');
-      }
+      if (!contractResult.success) throw new Error(contractResult.error || 'Transaction failed');
 
-      // Type guard: contractResult.success is true, so we know it has txHash
       const txHash = contractResult.txHash;
       const tokenId = contractResult.invoiceId;
-      
+
       if (!tokenId) {
-        // Invoice created but ID not extracted from event
-        // This is OK - we'll use transaction hash instead
-        console.warn('⚠️ Invoice created but ID not extracted. Using tx hash:', txHash);
         state.contractTxHash = txHash;
-        // Skip metadata save since we don't have tokenId
-        throw new Error('Invoice created on blockchain but ID not returned. Transaction: ' + txHash + '. Please check your invoices list.');
+        // Handle edge case where ID not returned immediately but TX valid
+        // For now, let's treat as partial success or error if critical
+        // But in previous code we threw error. Let's keep consistency.
+        throw new Error('Invoice created but ID missing. Check dashboard.');
       }
-      
+
       state.tokenId = tokenId;
       state.contractTxHash = txHash || 'completed';
-      console.log('✅ Phase 1 Complete - Invoice NFT created:', tokenId.toString());
 
-      // === PHASE 2: REVERSIBLE OPERATIONS WITH COMPENSATION ===
-      console.log('🔄 Phase 2: Starting database synchronization...');
-      
-      // Prepare metadata payload
+      // Phase 3: DB & Pay Link
       const metadataPayload = {
         exporter_wallet: activeAccount?.address || '',
         invoice_number: formData.invoiceNumber,
@@ -358,7 +305,6 @@ export default function CreateInvoice() {
         }, {} as Record<string, string>)
       };
 
-      // Prepare payment payload
       const shippingAmountCents = Math.floor(parseFloat(formData.shippingAmount) * 100);
       const paymentPayload = {
         amount_usd: shippingAmountCents,
@@ -368,502 +314,435 @@ export default function CreateInvoice() {
         due_date: new Date(formData.shippingDate!.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
       };
 
-      // Attempt database operations with compensation
       if (isSupabaseConfigured && health.supabaseConnection) {
         try {
-          // Save metadata with retry
           state.metadataId = await compensationService.saveMetadataWithRetry(tokenId, metadataPayload, 2);
-          console.log('✅ Metadata saved successfully');
-        } catch (metadataError) {
-          console.warn('⚠️ Metadata save failed - scheduled for compensation');
-          state.warnings.push('Invoice metadata will be synchronized in background');
-        }
+        } catch { state.warnings.push('Metadata sync backgrounded'); }
 
         try {
-          // Create payment link with retry
           state.paymentId = await compensationService.createPaymentWithRetry(tokenId, paymentPayload, 2);
-          console.log('✅ Payment link created successfully');
-        } catch (paymentError) {
-          console.warn('⚠️ Payment link creation failed - scheduled for compensation');
-          state.warnings.push('Payment link will be generated in background');
-        }
+        } catch { state.warnings.push('Payment link backgrounded'); }
       } else {
-        console.info('🔄 Database sync skipped - scheduling for background processing');
-        
-        // Schedule both operations for background processing
-        await compensationService.scheduleCompensation({
-          task_type: 'metadata_sync',
-          token_id: Number(tokenId),
-          payload: metadataPayload,
-          priority: 'high'
-        });
-
-        await compensationService.scheduleCompensation({
-          task_type: 'payment_link',
-          token_id: Number(tokenId),
-          payload: paymentPayload,
-          priority: 'normal'
-        });
-
-        state.warnings.push('Database synchronization scheduled for background processing');
+        await compensationService.scheduleCompensation({ task_type: 'metadata_sync', token_id: Number(tokenId), payload: metadataPayload, priority: 'high' });
+        await compensationService.scheduleCompensation({ task_type: 'payment_link', token_id: Number(tokenId), payload: paymentPayload, priority: 'normal' });
+        state.warnings.push('DB Sync scheduled');
       }
 
-      console.log('✅ Phase 2 Complete - Transaction state:', {
-        tokenId: tokenId.toString(),
-        metadataId: state.metadataId || 'scheduled',
-        paymentId: state.paymentId || 'scheduled',
-        warnings: state.warnings
-      });
-
-      // Show success message with any warnings
-      if (state.warnings.length > 0) {
-        console.warn('⚠️ Invoice created with warnings:', state.warnings);
-        // Could show a toast notification here about background processing
-      }
-
-      // Redirect to invoice list
       router.push('/exporter/invoices?created=true');
-      
+
     } catch (error: any) {
-      console.error('❌ Invoice creation failed:', error);
-      
-      // === ERROR RECOVERY AND CLEANUP ===
-      try {
-        // If we have IPFS hashes but contract failed, schedule cleanup
-        if (state.ipfsHashes && !state.tokenId) {
-          console.log('🧹 Scheduling IPFS cleanup for failed transaction');
-          const { compensationService } = await import('@/lib/compensation');
-          await compensationService.scheduleCompensation({
-            task_type: 'ipfs_cleanup',
-            token_id: 0, // No tokenId for failed contracts
-            payload: { ipfsHashes: state.ipfsHashes },
-            priority: 'low'
-          });
-        }
+      console.error('Submission failed:', error);
 
-        // If contract succeeded but we have other errors, this is still a success case
-        if (state.tokenId) {
-          console.warn('⚠️ Contract succeeded but some operations failed - treating as success');
-          router.push('/exporter/invoices?created=true&warnings=true');
-          return;
-        }
-      } catch (recoveryError) {
-        console.error('Recovery operations failed:', recoveryError);
+      // Cleanup attempt (simplified from previous)
+      if (state.ipfsHashes && !state.tokenId) {
+        const { compensationService } = await import('@/lib/compensation');
+        await compensationService.scheduleCompensation({
+          task_type: 'ipfs_cleanup',
+          token_id: 0,
+          payload: { ipfsHashes: state.ipfsHashes },
+          priority: 'low'
+        });
       }
 
-      // Determine error type for user-friendly message
-      let userMessage = 'Failed to create invoice. Please try again.';
-      
-      if (error.message.includes('wallet') || error.message.includes('connect')) {
-        userMessage = 'Wallet connection issue. Please ensure your wallet is connected and try again.';
-      } else if (error.message.includes('contract') || error.message.includes('transaction')) {
-        userMessage = 'Blockchain transaction failed. Please check your wallet and try again.';
-      } else if (error.message.includes('IPFS') || error.message.includes('upload')) {
-        userMessage = 'Document upload failed. Please check your documents and try again.';
-      } else if (error.message.includes('critical')) {
-        userMessage = error.message; // System health message
-      }
-
-      setErrors({ submit: userMessage });
+      setErrors({ submit: error.message || 'Failed to create invoice' });
     } finally {
       setIsSubmitting(false);
       setIsUploadingDocs(false);
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const formatCurrency = (val: string) => {
+    const num = parseFloat(val);
+    if (isNaN(num)) return '$0.00';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
   };
 
   if (!isConnected) {
     return (
-      <>
-        <ExporterHeader />
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-          <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-            <CardHeader className="text-center">
-              <CardTitle className="text-slate-100">Access Required</CardTitle>
-              <CardDescription className="text-slate-400">
-                Connect your wallet to create invoices
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Link href="/login" className="w-full">
-                <Button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white">
-                  Go to Login
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-      </>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-slate-900 border-slate-800 animate-in fade-in zoom-in duration-300">
+          <CardHeader className="text-center">
+            <CardTitle className="text-slate-100">Access Required</CardTitle>
+            <CardDescription className="text-slate-400">Connect wallet to proceed</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/login" className="w-full"><Button className="w-full bg-cyan-600">Go to Login</Button></Link>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
-  return (
-    <>
-      <ExporterHeader />
-      <div className="min-h-screen bg-slate-950">
-        {/* Header */}
-        <div className="bg-slate-900 border-b border-slate-800">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center">
-                <Link href="/exporter/invoices" className="mr-4">
-                  <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Invoices
-                  </Button>
-                </Link>
+  // --- Render Steps ---
+
+  const renderStep1_Importer = () => (
+    <div className="space-y-4 animate-in slide-in-from-right duration-300">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label className="text-slate-300">Company Name *</Label>
+          <Input
+            value={formData.importerCompany}
+            onChange={(e) => handleInputChange('importerCompany', e.target.value)}
+            placeholder="e.g. Global Tech Ltd"
+            className={cn("bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-400", errors.importerCompany && "border-red-500")}
+          />
+          {errors.importerCompany && <p className="text-red-400 text-xs">{errors.importerCompany}</p>}
+        </div>
+        <div className="space-y-2">
+          <Label className="text-slate-300">Email *</Label>
+          <Input
+            value={formData.importerEmail}
+            onChange={(e) => handleInputChange('importerEmail', e.target.value)}
+            placeholder="purchasing@company.com"
+            className={cn("bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-400", errors.importerEmail && "border-red-500")}
+          />
+          {errors.importerEmail && <p className="text-red-400 text-xs">{errors.importerEmail}</p>}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-slate-300">Country *</Label>
+        <Select value={formData.importerCountry} onValueChange={(val) => handleInputChange('importerCountry', val)}>
+          <SelectTrigger className={cn("bg-slate-800 border-slate-700 text-slate-100", errors.importerCountry && "border-red-500")}>
+            <SelectValue placeholder="Select country" />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+            {['United States', 'China', 'Japan', 'Singapore', 'Indonesia', 'United Kingdom'].map(c => (
+              <SelectItem key={c} value={c} className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {errors.importerCountry && <p className="text-red-400 text-xs">{errors.importerCountry}</p>}
+      </div>
+      <div className="space-y-2">
+        <Label className="text-slate-300">Full Address *</Label>
+        <Textarea
+          value={formData.importerAddress}
+          onChange={(e) => handleInputChange('importerAddress', e.target.value)}
+          placeholder="Street address, City, Zip Code..."
+          className={cn("bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-400", errors.importerAddress && "border-red-500")}
+        />
+        {errors.importerAddress && <p className="text-red-400 text-xs">{errors.importerAddress}</p>}
+      </div>
+    </div>
+  );
+
+  const renderStep2_Shipment = () => (
+    <div className="space-y-4 animate-in slide-in-from-right duration-300">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label className="text-slate-300">Invoice Number *</Label>
+          <Input
+            value={formData.invoiceNumber}
+            onChange={(e) => handleInputChange('invoiceNumber', e.target.value)}
+            placeholder="INV-2024-001"
+            className={cn("bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-400", errors.invoiceNumber && "border-red-500")}
+          />
+          {errors.invoiceNumber && <p className="text-red-400 text-xs">{errors.invoiceNumber}</p>}
+        </div>
+        <div className="space-y-2">
+          <Label className="text-slate-300">Expected Shipping Date *</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal bg-slate-800 border-slate-700 text-slate-100",
+                  !formData.shippingDate && "text-slate-500",
+                  errors.shippingDate && "border-red-500"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {formData.shippingDate ? format(formData.shippingDate, 'PPP') : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-slate-800 border-slate-700" align="start">
+              <Calendar
+                mode="single"
+                selected={formData.shippingDate}
+                onSelect={(date) => handleInputChange('shippingDate', date)}
+                disabled={(date) => date! <= new Date()}
+                initialFocus
+                className="bg-slate-800 text-slate-100"
+              />
+            </PopoverContent>
+          </Popover>
+          {errors.shippingDate && <p className="text-red-400 text-xs">{errors.shippingDate}</p>}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-slate-300">Goods Description *</Label>
+        <Textarea
+          value={formData.goodsDescription}
+          onChange={(e) => handleInputChange('goodsDescription', e.target.value)}
+          placeholder="Itemized list of goods..."
+          rows={4}
+          className={cn("bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-400", errors.goodsDescription && "border-red-500")}
+        />
+        {errors.goodsDescription && <p className="text-red-400 text-xs">{errors.goodsDescription}</p>}
+      </div>
+    </div>
+  );
+
+  const renderStep3_Financials = () => {
+    const ltv = (parseFloat(formData.loanAmount) / parseFloat(formData.shippingAmount)) * 100 || 0;
+    const isHighRisk = ltv > 80;
+
+    return (
+      <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <Label className="text-slate-300">Total Shipping Value (USD) *</Label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <Input
+                type="number"
+                value={formData.shippingAmount}
+                onChange={(e) => handleInputChange('shippingAmount', e.target.value)}
+                className={cn("pl-9 bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-400", errors.shippingAmount && "border-red-500")}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-slate-300">Requested Loan (USD) *</Label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+              <Input
+                type="number"
+                value={formData.loanAmount}
+                onChange={(e) => handleInputChange('loanAmount', e.target.value)}
+                className={cn("pl-9 bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-400", errors.loanAmount && "border-red-500")}
+                placeholder="0.00"
+              />
+            </div>
+            {errors.loanAmount && <p className="text-red-400 text-xs">{errors.loanAmount}</p>}
+          </div>
+        </div>
+
+        {formData.shippingAmount && formData.loanAmount && (
+          <div className="bg-slate-900 rounded-lg p-4 border border-slate-800">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-slate-400">Loan to Value (LTV) Ratio</span>
+              <span className={cn("font-bold", isHighRisk ? "text-yellow-400" : "text-green-400")}>
+                {ltv.toFixed(1)}%
+              </span>
+            </div>
+            <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+              <div
+                className={cn("h-full transition-all duration-500", isHighRisk ? "bg-yellow-500" : "bg-green-500")}
+                style={{ width: `${Math.min(ltv, 100)}%` }}
+              />
+            </div>
+            {isHighRisk && (
+              <p className="text-xs text-yellow-400 mt-2 flex items-center">
+                <AlertCircle className="w-3 h-3 mr-1" /> High LTV (80%+) may require extra approval.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderStep4_Documents = () => (
+    <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center bg-slate-800/50 hover:bg-slate-800 transition-colors">
+        <input
+          id="doc-upload"
+          type="file"
+          multiple
+          accept=".pdf,.jpg,.png,.doc,.docx"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
+        <label htmlFor="doc-upload" className="cursor-pointer flex flex-col items-center">
+          <div className="p-4 bg-slate-700 rounded-full mb-4">
+            <Upload className="h-8 w-8 text-cyan-400" />
+          </div>
+          <h3 className="text-lg font-medium text-slate-200 mb-1">Click to upload shipping docs</h3>
+          <p className="text-slate-400 text-sm">PDF, PNG, JPG or DOC (Max 10MB)</p>
+        </label>
+      </div>
+
+      {errors.documents && <p className="text-red-400 text-center">{errors.documents}</p>}
+
+      {formData.documents.length > 0 && (
+        <div className="space-y-2">
+          {formData.documents.map((file, idx) => (
+            <div key={idx} className="flex justify-between items-center p-3 bg-slate-800 rounded border border-slate-700">
+              <div className="flex items-center gap-3">
+                <FileText className="h-5 w-5 text-slate-400" />
                 <div>
-                  <h1 className="text-xl font-semibold text-slate-100">Create New Invoice</h1>
-                  <p className="text-sm text-slate-400">
-                    Submit your shipping invoice for funding consideration
-                  </p>
+                  <p className="text-sm text-slate-200">{file.name}</p>
+                  <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                 </div>
               </div>
-              <Button
-                type="button"
-                onClick={handleAutoFill}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/30 border-purple-500/50 text-purple-300"
-              >
-                <Sparkles className="w-4 h-4" />
-                Auto-fill Test Data
-              </Button>
+              <Button variant="ghost" size="sm" onClick={() => removeDocument(idx)} className="text-red-400 hover:text-red-300 hover:bg-red-400/10">Remove</Button>
             </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStep5_Review = () => (
+    <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-800 space-y-4">
+        <div className="flex justify-between border-b border-slate-700 pb-4">
+          <div>
+            <p className="text-sm text-slate-500">Invoice Number</p>
+            <p className="text-xl font-bold text-slate-100">{formData.invoiceNumber}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-slate-500">Shipping Date</p>
+            <p className="text-lg text-slate-100">{formData.shippingDate ? format(formData.shippingDate, 'PP') : '-'}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-8 py-2">
+          <div>
+            <h4 className="font-semibold text-slate-300 mb-2">Importer</h4>
+            <p className="text-slate-100">{formData.importerCompany}</p>
+            <p className="text-sm text-slate-400">{formData.importerCountry}</p>
+            <p className="text-sm text-slate-400 truncate max-w-[200px]">{formData.importerEmail}</p>
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-300 mb-2">Financials</h4>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-slate-400">Goods Value:</span>
+              <span className="text-slate-200">{formatCurrency(formData.shippingAmount)}</span>
+            </div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-slate-400">Loan Request:</span>
+              <span className="text-cyan-400 font-medium">{formatCurrency(formData.loanAmount)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-slate-700">
+          <p className="text-sm text-slate-400 mb-2">Documents Attached: {formData.documents.length}</p>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-6">
-            {/* Basic Information */}
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle className="text-slate-100">Invoice Information</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Basic details about your shipping invoice
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="exporterCompany" className="text-slate-300">Exporter Company</Label>
-                    <Input
-                      id="exporterCompany"
-                      value={formData.exporterCompany}
-                      onChange={(e) => handleInputChange('exporterCompany', e.target.value)}
-                      className="bg-slate-800 border-slate-700 text-slate-100"
-                      disabled
-                    />
-                  </div>
+      {errors.submit && (
+        <Alert variant="destructive" className="bg-red-900/20 border-red-800">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{errors.submit}</AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
 
-                  <div>
-                    <Label htmlFor="invoiceNumber" className="text-slate-300">Invoice Number *</Label>
-                    <Input
-                      id="invoiceNumber"
-                      value={formData.invoiceNumber}
-                      onChange={(e) => handleInputChange('invoiceNumber', e.target.value)}
-                      placeholder="INV-2024-001"
-                      className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
-                    />
-                    {errors.invoiceNumber && (
-                      <p className="text-red-400 text-sm mt-1">{errors.invoiceNumber}</p>
-                    )}
-                  </div>
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center py-10 px-4">
+
+      {/* Header Area */}
+      <div className="w-full max-w-3xl mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100">Create New Invoice</h1>
+          <p className="text-slate-400 text-sm">Complete the wizard to submit your invoice for funding</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAutoFill}
+          className="bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20"
+        >
+          <Sparkles className="w-4 h-4 mr-2" /> Auto-fill Demo
+        </Button>
+      </div>
+
+      {/* Progress Steps */}
+      <div className="w-full max-w-3xl mb-8">
+        <div className="flex justify-between relative">
+          {/* Connecting Line */}
+          <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-800 -z-10 -translate-y-1/2" />
+
+          {STEPS.map((step) => {
+            const isActive = currentStep === step.id;
+            const isCompleted = currentStep > step.id;
+            const Icon = step.icon;
+
+            return (
+              <div key={step.id} className="flex flex-col items-center bg-slate-950 px-2">
+                <div className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300",
+                  isActive ? "border-cyan-500 bg-cyan-950 text-cyan-400 shadow-lg shadow-cyan-900/50" :
+                    isCompleted ? "border-cyan-700 bg-cyan-900/20 text-cyan-700" :
+                      "border-slate-700 bg-slate-900 text-slate-600"
+                )}>
+                  {isCompleted ? <Check className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
                 </div>
+                <span className={cn(
+                  "text-xs mt-2 font-medium transition-colors",
+                  isActive ? "text-cyan-400" : isCompleted ? "text-cyan-700" : "text-slate-600"
+                )}>{step.title}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-                <div>
-                  <Label htmlFor="goodsDescription" className="text-slate-300">Goods Description *</Label>
-                  <Textarea
-                    id="goodsDescription"
-                    value={formData.goodsDescription}
-                    onChange={(e) => handleInputChange('goodsDescription', e.target.value)}
-                    placeholder="Describe the goods being shipped..."
-                    rows={3}
-                    className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
-                  />
-                  {errors.goodsDescription && (
-                    <p className="text-red-400 text-sm mt-1">{errors.goodsDescription}</p>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="shippingDate" className="text-slate-300">Expected Shipping Date *</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal bg-slate-800 border-slate-700 text-slate-100"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.shippingDate ? (
-                          format(formData.shippingDate, 'PPP')
-                        ) : (
-                          <span className="text-slate-500">Pick a date</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-slate-800 border-slate-700 text-slate-100" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={formData.shippingDate}
-                        onSelect={(date) => handleInputChange('shippingDate', date)}
-                        disabled={(date) => date <= new Date()}
-                        initialFocus
-                        className="bg-slate-800 text-slate-100 [&_.rdp-day]:text-slate-100 [&_.rdp-day_selected]:bg-cyan-600 [&_.rdp-day_selected]:text-white [&_.rdp-day_today]:bg-slate-700"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {errors.shippingDate && (
-                    <p className="text-red-400 text-sm mt-1">{errors.shippingDate}</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Importer Information */}
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle className="text-slate-100">Importer Information</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Details about the importing company
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="importerCompany" className="text-slate-300">Importer Company Name *</Label>
-                  <Input
-                    id="importerCompany"
-                    value={formData.importerCompany}
-                    onChange={(e) => handleInputChange('importerCompany', e.target.value)}
-                    placeholder="Global Trading Ltd"
-                    className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
-                  />
-                  {errors.importerCompany && (
-                    <p className="text-red-400 text-sm mt-1">{errors.importerCompany}</p>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="importerEmail" className="text-slate-300">Importer Email *</Label>
-                  <Input
-                    id="importerEmail"
-                    type="email"
-                    value={formData.importerEmail}
-                    onChange={(e) => handleInputChange('importerEmail', e.target.value)}
-                    placeholder="contact@globaltrading.com"
-                    className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
-                  />
-                  {errors.importerEmail && (
-                    <p className="text-red-400 text-sm mt-1">{errors.importerEmail}</p>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="importerAddress" className="text-slate-300">Importer Address *</Label>
-                  <Textarea
-                    id="importerAddress"
-                    value={formData.importerAddress}
-                    onChange={(e) => handleInputChange('importerAddress', e.target.value)}
-                    placeholder="Complete address of the importing company..."
-                    rows={2}
-                    className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
-                  />
-                  {errors.importerAddress && (
-                    <p className="text-red-400 text-sm mt-1">{errors.importerAddress}</p>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="importerCountry" className="text-slate-300">Importer Country *</Label>
-                  <Select value={formData.importerCountry} onValueChange={(value) => handleInputChange('importerCountry', value)}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-100">
-                      <SelectValue placeholder="Select country" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
-                      <SelectItem value="US" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">United States</SelectItem>
-                      <SelectItem value="CN" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">China</SelectItem>
-                      <SelectItem value="JP" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Japan</SelectItem>
-                      <SelectItem value="KR" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">South Korea</SelectItem>
-                      <SelectItem value="SG" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Singapore</SelectItem>
-                      <SelectItem value="MY" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Malaysia</SelectItem>
-                      <SelectItem value="TH" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Thailand</SelectItem>
-                      <SelectItem value="VN" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Vietnam</SelectItem>
-                      <SelectItem value="ID" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Indonesia</SelectItem>
-                      <SelectItem value="PH" className="text-slate-100 focus:bg-slate-700 focus:text-slate-100">Philippines</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {errors.importerCountry && (
-                    <p className="text-red-400 text-sm mt-1">{errors.importerCountry}</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Financial Information */}
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle className="text-slate-100">Financial Information</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Shipping value and loan amount requested
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="shippingAmount" className="text-slate-300">Total Shipping Amount (USD) *</Label>
-                    <Input
-                      id="shippingAmount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.shippingAmount}
-                      onChange={(e) => handleInputChange('shippingAmount', e.target.value)}
-                      placeholder="25000.00"
-                      className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
-                    />
-                    {errors.shippingAmount && (
-                      <p className="text-red-400 text-sm mt-1">{errors.shippingAmount}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="loanAmount" className="text-slate-300">Loan Amount Requested (USD) *</Label>
-                    <Input
-                      id="loanAmount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.loanAmount}
-                      onChange={(e) => handleInputChange('loanAmount', e.target.value)}
-                      placeholder="20000.00"
-                      className="bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500"
-                    />
-                    {errors.loanAmount && (
-                      <p className="text-red-400 text-sm mt-1">{errors.loanAmount}</p>
-                    )}
-                  </div>
-                </div>
-
-                {formData.shippingAmount && formData.loanAmount && (
-                  <Alert className="bg-slate-800 border-slate-700">
-                    <AlertCircle className="h-4 w-4 text-cyan-400" />
-                    <AlertDescription className="text-slate-300">
-                      Loan-to-value ratio: {(parseFloat(formData.loanAmount) / parseFloat(formData.shippingAmount) * 100).toFixed(1)}%
-                      {parseFloat(formData.loanAmount) / parseFloat(formData.shippingAmount) > 0.8 && (
-                        <span className="text-yellow-400 ml-2">
-                          (High ratio - may require additional documentation)
-                        </span>
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Document Upload */}
-            <Card className="bg-slate-900 border-slate-800">
-              <CardHeader>
-                <CardTitle className="text-slate-100">Supporting Documents</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Upload invoices, bills of lading, and other shipping documents
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="documents" className="text-slate-300">Upload Documents *</Label>
-                  <div className="mt-2">
-                    <input
-                      id="documents"
-                      type="file"
-                      multiple
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    <Label
-                      htmlFor="documents"
-                      className="cursor-pointer inline-flex items-center justify-center px-4 py-2 border border-slate-700 rounded-md shadow-sm bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"
-                    >
-                      <Upload className="mr-2 h-4 w-4" />
-                      Choose Files
-                    </Label>
-                  </div>
-                  {errors.documents && (
-                    <p className="text-red-400 text-sm mt-1">{errors.documents}</p>
-                  )}
-                </div>
-
-                {formData.documents.length > 0 && (
-                  <div className="space-y-2">
-                    <Label className="text-slate-300">Uploaded Files:</Label>
-                    {formData.documents.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-slate-800 rounded-md border border-slate-700">
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">{file.name}</p>
-                          <p className="text-xs text-slate-400">{formatFileSize(file.size)}</p>
-                          {uploadProgress[file.name] !== undefined && (
-                            <div className="w-32 bg-slate-700 rounded-full h-1 mt-1">
-                              <div 
-                                className="bg-cyan-600 h-1 rounded-full transition-all" 
-                                style={{ width: `${uploadProgress[file.name]}%` }}
-                              ></div>
-                            </div>
-                          )}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeDocument(index)}
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Submit */}
-            {errors.submit && (
-              <Alert className="bg-red-900/20 border-red-800">
-                <AlertCircle className="h-4 w-4 text-red-400" />
-                <AlertDescription className="text-red-300">
-                  {errors.submit}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex justify-end space-x-4">
-              <Link href="/exporter/invoices">
-                <Button type="button" variant="outline" className="border-slate-700 text-slate-300">
-                  Cancel
-                </Button>
-              </Link>
-              <Button 
-                type="submit" 
-                disabled={isSubmitting || isContractLoading || isUploadingDocs}
-                className="bg-cyan-600 hover:bg-cyan-700 text-white"
-              >
-                {isUploadingDocs ? 'Uploading Documents...' : 
-                 isContractLoading ? 'Creating NFT...' : 
-                 isSubmitting ? 'Saving...' : 'Create Invoice'}
-              </Button>
+      {/* Main Card */}
+      <Card className="w-full max-w-3xl bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-cyan-500 to-purple-500 w-full" />
+        <CardHeader>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 bg-cyan-500/10 rounded-lg">
+              {(() => {
+                const Icon = STEPS[currentStep - 1].icon;
+                return <Icon className="w-6 h-6 text-cyan-400" />;
+              })()}
+            </div>
+            <div>
+              <CardTitle className="text-slate-100 text-xl">{STEPS[currentStep - 1].title}</CardTitle>
+              <CardDescription className="text-slate-400">{STEPS[currentStep - 1].description}</CardDescription>
             </div>
           </div>
-        </form>
-      </div>
+        </CardHeader>
+
+        <Separator className="bg-slate-800" />
+
+        <CardContent className="p-6">
+          {currentStep === 1 && renderStep1_Importer()}
+          {currentStep === 2 && renderStep2_Shipment()}
+          {currentStep === 3 && renderStep3_Financials()}
+          {currentStep === 4 && renderStep4_Documents()}
+          {currentStep === 5 && renderStep5_Review()}
+        </CardContent>
+
+        <Separator className="bg-slate-800" />
+
+        <CardFooter className="bg-slate-950/30 p-6 flex justify-between">
+          <Button
+            variant="ghost"
+            onClick={prevStep}
+            disabled={currentStep === 1 || isSubmitting}
+            className="text-slate-400 hover:text-slate-200"
+          >
+            <ChevronLeft className="w-4 h-4 mr-2" /> Back
+          </Button>
+
+          {currentStep < 5 ? (
+            <Button onClick={nextStep} className="bg-cyan-600 hover:bg-cyan-700 text-white w-32">
+              Next <ChevronRight className="w-4 h-4 ml-2" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="bg-green-600 hover:bg-green-700 text-white w-40"
+            >
+              {isSubmitting || isUploadingDocs ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing</>
+              ) : (
+                <><CheckCircle className="w-4 h-4 mr-2" /> Submit Invoice</>
+              )}
+            </Button>
+          )}
+        </CardFooter>
+      </Card>
+
     </div>
-    </>
   );
 }

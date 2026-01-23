@@ -312,6 +312,7 @@ export function useSEATrax() {
           block_number: Number(receipt.blockNumber),
           transaction_hash: receipt.transactionHash,
 
+          exporter_wallet: account.address, // Save creator wallet for dashboard filtering
           created_at: new Date().toISOString()
         });
       }

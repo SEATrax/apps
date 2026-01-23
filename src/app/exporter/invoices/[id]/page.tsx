@@ -12,15 +12,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { 
-  ArrowLeft, 
-  FileText, 
-  Calendar, 
-  Building, 
-  DollarSign, 
-  Download, 
-  ExternalLink, 
-  AlertCircle, 
+import {
+  ArrowLeft,
+  FileText,
+  Calendar,
+  Building,
+  DollarSign,
+  Download,
+  ExternalLink,
+  AlertCircle,
   CheckCircle,
   Wallet,
   Copy,
@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import ExporterHeader from '@/components/ExporterHeader';
 
 interface Invoice {
   id: number;
@@ -66,7 +65,7 @@ export default function InvoiceDetail() {
   const { getInvoice, withdrawFunds, canWithdraw, isLoading: contractLoading } = useSEATrax();
   const params = useParams();
   const invoiceId = params.id as string;
-  
+
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -93,7 +92,7 @@ export default function InvoiceDetail() {
       // Handle both empty array and empty object
       const isEmptyArray = Array.isArray(invoice.documents) && invoice.documents.length === 0;
       const isEmptyObject = typeof invoice.documents === 'object' && !Array.isArray(invoice.documents) && Object.keys(invoice.documents).length === 0;
-      
+
       if (isEmptyArray || isEmptyObject) {
         setLoadingDocs(false);
         return;
@@ -104,18 +103,18 @@ export default function InvoiceDetail() {
       const docs: Record<string, { filename: string; fileUrl: string; ipfsHash: string }> = {};
 
       // Convert array format to object format if needed
-      const documentsToProcess = Array.isArray(invoice.documents) 
+      const documentsToProcess = Array.isArray(invoice.documents)
         ? invoice.documents.reduce((acc: any, doc: any) => {
-            if (doc.ipfsHash || doc.image) {
-              acc[doc.name || 'document'] = doc;
-            }
-            return acc;
-          }, {})
+          if (doc.ipfsHash || doc.image) {
+            acc[doc.name || 'document'] = doc;
+          }
+          return acc;
+        }, {})
         : invoice.documents;
 
       for (const [key, value] of Object.entries(documentsToProcess)) {
         console.log(`Processing document [${key}]:`, value);
-        
+
         let filename = key;
         let fileUrl = '';
         let ipfsHash = '';
@@ -125,16 +124,16 @@ export default function InvoiceDetail() {
           console.log(`  String format (metadata hash): ${value}`);
           const metadataUrl = `https://gateway.pinata.cloud/ipfs/${value}`;
           console.log(`  Fetching metadata from: ${metadataUrl}`);
-          
+
           try {
             const response = await fetch(metadataUrl);
             const metadataJson = await response.json();
             console.log(`  Metadata JSON:`, metadataJson);
-            
+
             if (metadataJson.image) {
               const imageUri = metadataJson.image;
               console.log(`  Image field from metadata: ${imageUri}`);
-              
+
               if (imageUri.startsWith('ipfs://')) {
                 ipfsHash = imageUri.replace('ipfs://', '');
                 fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
@@ -149,7 +148,7 @@ export default function InvoiceDetail() {
                 ipfsHash = imageUri;
                 fileUrl = `https://gateway.pinata.cloud/ipfs/${imageUri}`;
               }
-              
+
               filename = metadataJson.original_name || metadataJson.name || key;
               console.log(`  Extracted filename: ${filename}`);
               console.log(`  Extracted file URL: ${fileUrl}`);
@@ -167,11 +166,11 @@ export default function InvoiceDetail() {
           const val = value as any;
           filename = val.original_name || val.name || key;
           console.log(`  Object format, filename: ${filename}`);
-          
+
           if (val.image) {
             const imageUri = val.image;
             console.log(`  Image URI: ${imageUri}`);
-            
+
             if (imageUri.startsWith('ipfs://')) {
               ipfsHash = imageUri.replace('ipfs://', '');
               fileUrl = `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
@@ -207,25 +206,25 @@ export default function InvoiceDetail() {
   const loadInvoiceData = async () => {
     try {
       setIsLoading(true);
-      
+
       const tokenId = BigInt(invoiceId);
-      
+
       // Get invoice data from smart contract
       const contractInvoice = await getInvoice(tokenId);
-      
+
       if (!contractInvoice) {
         setError('Invoice not found');
         return;
       }
-      
+
       // Check available withdrawal amount
       const { canWithdraw: canWithdrawFunds, amount: withdrawableAmount } = await canWithdraw(tokenId);
       setAvailableToWithdraw(Number(withdrawableAmount) / 1e18); // Convert from Wei to ETH
-      
+
       // Get metadata from Supabase
       let metadata = null;
       let paymentLink = `/pay/${invoiceId}`; // Default payment link always available
-      
+
       if (isSupabaseConfigured) {
         const { data } = await supabase
           .from('invoice_metadata')
@@ -233,19 +232,19 @@ export default function InvoiceDetail() {
           .eq('token_id', Number(tokenId))
           .single();
         metadata = data;
-        
+
         // Try to get payment link from database (fallback to default)
         const { data: paymentData } = await supabase
           .from('payments')
           .select('payment_link')
           .eq('invoice_id', Number(tokenId))
           .single();
-        
+
         if (paymentData?.payment_link) {
           paymentLink = paymentData.payment_link;
         }
       }
-      
+
       // Map status number to string
       const statusMap: Record<number, Invoice['status']> = {
         [INVOICE_STATUS.PENDING]: 'pending',
@@ -257,13 +256,13 @@ export default function InvoiceDetail() {
         [INVOICE_STATUS.COMPLETED]: 'completed',
         [INVOICE_STATUS.REJECTED]: 'rejected',
       };
-      
+
       const shippingAmount = Number(contractInvoice.shippingAmount) / 100; // USD cents to dollars
       const loanAmount = Number(contractInvoice.loanAmount) / 100;
       const amountInvested = Number(contractInvoice.amountInvested) / 1e18 * 3000; // Wei to USD (mock rate)
       const amountWithdrawn = Number(contractInvoice.amountWithdrawn) / 1e18 * 3000;
       const fundedPercentage = loanAmount > 0 ? Math.round((amountInvested / loanAmount) * 100) : 0;
-      
+
       const invoiceData: Invoice = {
         id: Number(tokenId),
         tokenId: Number(tokenId),
@@ -286,7 +285,7 @@ export default function InvoiceDetail() {
         withdrawalHistory: [], // TODO: Get from events
         paymentLink, // From Supabase payments table
       };
-      
+
       setInvoice(invoiceData);
     } catch (error) {
       console.error('Error loading invoice:', error);
@@ -305,7 +304,7 @@ export default function InvoiceDetail() {
     try {
       const tokenId = BigInt(invoiceId);
       const result = await withdrawFunds(tokenId);
-      
+
       if (result.success) {
         // Refresh invoice data
         await loadInvoiceData();
@@ -334,7 +333,7 @@ export default function InvoiceDetail() {
     };
 
     const { variant, label, color } = config[status];
-    
+
     return (
       <Badge variant={variant} className={`text-xs text-white ${color}`}>
         {label}
@@ -381,7 +380,7 @@ export default function InvoiceDetail() {
     // Handle both empty array and empty object
     const isEmptyArray = Array.isArray(invoice.documents) && invoice.documents.length === 0;
     const isEmptyObject = typeof invoice.documents === 'object' && !Array.isArray(invoice.documents) && Object.keys(invoice.documents).length === 0;
-    
+
     if (isEmptyArray || isEmptyObject) {
       return (
         <div className="text-center py-8 text-gray-500">
@@ -452,7 +451,7 @@ export default function InvoiceDetail() {
           return (
             <div key={key} className="border border-slate-600 rounded-lg overflow-hidden bg-slate-800">
               {/* File Header - Clickable to expand/collapse */}
-              <div 
+              <div
                 className="bg-slate-700 p-4 flex items-center justify-between cursor-pointer hover:bg-slate-650"
                 onClick={() => toggleDoc(key)}
               >
@@ -592,20 +591,12 @@ export default function InvoiceDetail() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Navigation Header */}
-      <ExporterHeader />
-      
+
       {/* Page Header */}
       <div className="bg-slate-900 border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-              <Link href="/exporter/invoices" className="mr-4">
-                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-100">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Invoices
-                </Button>
-              </Link>
               <div>
                 <h1 className="text-xl font-semibold text-slate-100">{invoice.invoiceNumber}</h1>
                 <p className="text-sm text-slate-400">
@@ -655,7 +646,7 @@ export default function InvoiceDetail() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div>
                     <h4 className="font-medium text-slate-300 mb-3">Importer Information</h4>
                     <div className="space-y-2">
@@ -783,7 +774,7 @@ export default function InvoiceDetail() {
                       All funded amount will be withdrawn
                     </p>
                   </div>
-                  
+
                   {error && (
                     <Alert className="bg-red-900/20 border-red-800">
                       <AlertCircle className="h-4 w-4 text-red-400" />
@@ -793,14 +784,14 @@ export default function InvoiceDetail() {
                     </Alert>
                   )}
 
-                  <Button 
+                  <Button
                     onClick={handleWithdraw}
                     disabled={isWithdrawing || availableToWithdraw <= 0}
                     className="w-full bg-green-600 hover:bg-green-700 text-white"
                   >
                     {isWithdrawing ? 'Processing Withdrawal...' : 'Withdraw All Available Funds'}
                   </Button>
-                  
+
                   <p className="text-xs text-slate-500 text-center">
                     Note: This will withdraw all available funds at once
                   </p>
@@ -826,7 +817,7 @@ export default function InvoiceDetail() {
                 </AlertDescription>
               </Alert>
             )}
-            
+
             {invoice.status === 'funded' && availableToWithdraw > 0 && (
               <Alert className="bg-green-900/20 border-green-800">
                 <CheckCircle className="h-4 w-4 text-green-400" />
@@ -855,15 +846,15 @@ export default function InvoiceDetail() {
                       Payment link is ready! Share with your importer.
                     </AlertDescription>
                   </Alert>
-                  
+
                   <div className="p-3 bg-slate-800 rounded-lg">
                     <p className="text-xs text-slate-400 mb-2">Payment URL</p>
                     <p className="text-sm font-mono text-slate-100 break-all">
                       {typeof window !== 'undefined' ? window.location.origin : ''}{invoice?.paymentLink || `/pay/${invoiceId}`}
                     </p>
                   </div>
-                  
-                  <Button 
+
+                  <Button
                     onClick={() => {
                       const fullUrl = `${window.location.origin}${invoice?.paymentLink || `/pay/${invoiceId}`}`;
                       navigator.clipboard.writeText(fullUrl);
@@ -896,7 +887,7 @@ export default function InvoiceDetail() {
                             {formatDate(withdrawal.date)}
                           </p>
                         </div>
-                        <Link 
+                        <Link
                           href={`https://sepolia-blockscout.lisk.com/tx/${withdrawal.txHash}`}
                           target="_blank"
                           className="text-xs text-cyan-400 hover:text-cyan-300"
