@@ -11,6 +11,7 @@ import { Plus, FileText, DollarSign, TrendingUp, Clock, File } from 'lucide-reac
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 // Helper function to convert status number to label
 const getStatusLabel = (status: number): 'pending' | 'approved' | 'funded' | 'withdrawn' | 'paid' => {
@@ -83,7 +84,7 @@ export default function ExporterDashboard() {
 
       // Get invoice data from Supabase cache (fast)
       const { getExporterInvoicesFromCache } = await import('@/lib/supabase');
-      const invoices = await getExporterInvoicesFromCache(address);
+      const { data: invoices } = await getExporterInvoicesFromCache(address);
 
       if (invoices.length === 0) {
         setStats({
@@ -159,28 +160,20 @@ export default function ExporterDashboard() {
     }
   };
 
+  // Standardized Badge for Exporter Pages (Matches Details Page)
   const getStatusBadge = (status: Invoice['status']) => {
-    const styles = {
-      pending: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/20",
-      approved: "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20",
-      funded: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20",
-      withdrawn: "bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20",
-      paid: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20",
+    const config = {
+      pending: { label: 'Pending Review', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/50' },
+      approved: { label: 'Approved', color: 'bg-blue-500/10 text-blue-400 border-blue-500/50' },
+      in_pool: { label: 'In Pool', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/50' },
+      funded: { label: 'Funded', color: 'bg-green-500/10 text-green-400 border-green-500/50' },
+      withdrawn: { label: 'Withdrawn', color: 'bg-purple-500/10 text-purple-400 border-purple-500/50' },
+      paid: { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/50' },
+      completed: { label: 'Completed', color: 'bg-teal-500/10 text-teal-400 border-teal-500/50' },
+      rejected: { label: 'Rejected', color: 'bg-red-500/10 text-red-400 border-red-500/50' },
     };
-
-    const labels = {
-      pending: 'Pending Review',
-      approved: 'Approved',
-      funded: 'Funded',
-      withdrawn: 'Withdrawn',
-      paid: 'Paid',
-    };
-
-    return (
-      <Badge variant="outline" className={styles[status] || styles.pending}>
-        {labels[status]}
-      </Badge>
-    );
+    const { label, color } = config[status] || config['pending'];
+    return <Badge variant="outline" className={cn("px-3 py-1 font-medium capitalize border", color)}>{label}</Badge>;
   };
 
   const formatDate = (dateStr: string) => {
