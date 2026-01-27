@@ -95,10 +95,13 @@ export interface Database {
         Row: {
           id: string;
           token_id: number;
+          exporter_wallet: string;
           invoice_number: string;
           goods_description: string | null;
           importer_name: string;
           importer_license: string | null;
+          importer_address: string | null;
+          importer_country: string | null;
           documents: Record<string, string> | null;
 
           // Blockchain Cache
@@ -120,10 +123,13 @@ export interface Database {
         Insert: {
           id?: string;
           token_id: number;
+          exporter_wallet: string;
           invoice_number: string;
           goods_description?: string | null;
           importer_name: string;
           importer_license?: string | null;
+          importer_address?: string | null;
+          importer_country?: string | null;
           documents?: Record<string, string> | null;
 
           // Blockchain Cache
@@ -145,10 +151,13 @@ export interface Database {
         Update: {
           id?: string;
           token_id?: number;
+          exporter_wallet?: string;
           invoice_number?: string;
           goods_description?: string | null;
           importer_name?: string;
           importer_license?: string | null;
+          importer_address?: string | null;
+          importer_country?: string | null;
           documents?: Record<string, string> | null;
 
           // Blockchain Cache
@@ -613,4 +622,83 @@ export async function getMarketplacePools() {
       invoice_metadata: poolInvoices
     };
   });
+}
+
+export async function getExporterInvoicesFromCache(
+  walletAddress: string,
+  page: number = 1,
+  pageSize: number = 10
+) {
+  const normalizedWallet = walletAddress.toLowerCase().trim();
+  console.log('Fetching invoices for wallet:', normalizedWallet, 'Page:', page);
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, count, error } = await supabase
+    .from('invoice_metadata')
+    .select('*', { count: 'exact' })
+    .eq('exporter_wallet', normalizedWallet)
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error('Failed to fetch exporter invoices from cache:', error);
+    return { data: [], count: 0 };
+  }
+
+  console.log('Fetched invoices count:', data?.length, 'Total:', count);
+  return { data: data || [], count: count || 0 };
+}
+
+export async function getExporterPaymentsFromCache(
+  walletAddress: string,
+  page: number = 1,
+  pageSize: number = 10
+) {
+  const normalizedWallet = walletAddress.toLowerCase().trim();
+  console.log('Fetching payments for wallet:', normalizedWallet, 'Page:', page);
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  // 1. Get relevant invoices (Withdrawn, Paid, Completed)
+  // These are the ones where a payment cycle is active or finished
+  const { data: invoices, count, error } = await supabase
+    .from('invoice_metadata')
+    .select('*', { count: 'exact' })
+    .eq('exporter_wallet', normalizedWallet)
+    .in('status', ['approved', 'in_pool', 'funded', 'withdrawn', 'paid', 'completed']) // Filtered as requested
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error('Failed to fetch exporter payments invoice data:', error);
+    return { data: [], count: 0 };
+  }
+
+  if (!invoices || invoices.length === 0) {
+    return { data: [], count: 0 };
+  }
+
+  // 2. Get associated payment records
+  const invoiceIds = invoices.map(inv => inv.token_id);
+  const { data: paymentRecords, error: payError } = await supabase
+    .from('payments')
+    .select('*')
+    .in('invoice_id', invoiceIds);
+
+  if (payError) {
+    console.warn('Failed to fetch payment details (non-critical):', payError);
+  }
+
+  // 3. Merge data
+  const paymentMap = new Map(paymentRecords?.map(p => [p.invoice_id, p]));
+
+  const mergedData = invoices.map(invoice => ({
+    ...invoice,
+    payment_metadata: paymentMap.get(invoice.token_id) || null
+  }));
+
+  return { data: mergedData, count: count || 0 };
 }

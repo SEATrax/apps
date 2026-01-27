@@ -8,6 +8,8 @@
 | **Create Invoice** | ✅ Implemented | `createInvoice`. | Mints NFT, sets status PENDING. Mints to `msg.sender`. |
 | **Withdraw Funds** | ✅ Implemented | `withdrawFunds`. | Updates `invoice_metadata` status to `WITHDRAWN` and updates `amount_withdrawn` in cache immediately. |
 | **View Invoices** | ✅ Implemented | `getExporterInvoices`. | Key data is served via Supabase cache for high performance. |
+| **Payment Links** | ✅ Implemented | `api/payment/create`, `Generate Link`. | Secure UUID links generated from metadata. Stored in `payments` table. |
+| **Payment Tracking** | ✅ Implemented | `/exporter/payments`. | Tracks payment status (Link Generated, Sent, Paid). Uses Supabase `payments` table. |
 
 ## Blockchain Caching Strategy
 All Exporter write actions automatically update the Supabase cache:
