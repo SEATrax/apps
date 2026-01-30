@@ -121,7 +121,6 @@ export default function InvoiceList() {
 
             // Log raw status for debugging
             if (page === 1) console.log(`Processing invoice ${inv.invoice_number} raw status: ${inv.status}`);
-
             return {
               id: inv.token_id,
               tokenId: inv.token_id,
