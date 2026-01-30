@@ -119,6 +119,8 @@ export default function InvoiceList() {
             const amountInvested = safeCurrency(inv.amount_invested);
             const loanAmount = Number(inv.loan_amount || 0);
 
+            // Log raw status for debugging
+            if (page === 1) console.log(`Processing invoice ${inv.invoice_number} raw status: ${inv.status}`);
             return {
               id: inv.token_id,
               tokenId: inv.token_id,
@@ -136,6 +138,7 @@ export default function InvoiceList() {
             };
           });
 
+          console.log('Formatted Invoices:', formattedInvoices);
           setInvoices(formattedInvoices);
           setIsLoading(false);
           return;
@@ -169,7 +172,7 @@ export default function InvoiceList() {
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((invoice) => invoice.status === statusFilter);
+      filtered = filtered.filter((invoice) => invoice.status?.toLowerCase() === statusFilter.toLowerCase());
     }
 
     setFilteredInvoices(filtered);

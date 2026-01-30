@@ -294,7 +294,7 @@ export default function CreateInvoice() {
 
       // Phase 3: DB & Pay Link
       const metadataPayload = {
-        exporter_wallet: activeAccount?.address || '',
+        exporter_wallet: activeAccount?.address?.toLowerCase() || '',
         invoice_number: formData.invoiceNumber,
         goods_description: formData.goodsDescription,
         importer_name: formData.importerCompany,
@@ -302,7 +302,9 @@ export default function CreateInvoice() {
         documents: documentHashes.reduce((acc, hash, index) => {
           acc[formData.documents[index].name] = hash;
           return acc;
-        }, {} as Record<string, string>)
+        }, {} as Record<string, string>),
+        shipping_amount: parseFloat(formData.shippingAmount),
+        loan_amount: parseFloat(formData.loanAmount)
       };
 
       const shippingAmountCents = Math.floor(parseFloat(formData.shippingAmount) * 100);
