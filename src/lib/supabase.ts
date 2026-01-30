@@ -635,10 +635,11 @@ export async function getExporterInvoicesFromCache(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
+  // Use ilike for case-insensitive matching to find invoices created with mixed-case wallets
   const { data, count, error } = await supabase
     .from('invoice_metadata')
     .select('*', { count: 'exact' })
-    .eq('exporter_wallet', normalizedWallet)
+    .ilike('exporter_wallet', normalizedWallet)
     .order('created_at', { ascending: false })
     .range(from, to);
 
@@ -647,7 +648,13 @@ export async function getExporterInvoicesFromCache(
     return { data: [], count: 0 };
   }
 
-  console.log('Fetched invoices count:', data?.length, 'Total:', count);
+  console.log('Fetched invoices from DB:', {
+    wallet: normalizedWallet,
+    count: data?.length,
+    total: count,
+    firstId: data?.[0]?.id,
+    firstStatus: data?.[0]?.status
+  });
   return { data: data || [], count: count || 0 };
 }
 
@@ -668,7 +675,11 @@ export async function getExporterPaymentsFromCache(
     .from('invoice_metadata')
     .select('*', { count: 'exact' })
     .eq('exporter_wallet', normalizedWallet)
-    .in('status', ['approved', 'in_pool', 'funded', 'withdrawn', 'paid', 'completed']) // Filtered as requested
+    // Include both lowercase and uppercase to handle legacy/mixed data
+    .in('status', [
+      'approved', 'in_pool', 'funded', 'withdrawn', 'paid', 'completed',
+      'APPROVED', 'IN_POOL', 'FUNDED', 'WITHDRAWN', 'PAID', 'COMPLETED'
+    ]) // Filtered as requested
     .order('created_at', { ascending: false })
     .range(from, to);
 

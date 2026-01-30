@@ -21,6 +21,9 @@ export interface MetadataSyncPayload {
   importer_license?: string;
   documents: Record<string, string>;
   shipping_details?: any;
+  status?: string;
+  shipping_amount?: number;
+  loan_amount?: number;
 }
 
 export interface PaymentLinkPayload {
@@ -79,13 +82,16 @@ class CompensationService {
           .from('invoice_metadata')
           .insert({
             token_id: Number(tokenId),
-            exporter_wallet: payload.exporter_wallet,
+            exporter_wallet: payload.exporter_wallet.toLowerCase(),
             invoice_number: payload.invoice_number,
             goods_description: payload.goods_description,
             importer_name: payload.importer_name,
             importer_license: payload.importer_license,
             documents: payload.documents,
-            shipping_details: payload.shipping_details
+            shipping_details: payload.shipping_details,
+            status: payload.status || 'pending',
+            shipping_amount: payload.shipping_amount,
+            loan_amount: payload.loan_amount
           })
           .select()
           .single();
@@ -96,7 +102,7 @@ class CompensationService {
         return data.id;
       } catch (error) {
         console.warn(`⚠️ Metadata save attempt ${attempt}/${maxAttempts} failed:`, error);
-        
+
         if (attempt === maxAttempts) {
           // Schedule for background compensation
           await this.scheduleCompensation({
@@ -108,12 +114,12 @@ class CompensationService {
           });
           throw error;
         }
-        
+
         // Wait before retry (exponential backoff)
         await new Promise(resolve => setTimeout(resolve, attempt * 1000));
       }
     }
-    
+
     throw new Error('Max attempts reached');
   }
 
@@ -144,7 +150,7 @@ class CompensationService {
         return data.id;
       } catch (error) {
         console.warn(`⚠️ Payment creation attempt ${attempt}/${maxAttempts} failed:`, error);
-        
+
         if (attempt === maxAttempts) {
           // Schedule for background compensation
           await this.scheduleCompensation({
@@ -156,12 +162,12 @@ class CompensationService {
           });
           throw error;
         }
-        
+
         // Wait before retry (exponential backoff)
         await new Promise(resolve => setTimeout(resolve, attempt * 1000));
       }
     }
-    
+
     throw new Error('Max attempts reached');
   }
 
@@ -194,7 +200,7 @@ class CompensationService {
       // Mark as processing
       await supabase
         .from('compensation_queue')
-        .update({ 
+        .update({
           status: 'processing',
           attempts: task.attempts + 1
         })
@@ -230,7 +236,7 @@ class CompensationService {
       if (success) {
         await supabase
           .from('compensation_queue')
-          .update({ 
+          .update({
             status: 'completed',
             completed_at: new Date().toISOString()
           })
@@ -239,7 +245,7 @@ class CompensationService {
         const isLastAttempt = task.attempts + 1 >= task.max_attempts;
         await supabase
           .from('compensation_queue')
-          .update({ 
+          .update({
             status: isLastAttempt ? 'failed' : 'pending',
             next_retry: new Date(Date.now() + (task.attempts + 1) * 60000).toISOString(), // Exponential backoff
             error_message: 'Task execution failed'
@@ -277,7 +283,7 @@ export async function checkSystemHealth() {
     const { error } = await supabase.from('invoice_metadata').select('count').limit(1);
     health.supabaseConnection = !error;
     health.details.supabaseLatency = Date.now() - supabaseStart;
-    
+
     if (error) {
       console.warn('⚠️ Supabase health check failed:', error.message);
     }
@@ -296,10 +302,10 @@ export async function checkSystemHealth() {
       process.env.NEXT_PUBLIC_POOL_NFT &&
       process.env.NEXT_PUBLIC_ACCESS_CONTROL
     );
-    
+
     health.contractConnection = hasContractConfig;
     health.details.contractLatency = Date.now() - contractStart;
-    
+
     if (!hasContractConfig) {
       console.warn('⚠️ Contract configuration missing');
     }
