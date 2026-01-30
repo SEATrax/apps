@@ -155,16 +155,21 @@ export default function InvoiceDetail() {
       // For amounts, we assume DB stores standard units (e.g. USD) as numbers, 
       // while contract might need conversion if we were using it provided raw (wei etc). 
       // Based on backfill, DB has direct numbers.
-      // Helper: DB value > Contract Value > Default
-      // For amounts, we assume DB stores standard units (e.g. USD) as numbers, 
-      // while contract might need conversion if we were using it provided raw (wei etc). 
-      // Based on backfill, DB has direct numbers.
-      const shippingAmount = metadata?.shipping_amount ?? (contractInvoice ? Number(contractInvoice.shippingAmount) / 100 : 0);
-      const loanAmount = metadata?.loan_amount ?? (contractInvoice ? Number(contractInvoice.loanAmount) / 100 : 0);
+      // Helper: Contract Value > DB Value > Default
+      // We prioritize Contract (Blockchain) as the ultimate source of truth for financial data,
+      // falling back to Database only if Contract data is missing or zero (e.g. pre-minting state).
+      const shippingAmount = (contractInvoice && Number(contractInvoice.shippingAmount) > 0)
+        ? Number(contractInvoice.shippingAmount) / 100
+        : (metadata?.shipping_amount || 0);
+
+      const loanAmount = (contractInvoice && Number(contractInvoice.loanAmount) > 0)
+        ? Number(contractInvoice.loanAmount) / 100
+        : (metadata?.loan_amount || 0);
 
       // Helper to calculate value with Wei check
       const calculateFinancial = (contractVal: any, metaVal: any) => {
         let raw = 0;
+        // Check contract value first
         if (contractVal && Number(contractVal) > 0) raw = Number(contractVal);
         else if (metaVal) raw = Number(metaVal);
 
